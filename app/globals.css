@@ -1,0 +1,31 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Hiragino Kaku Gothic ProN", "Noto Sans JP", system-ui, sans-serif;
+  --color-ink-50: #f6f6f7;
+  --color-ink-100: #ebebee;
+  --color-ink-200: #d6d6dc;
+  --color-ink-400: #8a8a99;
+  --color-ink-600: #4b4b57;
+  --color-ink-800: #26262e;
+  --color-ink-900: #16161c;
+  --color-accent: #b4544a;
+  --color-accent-soft: #f6ece9;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  background-color: var(--color-ink-50);
+  color: var(--color-ink-900);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* 数値は等幅で桁を揃える */
+.tabular {
+  font-variant-numeric: tabular-nums;
+}

@@ -1,0 +1,436 @@
+// wearPOS - アパレル向け 顧客管理 / POSレジ連携アプリ
+// データモデル: 商品(品番) -> SKU(カラー×サイズ) を軸に、店舗別在庫・取引・顧客を紐付ける
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../node_modules/.prisma/client"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+// ---------------------------------------------------------------------------
+// 組織マスタ
+// ---------------------------------------------------------------------------
+
+model Store {
+  id        String   @id @default(cuid())
+  code      String   @unique // 店舗コード (例: SHIBUYA)
+  name      String
+  phone     String?
+  address   String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  staff      Staff[]
+  inventory  Inventory[]
+  movements  StockMovement[]
+  sales      Sale[]
+  customers  Customer[]
+  transfersFrom StockTransfer[] @relation("TransferFrom")
+  transfersTo   StockTransfer[] @relation("TransferTo")
+}
+
+model Staff {
+  id        String   @id @default(cuid())
+  code      String   @unique
+  name      String
+  role      String   @default("STAFF") // STAFF | MANAGER | ADMIN
+  storeId   String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  store     Store?   @relation(fields: [storeId], references: [id])
+  sales     Sale[]
+  movements StockMovement[]
+
+  @@index([storeId])
+}
+
+// ---------------------------------------------------------------------------
+// 商品マスタ (アパレル: 品番 -> カラー×サイズ SKU)
+// ---------------------------------------------------------------------------
+
+model Brand {
+  id        String    @id @default(cuid())
+  code      String    @unique
+  name      String
+  createdAt DateTime  @default(now())
+  products  Product[]
+}
+
+model Category {
+  id        String     @id @default(cuid())
+  code      String     @unique
+  name      String
+  parentId  String?
+  parent    Category?  @relation("CategoryTree", fields: [parentId], references: [id])
+  children  Category[] @relation("CategoryTree")
+  products  Product[]
+
+  @@index([parentId])
+}
+
+/// シーズン (例: 2026SS)。プロパー期間とセール開始日を持ち、値下げ管理の基準になる
+model Season {
+  id           String    @id @default(cuid())
+  code         String    @unique // 2026SS
+  name         String // 2026年 春夏
+  year         Int
+  term         String // SS | AW | ALL
+  startsOn     DateTime
+  endsOn       DateTime
+  saleStartsOn DateTime? // セール(値下げ)開始日
+  isArchived   Boolean   @default(false)
+  createdAt    DateTime  @default(now())
+
+  products Product[]
+
+  @@index([year, term])
+}
+
+/// 品番。カラー×サイズの組み合わせを Variant として持つ
+model Product {
+  id           String   @id @default(cuid())
+  styleCode    String   @unique // 品番 (例: 26SS-CT-001)
+  name         String
+  description  String?
+  brandId      String
+  categoryId   String
+  seasonId     String
+  /// プロパー(定価)。税抜
+  listPrice    Int
+  /// 現在の販売価格。税抜。値下げ時に更新し PriceChange に履歴を残す
+  currentPrice Int
+  costPrice    Int      @default(0)
+  taxRate      Float    @default(0.1)
+  material     String? // 素材・組成
+  originCountry String?
+  careNote     String? // 取扱い注意 (洗濯表示など)
+  imageUrl     String?
+  status       String   @default("ACTIVE") // ACTIVE | DISCONTINUED | DRAFT
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  brand    Brand    @relation(fields: [brandId], references: [id])
+  category Category @relation(fields: [categoryId], references: [id])
+  season   Season   @relation(fields: [seasonId], references: [id])
+
+  variants     ProductVariant[]
+  priceChanges PriceChange[]
+
+  @@index([brandId])
+  @@index([categoryId])
+  @@index([seasonId])
+  @@index([status])
+}
+
+/// カラー×サイズの実在庫単位 (SKU)
+model ProductVariant {
+  id          String   @id @default(cuid())
+  productId   String
+  sku         String   @unique // 26SS-CT-001-BLK-M
+  colorCode   String // BLK
+  colorName   String // ブラック
+  colorHex    String? // #111111 (UI表示用)
+  sizeCode    String // M
+  sizeName    String // M
+  sizeOrder   Int      @default(0) // サイズ並び順 (XS=1, S=2 ...)
+  barcode     String?  @unique // JANコード
+  /// SKU 単位の価格上書き。null なら Product.currentPrice を使う
+  priceOverride Int?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  product   Product         @relation(fields: [productId], references: [id], onDelete: Cascade)
+  inventory Inventory[]
+  movements StockMovement[]
+  saleLines SaleLine[]
+  transferLines StockTransferLine[]
+
+  @@unique([productId, colorCode, sizeCode])
+  @@index([productId])
+  @@index([barcode])
+}
+
+/// 値下げ・価格改定の履歴 (シーズン管理と対になる)
+model PriceChange {
+  id        String   @id @default(cuid())
+  productId String
+  fromPrice Int
+  toPrice   Int
+  reason    String   @default("MARKDOWN") // MARKDOWN | CORRECTION | PROMOTION
+  note      String?
+  changedBy String?
+  changedAt DateTime @default(now())
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([productId, changedAt])
+}
+
+// ---------------------------------------------------------------------------
+// 在庫
+// ---------------------------------------------------------------------------
+
+/// 店舗 × SKU の在庫数
+model Inventory {
+  id         String   @id @default(cuid())
+  storeId    String
+  variantId  String
+  quantity   Int      @default(0) // 実在庫
+  reserved   Int      @default(0) // 取り置き・取り寄せ引当
+  safetyStock Int     @default(0) // 発注点
+  updatedAt  DateTime @updatedAt
+
+  store   Store          @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  variant ProductVariant @relation(fields: [variantId], references: [id], onDelete: Cascade)
+
+  @@unique([storeId, variantId])
+  @@index([variantId])
+}
+
+/// 在庫の増減履歴。すべての在庫変動はここに残す
+model StockMovement {
+  id        String   @id @default(cuid())
+  storeId   String
+  variantId String
+  /// INBOUND(入荷) | SALE(販売) | RETURN(返品) | TRANSFER_OUT | TRANSFER_IN | ADJUSTMENT(調整) | STOCKTAKE(棚卸)
+  type      String
+  /// 増減数。マイナスなら減少
+  quantity  Int
+  /// 変動後の在庫数 (監査用スナップショット)
+  balance   Int
+  reason    String?
+  refType   String? // SALE | TRANSFER | STOCKTAKE
+  refId     String?
+  staffId   String?
+  createdAt DateTime @default(now())
+
+  store   Store          @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  variant ProductVariant @relation(fields: [variantId], references: [id], onDelete: Cascade)
+  staff   Staff?         @relation(fields: [staffId], references: [id])
+
+  @@index([storeId, createdAt])
+  @@index([variantId, createdAt])
+  @@index([refType, refId])
+}
+
+/// 店舗間の在庫移動 (取り寄せ)
+model StockTransfer {
+  id          String   @id @default(cuid())
+  transferNo  String   @unique
+  fromStoreId String
+  toStoreId   String
+  status      String   @default("REQUESTED") // REQUESTED | SHIPPED | RECEIVED | CANCELLED
+  note        String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  fromStore Store               @relation("TransferFrom", fields: [fromStoreId], references: [id])
+  toStore   Store               @relation("TransferTo", fields: [toStoreId], references: [id])
+  lines     StockTransferLine[]
+
+  @@index([status])
+}
+
+model StockTransferLine {
+  id         String @id @default(cuid())
+  transferId String
+  variantId  String
+  quantity   Int
+
+  transfer StockTransfer  @relation(fields: [transferId], references: [id], onDelete: Cascade)
+  variant  ProductVariant @relation(fields: [variantId], references: [id])
+
+  @@index([transferId])
+}
+
+// ---------------------------------------------------------------------------
+// 顧客 (CRM)
+// ---------------------------------------------------------------------------
+
+model Customer {
+  id          String    @id @default(cuid())
+  /// 会員番号。POS 側の顧客IDとの突合にも使う
+  memberCode  String    @unique
+  lastName    String
+  firstName   String
+  lastNameKana String?
+  firstNameKana String?
+  phone       String?
+  email       String?
+  postalCode  String?
+  address     String?
+  birthday    DateTime?
+  gender      String? // FEMALE | MALE | OTHER | UNKNOWN
+  /// 主担当店舗
+  storeId     String?
+  rank        String    @default("REGULAR") // REGULAR | SILVER | GOLD | PLATINUM
+  points      Int       @default(0)
+  totalSpent  Int       @default(0) // 累計購入金額(税込)
+  visitCount  Int       @default(0)
+  firstVisitAt DateTime?
+  lastVisitAt DateTime?
+  note        String?
+  /// カンマ区切りの好みタグ (例: "カジュアル,モノトーン")
+  tags        String?
+  isActive    Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  store       Store?       @relation(fields: [storeId], references: [id])
+  sales       Sale[]
+  pointEvents PointEvent[]
+  lineAccount LineAccount?
+  lineLinkTokens LineLinkToken[]
+  lineMessages   LineMessageLog[]
+
+  @@index([storeId])
+  @@index([phone])
+  @@index([lastVisitAt])
+}
+
+/// ポイントの増減履歴
+model PointEvent {
+  id         String   @id @default(cuid())
+  customerId String
+  /// EARN(付与) | REDEEM(利用) | EXPIRE(失効) | ADJUST(調整)
+  type       String
+  points     Int // 符号付き
+  balance    Int // 変動後残高
+  saleId     String?
+  note       String?
+  createdAt  DateTime @default(now())
+
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  sale     Sale?    @relation(fields: [saleId], references: [id])
+
+  @@index([customerId, createdAt])
+}
+
+// ---------------------------------------------------------------------------
+// 取引 (POSレジからの連携で作成される)
+// ---------------------------------------------------------------------------
+
+model Sale {
+  id         String   @id @default(cuid())
+  /// 伝票番号
+  receiptNo  String   @unique
+  /// 連携元 POS の取引ID。再送信時の冪等キー
+  externalId String?  @unique
+  source     String   @default("POS") // POS | EC | MANUAL
+  storeId    String
+  staffId    String?
+  customerId String?
+  soldAt     DateTime
+  /// 明細合計(税抜)
+  subtotal   Int
+  /// 伝票値引き(税抜)
+  discount   Int      @default(0)
+  tax        Int      @default(0)
+  /// 請求総額(税込)
+  total      Int
+  /// ポイント利用による充当額
+  pointsUsed Int      @default(0)
+  pointsEarned Int    @default(0)
+  paymentMethod String @default("CASH") // CASH | CREDIT | E_MONEY | QR | OTHER
+  /// SALE(通常) | RETURN(返品)
+  type       String   @default("SALE")
+  /// 返品元の取引
+  originalSaleId String?
+  note       String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  store    Store      @relation(fields: [storeId], references: [id])
+  staff    Staff?     @relation(fields: [staffId], references: [id])
+  customer Customer?  @relation(fields: [customerId], references: [id])
+  lines    SaleLine[]
+  pointEvents PointEvent[]
+
+  @@index([storeId, soldAt])
+  @@index([customerId, soldAt])
+  @@index([soldAt])
+}
+
+model SaleLine {
+  id        String @id @default(cuid())
+  saleId    String
+  variantId String
+  quantity  Int
+  /// 販売単価(税抜)
+  unitPrice Int
+  /// 明細値引き(税抜)
+  discount  Int    @default(0)
+  /// (unitPrice * quantity) - discount
+  lineTotal Int
+  /// 販売時点のプロパー価格。プロパー消化率の算出に使う
+  listPriceAtSale Int @default(0)
+
+  sale    Sale           @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  variant ProductVariant @relation(fields: [variantId], references: [id])
+
+  @@index([saleId])
+  @@index([variantId])
+}
+
+// ---------------------------------------------------------------------------
+// LINE 公式アカウント連携
+// ---------------------------------------------------------------------------
+
+/// 顧客と LINE ユーザーの紐付け
+model LineAccount {
+  id            String    @id @default(cuid())
+  customerId    String    @unique
+  lineUserId    String    @unique
+  displayName   String?
+  pictureUrl    String?
+  /// 友だち登録中か (ブロックされたら false)
+  isFollowing   Boolean   @default(true)
+  linkedAt      DateTime  @default(now())
+  unfollowedAt  DateTime?
+  updatedAt     DateTime  @updatedAt
+
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+}
+
+/// 店頭で発行する連携コード。顧客が LINE で送信すると紐付けが完了する
+model LineLinkToken {
+  id         String    @id @default(cuid())
+  customerId String
+  token      String    @unique // 6桁の英数字
+  expiresAt  DateTime
+  usedAt     DateTime?
+  createdAt  DateTime  @default(now())
+
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@index([customerId])
+}
+
+/// LINE 送受信ログ
+model LineMessageLog {
+  id         String   @id @default(cuid())
+  customerId String?
+  lineUserId String
+  /// INBOUND(受信) | OUTBOUND(送信)
+  direction  String
+  /// TEXT | FLEX | STICKER | EVENT
+  messageType String  @default("TEXT")
+  body       String
+  /// 送信テンプレート種別 (PURCHASE_THANKS / POINT_UPDATE / CAMPAIGN など)
+  template   String?
+  status     String   @default("SENT") // SENT | FAILED | RECEIVED
+  error      String?
+  createdAt  DateTime @default(now())
+
+  customer Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+
+  @@index([lineUserId, createdAt])
+  @@index([customerId, createdAt])
+}
