@@ -52,11 +52,30 @@ postgresql://neondb_owner:xxxx@ep-cool-name-123456.ap-southeast-1.aws.neon.tech/
 
 ## Step 2. Vercel にインポートする
 
+> ### ⚠️ 先に: コードがあるブランチを確認する
+>
+> Vercel も `git clone` も、既定では**デフォルトブランチ**を見ます。
+> アプリのコードがまだ `main` にマージされていない場合、
+> **README.md しか無いブランチをデプロイしようとして失敗します**
+> （`package.json` が見つからない、というエラーになります）。
+>
+> ```bash
+> # デフォルトブランチに package.json があるか確認する
+> git ls-remote --heads origin
+> ```
+>
+> マージされていない場合は、次のどちらかを先に行ってください。
+>
+> - **推奨**: 作業ブランチを `main` にマージする（プルリクエストを作成してマージ）
+> - または Vercel の **Settings → Git → Production Branch** で作業ブランチを指定する
+
 1. [vercel.com](https://vercel.com) にサインアップします（GitHub アカウント推奨）。
 2. **Add New… → Project** から、このリポジトリを **Import** します。
    - 初回は GitHub との連携許可を求められます。リポジトリへのアクセスを許可してください。
 3. **Configure Project** の画面が出ます。
    - **Framework Preset**: `Next.js` が自動検出されます。**変更不要**です。
+     ここで `Other` と表示される場合は、デフォルトブランチにコードが無い可能性が高いです
+     （上の確認に戻ってください）。
    - **Build Command / Output Directory / Install Command**: すべて既定のままで構いません。
      `package.json` の `vercel-build` スクリプトが自動的に使われます。
    - **Root Directory**: `./`（既定）
@@ -121,12 +140,18 @@ Running "vercel-build"
 180日分の取引生成には足りないため）。
 
 ```bash
-git clone https://github.com/emcyrup/wearPOS.git
-cd wearPOS
+# コードのあるブランチを指定して取得する (-b を省くとデフォルトブランチになります)
+git clone -b claude/apparel-crm-pos-integration-b2nxds \
+  https://github.com/emcyrup/wearPOS.git
+
+cd wearPOS          # ← このディレクトリ移動を忘れると package.json が見つかりません
 npm install
 
 DATABASE_URL="<Neon の Direct 接続文字列>" npm run db:seed
 ```
+
+`main` にマージ済みなら `-b` は不要です。取得できたか不安な場合は、
+`ls package.json` でファイルの存在を確認してから `npm install` に進んでください。
 
 数分かかります。次のように出れば完了です。
 
@@ -257,6 +282,8 @@ Vercel の **Deployments** から以前のデプロイを選び、**Promote to P
 | LINE Webhook の検証が失敗する | `LINE_CHANNEL_SECRET` が誤っているか、環境変数の設定後に再デプロイしていない |
 | LINE の返信が定型文になる | LINE 側の**応答メッセージ**がオンのまま。オフにしてください |
 | シードが途中で止まる | Pooled ではなく **Direct** の接続文字列で実行してください |
+| `Could not read package.json` (ENOENT) | クローンしたブランチにコードが無いか、`cd wearPOS` を実行していない。Step 5 のコマンドを参照 |
+| Vercel のビルドが `No Next.js version detected` で失敗 | デプロイ対象のブランチにコードが無い。Step 2 の確認を参照 |
 
 ビルドやアクセス時のエラーは、Vercel の **Deployments → 該当デプロイ → Logs**（実行時は **Runtime Logs**）で確認できます。
 
