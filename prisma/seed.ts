@@ -115,7 +115,25 @@ const SEGMENTS = [
   { key: "DORMANT", ratio: 0.28, visits: [2, 6] as const, windowStart: 180, windowEnd: 95 },
 ];
 
+/**
+ * createMany では ID の自動採番が使えないため、自前で決定的に採番する。
+ * 1件ずつ insert すると往復回数が膨大になり、リモートDBでは実行時間が跳ね上がる。
+ */
+let idSeq = 0;
+const makeId = () => `c${(idSeq++).toString(36).padStart(10, "0")}`;
+
+/** Postgres のバインド変数上限を避けるため、分割して一括挿入する */
+async function insertChunked<T>(rows: T[], insert: (chunk: T[]) => Promise<unknown>) {
+  const CHUNK = 500;
+  for (let i = 0; i < rows.length; i += CHUNK) {
+    await insert(rows.slice(i, i + CHUNK));
+  }
+  return rows.length;
+}
+
 async function main() {
+  const startedAt = Date.now();
+
   console.log("既存データを削除中...");
   // 依存関係の順に削除
   await prisma.lineMessageLog.deleteMany();
@@ -138,16 +156,21 @@ async function main() {
   await prisma.staff.deleteMany();
   await prisma.store.deleteMany();
 
-  console.log("店舗・スタッフを作成中...");
-  const stores = await Promise.all(
-    [
-      { code: "SHIBUYA", name: "渋谷店", phone: "03-1234-5678", address: "東京都渋谷区神南1-1-1" },
-      { code: "UMEDA", name: "梅田店", phone: "06-2345-6789", address: "大阪府大阪市北区梅田2-2-2" },
-      { code: "SAKAE", name: "栄店", phone: "052-345-6789", address: "愛知県名古屋市中区栄3-3-3" },
-    ].map((data) => prisma.store.create({ data })),
-  );
+  const today = new Date();
+  const daysAgo = (days: number) => new Date(today.getTime() - days * 86_400_000);
 
-  const staffSpecs = [
+  // ---------------------------------------------------------------------------
+  // ここから先はすべてメモリ上で組み立て、最後にまとめて書き込む
+  // ---------------------------------------------------------------------------
+
+  console.log("店舗・スタッフを組み立て中...");
+  const stores = [
+    { code: "SHIBUYA", name: "渋谷店", phone: "03-1234-5678", address: "東京都渋谷区神南1-1-1" },
+    { code: "UMEDA", name: "梅田店", phone: "06-2345-6789", address: "大阪府大阪市北区梅田2-2-2" },
+    { code: "SAKAE", name: "栄店", phone: "052-345-6789", address: "愛知県名古屋市中区栄3-3-3" },
+  ].map((data) => ({ id: makeId(), ...data }));
+
+  const staff = [
     { code: "S001", name: "森田 彩香", role: "MANAGER", storeIdx: 0 },
     { code: "S002", name: "岡田 里奈", role: "STAFF", storeIdx: 0 },
     { code: "S003", name: "藤井 悠", role: "STAFF", storeIdx: 0 },
@@ -155,19 +178,18 @@ async function main() {
     { code: "S005", name: "大野 香織", role: "STAFF", storeIdx: 1 },
     { code: "S006", name: "宮本 直樹", role: "MANAGER", storeIdx: 2 },
     { code: "S007", name: "堀内 沙耶", role: "STAFF", storeIdx: 2 },
-  ];
-  const staff = await Promise.all(
-    staffSpecs.map((spec) =>
-      prisma.staff.create({
-        data: { code: spec.code, name: spec.name, role: spec.role, storeId: stores[spec.storeIdx].id },
-      }),
-    ),
-  );
+  ].map((spec) => ({
+    id: makeId(),
+    code: spec.code,
+    name: spec.name,
+    role: spec.role,
+    storeId: stores[spec.storeIdx].id,
+  }));
 
-  console.log("ブランド・カテゴリ・シーズンを作成中...");
-  const brand = await prisma.brand.create({ data: { code: "WEAR", name: "wear label" } });
+  console.log("ブランド・カテゴリ・シーズンを組み立て中...");
+  const brand = { id: makeId(), code: "WEAR", name: "wear label" };
 
-  const categorySpecs = [
+  const categories = [
     { code: "OUTER", name: "アウター" },
     { code: "SHIRT", name: "シャツ・ブラウス" },
     { code: "KNIT", name: "ニット・カーディガン" },
@@ -177,14 +199,10 @@ async function main() {
     { code: "SKIRT", name: "スカート" },
     { code: "BAG", name: "バッグ" },
     { code: "ACC", name: "アクセサリー・小物" },
-  ];
-  const categories = await Promise.all(
-    categorySpecs.map((data) => prisma.category.create({ data })),
-  );
+  ].map((data) => ({ id: makeId(), ...data }));
   const categoryByCode = new Map(categories.map((c) => [c.code, c]));
 
-  const today = new Date();
-  const seasonSpecs = [
+  const seasons = [
     {
       code: "2026SS",
       name: "2026年 春夏",
@@ -213,12 +231,25 @@ async function main() {
       endsOn: new Date(2026, 11, 31),
       saleStartsOn: null,
     },
-  ];
-  const seasons = await Promise.all(seasonSpecs.map((data) => prisma.season.create({ data })));
+  ].map((data) => ({ id: makeId(), ...data }));
   const seasonByCode = new Map(seasons.map((s) => [s.code, s]));
 
-  console.log("商品と SKU (カラー×サイズ) を作成中...");
-  const allVariants: { id: string; sku: string; price: number; listPrice: number }[] = [];
+  console.log("商品と SKU (カラー×サイズ) を組み立て中...");
+  const products: Record<string, unknown>[] = [];
+  const variants: Record<string, unknown>[] = [];
+  const priceChanges: Record<string, unknown>[] = [];
+  const inventories: {
+    id: string;
+    storeId: string;
+    variantId: string;
+    quantity: number;
+    safetyStock: number;
+  }[] = [];
+  const movements: Record<string, unknown>[] = [];
+
+  /** 販売時に在庫を引くための索引 */
+  const inventoryByKey = new Map<string, (typeof inventories)[number]>();
+  const sellableVariants: { id: string; price: number; listPrice: number }[] = [];
 
   for (const spec of PRODUCTS) {
     const season = seasonByCode.get(spec.seasonCode);
@@ -226,36 +257,35 @@ async function main() {
     if (!season || !category) throw new Error(`マスタ未定義: ${spec.styleCode}`);
 
     const currentPrice = spec.currentPrice ?? spec.listPrice;
+    const productId = makeId();
 
-    const product = await prisma.product.create({
-      data: {
-        styleCode: spec.styleCode,
-        name: spec.name,
-        brandId: brand.id,
-        categoryId: category.id,
-        seasonId: season.id,
-        listPrice: spec.listPrice,
-        currentPrice,
-        costPrice: spec.cost,
-        material: spec.material,
-        originCountry: pick(["日本", "中国", "ベトナム", "ポルトガル"]),
-        careNote: "洗濯表示に従ってお取り扱いください。",
-        status: "ACTIVE",
-      },
+    products.push({
+      id: productId,
+      styleCode: spec.styleCode,
+      name: spec.name,
+      brandId: brand.id,
+      categoryId: category.id,
+      seasonId: season.id,
+      listPrice: spec.listPrice,
+      currentPrice,
+      costPrice: spec.cost,
+      material: spec.material,
+      originCountry: pick(["日本", "中国", "ベトナム", "ポルトガル"]),
+      careNote: "洗濯表示に従ってお取り扱いください。",
+      status: "ACTIVE",
     });
 
     // 値下げしている商品は価格改定履歴を残す
     if (currentPrice < spec.listPrice) {
-      await prisma.priceChange.create({
-        data: {
-          productId: product.id,
-          fromPrice: spec.listPrice,
-          toPrice: currentPrice,
-          reason: "MARKDOWN",
-          note: `${season.code} シーズンセール`,
-          changedBy: "S001",
-          changedAt: season.saleStartsOn ?? new Date(),
-        },
+      priceChanges.push({
+        id: makeId(),
+        productId,
+        fromPrice: spec.listPrice,
+        toPrice: currentPrice,
+        reason: "MARKDOWN",
+        note: `${season.code} シーズンセール`,
+        changedBy: "S001",
+        changedAt: season.saleStartsOn ?? today,
       });
     }
 
@@ -264,58 +294,53 @@ async function main() {
       if (!color) continue;
 
       for (const sizeCode of spec.sizes) {
-        const variant = await prisma.productVariant.create({
-          data: {
-            productId: product.id,
-            sku: buildSku(spec.styleCode, colorCode, sizeCode),
-            colorCode: color.code,
-            colorName: color.name,
-            colorHex: color.hex,
-            sizeCode,
-            sizeName: sizeCode === "F" ? "FREE" : sizeCode,
-            sizeOrder: sizeOrderOf(sizeCode),
-            barcode: `49${String(randInt(10_000_000, 99_999_999))}${randInt(0, 9)}`,
-          },
+        const variantId = makeId();
+        variants.push({
+          id: variantId,
+          productId,
+          sku: buildSku(spec.styleCode, colorCode, sizeCode),
+          colorCode: color.code,
+          colorName: color.name,
+          colorHex: color.hex,
+          sizeCode,
+          sizeName: sizeCode === "F" ? "FREE" : sizeCode,
+          sizeOrder: sizeOrderOf(sizeCode),
+          barcode: `49${String(randInt(10_000_000, 99_999_999))}${randInt(0, 9)}`,
         });
-        allVariants.push({
-          id: variant.id,
-          sku: variant.sku,
-          price: currentPrice,
-          listPrice: spec.listPrice,
-        });
+        sellableVariants.push({ id: variantId, price: currentPrice, listPrice: spec.listPrice });
 
         // 店舗ごとに初期在庫を投入 (入荷として履歴も残す)
         const isCoreSize = ["M", "L", "F"].includes(sizeCode);
         for (const store of stores) {
           // 定番サイズ(M/L)は厚めに、端サイズは薄めに
           const base = isCoreSize ? randInt(18, 40) : randInt(4, 16);
+          const inventory = {
+            id: makeId(),
+            storeId: store.id,
+            variantId,
+            quantity: base,
+            safetyStock: isCoreSize ? 4 : 2,
+          };
+          inventories.push(inventory);
+          inventoryByKey.set(`${store.id}:${variantId}`, inventory);
 
-          await prisma.inventory.create({
-            data: {
-              storeId: store.id,
-              variantId: variant.id,
-              quantity: base,
-              safetyStock: isCoreSize ? 4 : 2,
-            },
-          });
-          await prisma.stockMovement.create({
-            data: {
-              storeId: store.id,
-              variantId: variant.id,
-              type: "INBOUND",
-              quantity: base,
-              balance: base,
-              reason: "初回入荷",
-              createdAt: new Date(today.getTime() - randInt(150, 200) * 86_400_000),
-            },
+          movements.push({
+            id: makeId(),
+            storeId: store.id,
+            variantId,
+            type: "INBOUND",
+            quantity: base,
+            balance: base,
+            reason: "初回入荷",
+            createdAt: daysAgo(randInt(150, 200)),
           });
         }
       }
     }
   }
-  console.log(`  -> ${PRODUCTS.length} 品番 / ${allVariants.length} SKU`);
+  console.log(`  -> ${PRODUCTS.length} 品番 / ${variants.length} SKU`);
 
-  console.log("顧客を作成中...");
+  console.log("顧客を組み立て中...");
   const CUSTOMER_COUNT = 160;
 
   // セグメント比率に従って各顧客の来店パターンを決める
@@ -349,44 +374,36 @@ async function main() {
       randInt(segment.windowEnd, segment.windowStart),
     ).sort((a, b) => b - a);
 
-    const firstVisitOffset = visitOffsets[0];
-    const tags = Array.from({ length: randInt(1, 3) }, () => pick(TAG_POOL));
-
-    const record = await prisma.customer.create({
-      data: {
-        memberCode: `M${String(10001 + i)}`,
-        lastName: surname[0],
-        firstName: given[0],
-        lastNameKana: surname[1],
-        firstNameKana: given[1],
-        gender: given[2],
-        phone: `090-${String(randInt(1000, 9999))}-${String(randInt(1000, 9999))}`,
-        email: `customer${i + 1}@example.com`,
-        birthday: new Date(randInt(1975, 2005), randInt(0, 11), randInt(1, 28)),
-        postalCode: `1${String(randInt(50, 99))}-00${randInt(10, 99)}`,
-        address: pick(["東京都渋谷区", "東京都世田谷区", "大阪府大阪市北区", "愛知県名古屋市中区"]),
-        storeId: pick(stores).id,
-        tags: Array.from(new Set(tags)).join(","),
-        // 入会日は初回来店日に合わせる
-        createdAt: new Date(today.getTime() - firstVisitOffset * 86_400_000),
-        note:
-          rand() > 0.6
-            ? pick([
-                "普段はMサイズ着用。ゆったりめを好まれる。",
-                "通勤用のきれいめを探されることが多い。",
-                "セール時期にまとめ買いされる傾向。",
-                "ご家族へのギフト購入あり。",
-                "同じ品番を色違いで購入されることが多い。",
-              ])
-            : null,
-      },
-    });
-
     customers.push({
-      record,
+      id: makeId(),
+      memberCode: `M${String(10001 + i)}`,
+      lastName: surname[0],
+      firstName: given[0],
+      lastNameKana: surname[1],
+      firstNameKana: given[1],
+      gender: given[2],
+      phone: `090-${String(randInt(1000, 9999))}-${String(randInt(1000, 9999))}`,
+      email: `customer${i + 1}@example.com`,
+      birthday: new Date(randInt(1975, 2005), randInt(0, 11), randInt(1, 28)),
+      postalCode: `1${String(randInt(50, 99))}-00${randInt(10, 99)}`,
+      address: pick(["東京都渋谷区", "東京都世田谷区", "大阪府大阪市北区", "愛知県名古屋市中区"]),
+      storeId: pick(stores).id,
+      tags: Array.from(new Set(Array.from({ length: randInt(1, 3) }, () => pick(TAG_POOL)))).join(","),
+      // 入会日は初回来店日に合わせる
+      createdAt: daysAgo(visitOffsets[0]),
+      note:
+        rand() > 0.6
+          ? pick([
+              "普段はMサイズ着用。ゆったりめを好まれる。",
+              "通勤用のきれいめを探されることが多い。",
+              "セール時期にまとめ買いされる傾向。",
+              "ご家族へのギフト購入あり。",
+              "同じ品番を色違いで購入されることが多い。",
+            ])
+          : null,
+      // 以下は取引を生成しながら積み上げる
       segment: segment.key,
       visitOffsets,
-      // 集計用の可変状態
       points: 0,
       totalSpent: 0,
       visitCount: 0,
@@ -402,7 +419,7 @@ async function main() {
   }, {});
   console.log(`  -> ${customers.length} 名`, segmentCounts);
 
-  console.log("LINE 連携を作成中...");
+  console.log("LINE 連携を組み立て中...");
   // 新規会員ほど連携率が高く、休眠会員は低いという想定
   const linkRate: Record<string, number> = {
     VIP: 0.85,
@@ -411,25 +428,22 @@ async function main() {
     NEW: 0.7,
     DORMANT: 0.3,
   };
-  let linkedCount = 0;
+  const lineAccounts: Record<string, unknown>[] = [];
   for (const customer of customers) {
     if (rand() >= (linkRate[customer.segment] ?? 0.5)) continue;
-    const firstVisit = customer.visitOffsets[0] ?? 30;
-    await prisma.lineAccount.create({
-      data: {
-        customerId: customer.record.id,
-        lineUserId: `U${String(randInt(10 ** 9, 10 ** 10 - 1))}${randInt(1000, 9999)}`,
-        displayName: `${customer.record.lastName}${pick(["", "🌸", "@お買い物垢", "ᐡ"])}`,
-        // 休眠会員には一定割合でブロック済みを混ぜる
-        isFollowing: customer.segment === "DORMANT" ? rand() > 0.25 : rand() > 0.05,
-        linkedAt: new Date(today.getTime() - randInt(0, firstVisit) * 86_400_000),
-      },
+    lineAccounts.push({
+      id: makeId(),
+      customerId: customer.id,
+      lineUserId: `U${String(randInt(10 ** 9, 10 ** 10 - 1))}${randInt(1000, 9999)}`,
+      displayName: `${customer.lastName}${pick(["", "🌸", "@お買い物垢", "ᐡ"])}`,
+      // 休眠会員には一定割合でブロック済みを混ぜる
+      isFollowing: customer.segment === "DORMANT" ? rand() > 0.25 : rand() > 0.05,
+      linkedAt: daysAgo(randInt(0, customer.visitOffsets[0] ?? 30)),
     });
-    linkedCount += 1;
   }
-  console.log(`  -> ${linkedCount} / ${customers.length} 名が連携済み`);
+  console.log(`  -> ${lineAccounts.length} / ${customers.length} 名が連携済み`);
 
-  console.log("過去180日分の取引を作成中...");
+  console.log("過去180日分の取引を組み立て中...");
   const paymentMethods = ["CASH", "CREDIT", "CREDIT", "E_MONEY", "QR"];
 
   type Visit = { dayOffset: number; customer: (typeof customers)[number] | null };
@@ -445,8 +459,7 @@ async function main() {
   const walkInCount = Math.round(visits.length * 0.43);
   for (let i = 0; i < walkInCount; i += 1) {
     let dayOffset = randInt(0, 180);
-    const date = new Date(today.getTime() - dayOffset * 86_400_000);
-    const dow = date.getDay();
+    const dow = daysAgo(dayOffset).getDay();
     // 週末に寄せるため、平日に当たったら一定確率で引き直す
     if (dow !== 0 && dow !== 6 && rand() < 0.35) dayOffset = randInt(0, 180);
     visits.push({ dayOffset, customer: null });
@@ -455,8 +468,10 @@ async function main() {
   // 古い順に処理して、ポイント残高とランクが時系列で正しく積み上がるようにする
   visits.sort((a, b) => b.dayOffset - a.dayOffset);
 
+  const sales: Record<string, unknown>[] = [];
+  const saleLines: Record<string, unknown>[] = [];
+  const pointEvents: Record<string, unknown>[] = [];
   let receiptSeq = 1;
-  let saleCount = 0;
 
   for (const visit of visits) {
     const store = pick(stores);
@@ -464,7 +479,7 @@ async function main() {
     const seller = pick(storeStaff);
     const customer = visit.customer;
 
-    const soldAt = new Date(today.getTime() - visit.dayOffset * 86_400_000);
+    const soldAt = daysAgo(visit.dayOffset);
     soldAt.setHours(randInt(11, 20), randInt(0, 59), 0, 0);
 
     // 買上点数は1点が中心。まとめ買いは少数
@@ -473,7 +488,7 @@ async function main() {
 
     const chosen = new Map<string, { quantity: number; price: number; listPrice: number }>();
     for (let l = 0; l < lineCount; l += 1) {
-      const variant = pick(allVariants);
+      const variant = pick(sellableVariants);
       const existing = chosen.get(variant.id);
       // 同じ SKU を2点買うのは稀 (色違い・サイズ違いが普通)
       const quantity = existing ? 1 : rand() < 0.12 ? 2 : 1;
@@ -507,49 +522,45 @@ async function main() {
         : 0;
     const pointsEarned = customer ? calcEarnedPoints(Math.max(0, total - pointsUsed), rank) : 0;
 
-    const sale = await prisma.sale.create({
-      data: {
-        receiptNo: `${store.code}-${String(receiptSeq).padStart(6, "0")}`,
-        externalId: `POS-${store.code}-${String(receiptSeq).padStart(6, "0")}`,
-        source: "POS",
-        storeId: store.id,
-        staffId: seller?.id,
-        customerId: customer?.record.id,
-        soldAt,
-        subtotal,
-        discount,
-        tax,
-        total,
-        pointsUsed,
-        pointsEarned,
-        paymentMethod: pick(paymentMethods),
-        type: "SALE",
-        lines: { create: lines },
-      },
+    const saleId = makeId();
+    sales.push({
+      id: saleId,
+      receiptNo: `${store.code}-${String(receiptSeq).padStart(6, "0")}`,
+      externalId: `POS-${store.code}-${String(receiptSeq).padStart(6, "0")}`,
+      source: "POS",
+      storeId: store.id,
+      staffId: seller?.id,
+      customerId: customer?.id,
+      soldAt,
+      subtotal,
+      discount,
+      tax,
+      total,
+      pointsUsed,
+      pointsEarned,
+      paymentMethod: pick(paymentMethods),
+      type: "SALE",
     });
     receiptSeq += 1;
-    saleCount += 1;
 
-    // 在庫を減らす (在庫が無ければスキップして履歴の整合を保つ)
     for (const line of lines) {
-      const inv = await prisma.inventory.findUnique({
-        where: { storeId_variantId: { storeId: store.id, variantId: line.variantId } },
-      });
-      if (!inv) continue;
-      const balance = Math.max(0, inv.quantity - line.quantity);
-      await prisma.inventory.update({ where: { id: inv.id }, data: { quantity: balance } });
-      await prisma.stockMovement.create({
-        data: {
-          storeId: store.id,
-          variantId: line.variantId,
-          type: "SALE",
-          quantity: -line.quantity,
-          balance,
-          refType: "SALE",
-          refId: sale.id,
-          staffId: seller?.id,
-          createdAt: soldAt,
-        },
+      saleLines.push({ id: makeId(), saleId, ...line });
+
+      // 在庫はメモリ上で引き当てる (DB への問い合わせを発生させない)
+      const inventory = inventoryByKey.get(`${store.id}:${line.variantId}`);
+      if (!inventory) continue;
+      inventory.quantity = Math.max(0, inventory.quantity - line.quantity);
+      movements.push({
+        id: makeId(),
+        storeId: store.id,
+        variantId: line.variantId,
+        type: "SALE",
+        quantity: -line.quantity,
+        balance: inventory.quantity,
+        refType: "SALE",
+        refId: saleId,
+        staffId: seller?.id,
+        createdAt: soldAt,
       });
     }
 
@@ -559,28 +570,26 @@ async function main() {
     let balance = customer.points;
     if (pointsUsed > 0) {
       balance -= pointsUsed;
-      await prisma.pointEvent.create({
-        data: {
-          customerId: customer.record.id,
-          type: "REDEEM",
-          points: -pointsUsed,
-          balance,
-          saleId: sale.id,
-          createdAt: soldAt,
-        },
+      pointEvents.push({
+        id: makeId(),
+        customerId: customer.id,
+        type: "REDEEM",
+        points: -pointsUsed,
+        balance,
+        saleId,
+        createdAt: soldAt,
       });
     }
     if (pointsEarned > 0) {
       balance += pointsEarned;
-      await prisma.pointEvent.create({
-        data: {
-          customerId: customer.record.id,
-          type: "EARN",
-          points: pointsEarned,
-          balance,
-          saleId: sale.id,
-          createdAt: soldAt,
-        },
+      pointEvents.push({
+        id: makeId(),
+        customerId: customer.id,
+        type: "EARN",
+        points: pointsEarned,
+        balance,
+        saleId,
+        createdAt: soldAt,
       });
     }
 
@@ -592,31 +601,64 @@ async function main() {
     customer.rank = rankForSpent(customer.totalSpent);
   }
 
-  // 集計した顧客実績をまとめて反映
-  for (const customer of customers) {
-    await prisma.customer.update({
-      where: { id: customer.record.id },
-      data: {
-        points: customer.points,
-        totalSpent: customer.totalSpent,
-        visitCount: customer.visitCount,
-        rank: customer.rank,
-        firstVisitAt: customer.firstVisitAt,
-        lastVisitAt: customer.lastVisitAt,
-      },
-    });
-  }
-  console.log(`  -> ${saleCount} 件の取引`);
+  // ---------------------------------------------------------------------------
+  // ここから書き込み。外部キーの依存順に一括挿入する
+  // ---------------------------------------------------------------------------
+
+  console.log("\nデータベースに書き込み中...");
+  await prisma.store.createMany({ data: stores });
+  await prisma.brand.createMany({ data: [brand] });
+  await prisma.category.createMany({ data: categories });
+  await prisma.season.createMany({ data: seasons });
+  await prisma.staff.createMany({ data: staff });
+
+  await insertChunked(products, (chunk) => prisma.product.createMany({ data: chunk as never }));
+  await insertChunked(variants, (chunk) => prisma.productVariant.createMany({ data: chunk as never }));
+  await insertChunked(priceChanges, (chunk) => prisma.priceChange.createMany({ data: chunk as never }));
+
+  // 集計済みの実績を含めて顧客を作る (後から UPDATE しない)
+  await insertChunked(
+    customers.map((c) => ({
+      id: c.id,
+      memberCode: c.memberCode,
+      lastName: c.lastName,
+      firstName: c.firstName,
+      lastNameKana: c.lastNameKana,
+      firstNameKana: c.firstNameKana,
+      gender: c.gender,
+      phone: c.phone,
+      email: c.email,
+      birthday: c.birthday,
+      postalCode: c.postalCode,
+      address: c.address,
+      storeId: c.storeId,
+      tags: c.tags,
+      note: c.note,
+      createdAt: c.createdAt,
+      points: c.points,
+      totalSpent: c.totalSpent,
+      visitCount: c.visitCount,
+      rank: c.rank,
+      firstVisitAt: c.firstVisitAt,
+      lastVisitAt: c.lastVisitAt,
+    })),
+    (chunk) => prisma.customer.createMany({ data: chunk }),
+  );
+
+  await insertChunked(lineAccounts, (chunk) => prisma.lineAccount.createMany({ data: chunk as never }));
+  await insertChunked(inventories, (chunk) => prisma.inventory.createMany({ data: chunk }));
+  await insertChunked(sales, (chunk) => prisma.sale.createMany({ data: chunk as never }));
+  await insertChunked(saleLines, (chunk) => prisma.saleLine.createMany({ data: chunk as never }));
+  await insertChunked(pointEvents, (chunk) => prisma.pointEvent.createMany({ data: chunk as never }));
+  await insertChunked(movements, (chunk) => prisma.stockMovement.createMany({ data: chunk as never }));
 
   // 集計サマリを出して、分布が偏っていないか確認できるようにする
   const rankCounts = customers.reduce<Record<string, number>>((acc, c) => {
     acc[c.rank] = (acc[c.rank] ?? 0) + 1;
     return acc;
   }, {});
-  const totalSales = await prisma.sale.aggregate({ _sum: { total: true }, _count: { _all: true } });
-  const averageOrder = totalSales._count._all
-    ? Math.round((totalSales._sum.total ?? 0) / totalSales._count._all)
-    : 0;
+  const grossTotal = sales.reduce((sum, sale) => sum + (sale.total as number), 0);
+  const averageOrder = sales.length ? Math.round(grossTotal / sales.length) : 0;
   const repeaters = customers.filter((c) => c.visitCount > 1).length;
   const dormant = customers.filter(
     (c) => c.lastVisitAt && today.getTime() - c.lastVisitAt.getTime() > 90 * 86_400_000,
@@ -627,13 +669,15 @@ async function main() {
 
   console.log("\n完了しました。");
   console.log(`  店舗: ${stores.length} / スタッフ: ${staff.length}`);
-  console.log(`  品番: ${PRODUCTS.length} / SKU: ${allVariants.length}`);
-  console.log(`  顧客: ${customers.length} (LINE連携 ${linkedCount})`);
-  console.log(`  取引: ${saleCount} / 客単価: ¥${averageOrder.toLocaleString("ja-JP")}`);
+  console.log(`  品番: ${products.length} / SKU: ${variants.length}`);
+  console.log(`  顧客: ${customers.length} (LINE連携 ${lineAccounts.length})`);
+  console.log(`  取引: ${sales.length} / 明細: ${saleLines.length} / 客単価: ¥${averageOrder.toLocaleString("ja-JP")}`);
+  console.log(`  在庫変動: ${movements.length} / ポイント履歴: ${pointEvents.length}`);
   console.log(`  ランク分布:`, rankCounts);
   console.log(
     `  直近30日の新規: ${newcomers} 名 / リピーター: ${repeaters} 名 / 休眠(90日以上): ${dormant} 名`,
   );
+  console.log(`  所要時間: ${((Date.now() - startedAt) / 1000).toFixed(1)} 秒`);
 }
 
 main()

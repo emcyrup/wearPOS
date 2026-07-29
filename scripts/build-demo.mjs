@@ -61,9 +61,9 @@ try {
     }, pattern);
   }
 
-  const productHref = await firstDetailHref("/products", "^/products/[a-z0-9]{20,}$");
-  const customerHref = await firstDetailHref("/customers", "^/customers/[a-z0-9]{20,}$");
-  const saleHref = await firstDetailHref("/sales", "^/sales/[a-z0-9]{20,}$");
+  const productHref = await firstDetailHref("/products", "^/products/[A-Za-z0-9_-]+$");
+  const customerHref = await firstDetailHref("/customers", "^/customers/[A-Za-z0-9_-]+$");
+  const saleHref = await firstDetailHref("/sales", "^/sales/[A-Za-z0-9_-]+$");
 
   const screens = [
     { id: "dashboard", label: "ダッシュボード", note: "直近30日の売上・顧客サマリ", path: "/" },
