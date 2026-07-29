@@ -140,18 +140,22 @@ Running "vercel-build"
 180日分の取引生成には足りないため）。
 
 ```bash
-# コードのあるブランチを指定して取得する (-b を省くとデフォルトブランチになります)
-git clone -b claude/apparel-crm-pos-integration-b2nxds \
-  https://github.com/emcyrup/wearPOS.git
-
+git clone https://github.com/emcyrup/wearPOS.git
 cd wearPOS          # ← このディレクトリ移動を忘れると package.json が見つかりません
+
+# postinstall で Prisma クライアントが自動生成されます
 npm install
 
+# テーブルを作成する。Vercel のデプロイ時にも実行されるため、
+# 済んでいれば "No pending migrations" と出るだけで、何度実行しても安全です
+DATABASE_URL="<Neon の Direct 接続文字列>" npm run db:deploy
+
+# デモデータを投入する
 DATABASE_URL="<Neon の Direct 接続文字列>" npm run db:seed
 ```
 
-`main` にマージ済みなら `-b` は不要です。取得できたか不安な場合は、
-`ls package.json` でファイルの存在を確認してから `npm install` に進んでください。
+うまくいかない場合は `ls package.json` でファイルの存在を確認してください。
+表示されなければ、クローンしたブランチにコードが無いか、`cd wearPOS` を実行できていません。
 
 数分かかります。次のように出れば完了です。
 
@@ -283,6 +287,8 @@ Vercel の **Deployments** から以前のデプロイを選び、**Promote to P
 | LINE の返信が定型文になる | LINE 側の**応答メッセージ**がオンのまま。オフにしてください |
 | シードが途中で止まる | Pooled ではなく **Direct** の接続文字列で実行してください |
 | `Could not read package.json` (ENOENT) | クローンしたブランチにコードが無いか、`cd wearPOS` を実行していない。Step 5 のコマンドを参照 |
+| `Cannot find module '.prisma/client/default'` | Prisma クライアントが未生成。`npx prisma generate` を実行してから再試行してください |
+| `relation "Store" does not exist`（シード時） | テーブルが未作成。先に `npm run db:deploy` を実行してください |
 | Vercel のビルドが `No Next.js version detected` で失敗 | デプロイ対象のブランチにコードが無い。Step 2 の確認を参照 |
 
 ビルドやアクセス時のエラーは、Vercel の **Deployments → 該当デプロイ → Logs**（実行時は **Runtime Logs**）で確認できます。

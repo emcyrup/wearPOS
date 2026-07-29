@@ -11,15 +11,12 @@ import { defineConfig } from "prisma/config";
  */
 const migrationUrl = process.env.DIRECT_DATABASE_URL ?? process.env.DATABASE_URL;
 
-if (!migrationUrl) {
-  throw new Error("DATABASE_URL (または DIRECT_DATABASE_URL) が設定されていません");
-}
-
 export default defineConfig({
   schema: path.join("prisma", "schema.prisma"),
-  datasource: {
-    url: migrationUrl,
-  },
+  // `prisma generate` のように接続を必要としないコマンドもあるため、
+  // URL が無い場合は datasource ごと渡さない。
+  // これがないと .env の無いクローン直後に postinstall が失敗する。
+  ...(migrationUrl ? { datasource: { url: migrationUrl } } : {}),
   migrations: {
     seed: "tsx prisma/seed.ts",
   },
