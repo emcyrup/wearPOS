@@ -1,13 +1,13 @@
 import Link from "next/link";
 
-import { Badge, Card, EmptyState, PageHeader, Table } from "@/components/ui";
+import { Badge, Card, EmptyState, PAGE_SIZE, PageHeader, Pagination, Table } from "@/components/ui";
 import { DORMANT_DAYS, MEMBER_RANKS, parseTags, rankLabel } from "@/lib/apparel";
 import { prisma } from "@/lib/db";
 import { daysSince, formatDate, formatNumber, formatYen, fullName, fullNameKana } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 
-type Search = { q?: string; rank?: string; line?: string; sort?: string; dormant?: string };
+type Search = { q?: string; rank?: string; line?: string; sort?: string; dormant?: string; page?: string };
 
 const SORTS = {
   recent: { label: "最終来店が新しい順", order: { lastVisitAt: "desc" as const } },
@@ -22,8 +22,9 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
   const sortKey = (params.sort && params.sort in SORTS ? params.sort : "recent") as keyof typeof SORTS;
   const dormantBefore = new Date(Date.now() - DORMANT_DAYS * 86_400_000);
 
-  const customers = await prisma.customer.findMany({
-    where: {
+  const page = Math.max(1, Number(params.page) || 1);
+
+  const where = {
       isActive: true,
       ...(q
         ? {
@@ -43,18 +44,25 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
       ...(params.line === "linked" ? { lineAccount: { isFollowing: true } } : {}),
       ...(params.line === "unlinked" ? { lineAccount: { is: null } } : {}),
       ...(params.dormant === "1" ? { lastVisitAt: { lt: dormantBefore } } : {}),
-    },
-    include: { store: true, lineAccount: true },
-    orderBy: SORTS[sortKey].order,
-    take: 200,
-  });
+  };
+
+  const [customers, total] = await Promise.all([
+    prisma.customer.findMany({
+      where,
+      include: { store: true, lineAccount: true },
+      orderBy: SORTS[sortKey].order,
+      skip: (page - 1) * PAGE_SIZE,
+      take: PAGE_SIZE,
+    }),
+    prisma.customer.count({ where }),
+  ]);
 
   return (
     <>
       <PageHeader
         title="顧客 (CRM)"
         description="購買履歴・ポイント・LINE 連携をまとめて管理します"
-        action={<Badge tone="neutral">{customers.length} 名</Badge>}
+        action={<Badge tone="neutral">{total.toLocaleString("ja-JP")} 名</Badge>}
       />
 
       <Card className="mb-4">
@@ -211,6 +219,18 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
         ) : (
           <EmptyState message="該当する顧客がいません" hint="検索条件を変えてお試しください" />
         )}
+        <Pagination
+          page={page}
+          total={total}
+          basePath="/customers"
+          params={{
+            q: params.q,
+            rank: params.rank,
+            line: params.line,
+            sort: params.sort,
+            dormant: params.dormant,
+          }}
+        />
       </Card>
     </>
   );

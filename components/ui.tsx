@@ -178,3 +178,74 @@ export function StockCell({ quantity, safetyStock = 0 }: { quantity: number; saf
     </span>
   );
 }
+
+/**
+ * 一覧のページ送り。
+ * スマートフォンでは1画面に数百行を描画すると DOM が肥大して表示が遅くなるため、
+ * 既定で 50 件ずつに区切る。
+ */
+export const PAGE_SIZE = 50;
+
+export function Pagination({
+  page,
+  total,
+  pageSize = PAGE_SIZE,
+  basePath,
+  params,
+}: {
+  page: number;
+  total: number;
+  pageSize?: number;
+  basePath: string;
+  /** 現在の絞り込み条件。ページ送りしても維持する */
+  params: Record<string, string | undefined>;
+}) {
+  const lastPage = Math.max(1, Math.ceil(total / pageSize));
+  if (total === 0) return null;
+
+  const hrefFor = (target: number) => {
+    const query = new URLSearchParams();
+    for (const [key, value] of Object.entries(params)) {
+      if (value) query.set(key, value);
+    }
+    if (target > 1) query.set("page", String(target));
+    const qs = query.toString();
+    return qs ? `${basePath}?${qs}` : basePath;
+  };
+
+  const from = (page - 1) * pageSize + 1;
+  const to = Math.min(page * pageSize, total);
+
+  return (
+    <nav className="mt-4 flex items-center justify-between gap-3 border-t border-ink-100 pt-3">
+      <p className="tabular text-xs text-ink-400">
+        {from}–{to} 件 / 全 {total.toLocaleString("ja-JP")} 件
+      </p>
+      <div className="flex items-center gap-2">
+        {page > 1 ? (
+          <Link
+            href={hrefFor(page - 1)}
+            className="rounded-lg border border-ink-200 bg-white px-3 py-1.5 text-sm text-ink-600 hover:bg-ink-50"
+          >
+            前へ
+          </Link>
+        ) : (
+          <span className="rounded-lg border border-ink-100 px-3 py-1.5 text-sm text-ink-200">前へ</span>
+        )}
+        <span className="tabular text-xs text-ink-400">
+          {page} / {lastPage}
+        </span>
+        {page < lastPage ? (
+          <Link
+            href={hrefFor(page + 1)}
+            className="rounded-lg border border-ink-200 bg-white px-3 py-1.5 text-sm text-ink-600 hover:bg-ink-50"
+          >
+            次へ
+          </Link>
+        ) : (
+          <span className="rounded-lg border border-ink-100 px-3 py-1.5 text-sm text-ink-200">次へ</span>
+        )}
+      </div>
+    </nav>
+  );
+}

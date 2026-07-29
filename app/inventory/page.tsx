@@ -1,7 +1,7 @@
 import Link from "next/link";
 
 import { StockAdjustForm } from "@/components/stock-adjust-form";
-import { Badge, Card, EmptyState, PageHeader, StockCell, Table } from "@/components/ui";
+import { Badge, Card, EmptyState, PAGE_SIZE, PageHeader, Pagination, StockCell, Table } from "@/components/ui";
 import { MOVEMENT_TYPE_LABEL } from "@/lib/apparel";
 import { prisma } from "@/lib/db";
 import { inventoryList, recentMovements } from "@/lib/inventory";
@@ -9,7 +9,7 @@ import { formatDateTime, formatNumber } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 
-type Search = { store?: string; q?: string; low?: string };
+type Search = { store?: string; q?: string; low?: string; page?: string };
 
 export default async function InventoryPage({ searchParams }: { searchParams: Promise<Search> }) {
   const params = await searchParams;
@@ -22,13 +22,20 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
 
   const storeId = stores.some((s) => s.id === params.store) ? params.store : undefined;
 
-  const [rows, movements] = await Promise.all([
-    inventoryList({ storeId, keyword: q, lowOnly: params.low === "1" }),
+  const page = Math.max(1, Number(params.page) || 1);
+
+  const [inventory, movements] = await Promise.all([
+    inventoryList({
+      storeId,
+      keyword: q,
+      lowOnly: params.low === "1",
+      limit: PAGE_SIZE,
+      offset: (page - 1) * PAGE_SIZE,
+    }),
     recentMovements(storeId),
   ]);
 
-  const totalUnits = rows.reduce((sum, item) => sum + item.quantity, 0);
-  const lowCount = rows.filter((i) => i.safetyStock > 0 && i.quantity <= i.safetyStock).length;
+  const { rows, total, totalUnits, lowCount } = inventory;
 
   return (
     <>
@@ -102,7 +109,7 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
         </form>
       </Card>
 
-      <Card title={`在庫一覧 (${rows.length} 件)`}>
+      <Card title={`在庫一覧 (${total.toLocaleString("ja-JP")} 件)`}>
         {rows.length ? (
           <Table head={["店舗", "SKU", "商品", "カラー / サイズ", "シーズン", "在庫", "発注点"]}>
             {rows.map((item) => (
@@ -139,6 +146,12 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
         ) : (
           <EmptyState message="該当する在庫がありません" />
         )}
+        <Pagination
+          page={page}
+          total={total}
+          basePath="/inventory"
+          params={{ store: params.store, q: params.q, low: params.low }}
+        />
       </Card>
 
       <Card title="直近の在庫変動" className="mt-4">

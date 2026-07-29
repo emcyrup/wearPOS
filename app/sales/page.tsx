@@ -1,13 +1,13 @@
 import Link from "next/link";
 
-import { Badge, Card, EmptyState, PageHeader, Table } from "@/components/ui";
+import { Badge, Card, EmptyState, PAGE_SIZE, PageHeader, Pagination, Table } from "@/components/ui";
 import { PAYMENT_METHOD_LABEL } from "@/lib/apparel";
 import { prisma } from "@/lib/db";
 import { formatDateTime, formatNumber, formatYen, fullName } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 
-type Search = { store?: string; q?: string; type?: string; from?: string; to?: string };
+type Search = { store?: string; q?: string; type?: string; from?: string; to?: string; page?: string };
 
 export default async function SalesPage({ searchParams }: { searchParams: Promise<Search> }) {
   const params = await searchParams;
@@ -35,6 +35,8 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
       : {}),
   };
 
+  const page = Math.max(1, Number(params.page) || 1);
+
   const [sales, aggregate] = await Promise.all([
     prisma.sale.findMany({
       where,
@@ -45,7 +47,8 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
         lines: { select: { quantity: true } },
       },
       orderBy: { soldAt: "desc" },
-      take: 100,
+      skip: (page - 1) * PAGE_SIZE,
+      take: PAGE_SIZE,
     }),
     prisma.sale.aggregate({ where, _sum: { total: true }, _count: { _all: true } }),
   ]);
@@ -190,11 +193,18 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
             hint="POS連携APIから取引を送信するとここに表示されます"
           />
         )}
-        {aggregate._count._all > sales.length && (
-          <p className="mt-3 text-center text-xs text-ink-400">
-            直近 {sales.length} 件を表示しています（全 {formatNumber(aggregate._count._all)} 件）
-          </p>
-        )}
+        <Pagination
+          page={page}
+          total={aggregate._count._all}
+          basePath="/sales"
+          params={{
+            store: params.store,
+            q: params.q,
+            type: params.type,
+            from: params.from,
+            to: params.to,
+          }}
+        />
       </Card>
     </>
   );

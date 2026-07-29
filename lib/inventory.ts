@@ -108,9 +108,33 @@ export async function inventoryList(params: {
   keyword?: string;
   lowOnly?: boolean;
   limit?: number;
-}): Promise<InventoryRow[]> {
+  offset?: number;
+}): Promise<{ rows: InventoryRow[]; total: number; totalUnits: number; lowCount: number }> {
   const keyword = params.keyword?.trim();
   const like = keyword ? `%${keyword}%` : null;
+
+  const conditions = Prisma.sql`
+    WHERE TRUE
+      ${params.storeId ? Prisma.sql`AND i."storeId" = ${params.storeId}` : Prisma.empty}
+      ${params.lowOnly ? Prisma.sql`AND i.quantity <= i."safetyStock"` : Prisma.empty}
+      ${
+        like
+          ? Prisma.sql`AND (v.sku ILIKE ${like} OR v.barcode ILIKE ${like}
+              OR p.name ILIKE ${like} OR p."styleCode" ILIKE ${like})`
+          : Prisma.empty
+      }
+  `;
+
+  // 件数と合計は全件を対象に集計する (表示するのは1ページ分だけ)
+  const summaryRows = await prisma.$queryRaw<Record<string, unknown>[]>(Prisma.sql`
+    SELECT COUNT(*) AS total,
+           COALESCE(SUM(i.quantity), 0) AS total_units,
+           COUNT(*) FILTER (WHERE i."safetyStock" > 0 AND i.quantity <= i."safetyStock") AS low_count
+    FROM "Inventory" i
+    JOIN "ProductVariant" v ON v.id = i."variantId"
+    JOIN "Product" p ON p.id = v."productId"
+    ${conditions}
+  `);
 
   const rows = await prisma.$queryRaw<Record<string, unknown>[]>(Prisma.sql`
     SELECT i.id, i.quantity, i."safetyStock",
@@ -123,20 +147,14 @@ export async function inventoryList(params: {
     JOIN "ProductVariant" v ON v.id = i."variantId"
     JOIN "Product" p ON p.id = v."productId"
     JOIN "Season" se ON se.id = p."seasonId"
-    WHERE TRUE
-      ${params.storeId ? Prisma.sql`AND i."storeId" = ${params.storeId}` : Prisma.empty}
-      ${params.lowOnly ? Prisma.sql`AND i.quantity <= i."safetyStock"` : Prisma.empty}
-      ${
-        like
-          ? Prisma.sql`AND (v.sku ILIKE ${like} OR v.barcode ILIKE ${like}
-              OR p.name ILIKE ${like} OR p."styleCode" ILIKE ${like})`
-          : Prisma.empty
-      }
+    ${conditions}
     ORDER BY v.sku ASC, st.code ASC
-    LIMIT ${params.limit ?? 200}
+    LIMIT ${params.limit ?? 50} OFFSET ${params.offset ?? 0}
   `);
 
-  return rows.map((row) => ({
+  const summary = summaryRows[0] ?? {};
+
+  const mapped = rows.map((row) => ({
     id: String(row.id),
     quantity: Number(row.quantity ?? 0),
     safetyStock: Number(row.safetyStock ?? 0),
@@ -149,6 +167,13 @@ export async function inventoryList(params: {
     productName: String(row.product_name),
     seasonCode: String(row.season_code),
   }));
+
+  return {
+    rows: mapped,
+    total: Number(summary.total ?? 0),
+    totalUnits: Number(summary.total_units ?? 0),
+    lowCount: Number(summary.low_count ?? 0),
+  };
 }
 
 export type MovementRow = {
