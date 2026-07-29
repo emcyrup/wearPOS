@@ -75,7 +75,10 @@ postgresql://neondb_owner:xxxx@ep-cool-name-123456.ap-southeast-1.aws.neon.tech/
 3. **Configure Project** の画面が出ます。
    - **Framework Preset**: `Next.js` が自動検出されます。**変更不要**です。
      ここで `Other` と表示される場合は、デフォルトブランチにコードが無い可能性が高いです
-     （上の確認に戻ってください）。
+     （上の確認に戻ってください）。`Other` のままデプロイすると、静的サイトとして扱われ
+     `No Output Directory named "public" found` で失敗します。
+     一度 `Other` で作成したプロジェクトは、後からコードを追加しても自動では直りません。
+     **Settings → Build and Deployment → Framework Settings** で手動で `Next.js` に変更してください。
    - **Build Command / Output Directory / Install Command**: すべて既定のままで構いません。
      `package.json` の `vercel-build` スクリプトが自動的に使われます。
    - **Root Directory**: `./`（既定）
@@ -294,6 +297,7 @@ Vercel の **Deployments** から以前のデプロイを選び、**Promote to P
 | `Cannot find module '.prisma/client/default'` | Prisma クライアントが未生成。`npx prisma generate` を実行してから再試行してください |
 | `relation "Store" does not exist`（シード時） | テーブルが未作成。先に `npm run db:deploy` を実行してください |
 | Vercel のビルドが `No Next.js version detected` で失敗 | デプロイ対象のブランチにコードが無い。Step 2 の確認を参照 |
+| `No Output Directory named "public" found` | Framework Preset が `Other` のまま。**Settings → Build and Deployment → Framework Settings** で `Next.js` に変更し、Build Command と Output Directory の Override を解除してから再デプロイ |
 
 ビルドやアクセス時のエラーは、Vercel の **Deployments → 該当デプロイ → Logs**（実行時は **Runtime Logs**）で確認できます。
 
