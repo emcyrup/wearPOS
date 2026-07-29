@@ -69,36 +69,50 @@ const PRODUCTS: ProductSpec[] = [
   { styleCode: "ALL-AC-203", name: "シルクスカーフ", categoryCode: "ACC", listPrice: 9800, cost: 3100, sizes: FREE_SIZES, colors: ["PNK", "NVY", "BEG"], material: "シルク100%", seasonCode: "2026ALL" },
 ];
 
-const CUSTOMER_NAMES: [string, string, string, string, string][] = [
-  ["佐藤", "美咲", "サトウ", "ミサキ", "FEMALE"],
-  ["鈴木", "陽菜", "スズキ", "ヒナ", "FEMALE"],
-  ["高橋", "健太", "タカハシ", "ケンタ", "MALE"],
-  ["田中", "さくら", "タナカ", "サクラ", "FEMALE"],
-  ["伊藤", "翔太", "イトウ", "ショウタ", "MALE"],
-  ["渡辺", "結衣", "ワタナベ", "ユイ", "FEMALE"],
-  ["山本", "大輔", "ヤマモト", "ダイスケ", "MALE"],
-  ["中村", "彩", "ナカムラ", "アヤ", "FEMALE"],
-  ["小林", "遥", "コバヤシ", "ハルカ", "FEMALE"],
-  ["加藤", "拓也", "カトウ", "タクヤ", "MALE"],
-  ["吉田", "愛", "ヨシダ", "アイ", "FEMALE"],
-  ["山田", "真央", "ヤマダ", "マオ", "FEMALE"],
-  ["佐々木", "涼", "ササキ", "リョウ", "MALE"],
-  ["松本", "杏", "マツモト", "アン", "FEMALE"],
-  ["井上", "千夏", "イノウエ", "チナツ", "FEMALE"],
-  ["木村", "隼人", "キムラ", "ハヤト", "MALE"],
-  ["林", "美穂", "ハヤシ", "ミホ", "FEMALE"],
-  ["清水", "楓", "シミズ", "カエデ", "FEMALE"],
-  ["山口", "健", "ヤマグチ", "ケン", "MALE"],
-  ["斎藤", "菜々", "サイトウ", "ナナ", "FEMALE"],
-  ["池田", "優花", "イケダ", "ユウカ", "FEMALE"],
-  ["橋本", "亮", "ハシモト", "リョウ", "MALE"],
-  ["石川", "咲", "イシカワ", "サキ", "FEMALE"],
-  ["前田", "詩織", "マエダ", "シオリ", "FEMALE"],
+const SURNAMES: [string, string][] = [
+  ["佐藤", "サトウ"], ["鈴木", "スズキ"], ["高橋", "タカハシ"], ["田中", "タナカ"],
+  ["伊藤", "イトウ"], ["渡辺", "ワタナベ"], ["山本", "ヤマモト"], ["中村", "ナカムラ"],
+  ["小林", "コバヤシ"], ["加藤", "カトウ"], ["吉田", "ヨシダ"], ["山田", "ヤマダ"],
+  ["佐々木", "ササキ"], ["松本", "マツモト"], ["井上", "イノウエ"], ["木村", "キムラ"],
+  ["林", "ハヤシ"], ["清水", "シミズ"], ["山口", "ヤマグチ"], ["斎藤", "サイトウ"],
+  ["池田", "イケダ"], ["橋本", "ハシモト"], ["石川", "イシカワ"], ["前田", "マエダ"],
+  ["藤田", "フジタ"], ["後藤", "ゴトウ"], ["岡田", "オカダ"], ["長谷川", "ハセガワ"],
+  ["村上", "ムラカミ"], ["近藤", "コンドウ"], ["石井", "イシイ"], ["坂本", "サカモト"],
+];
+
+const GIVEN_NAMES: [string, string, string][] = [
+  ["美咲", "ミサキ", "FEMALE"], ["陽菜", "ヒナ", "FEMALE"], ["さくら", "サクラ", "FEMALE"],
+  ["結衣", "ユイ", "FEMALE"], ["彩", "アヤ", "FEMALE"], ["遥", "ハルカ", "FEMALE"],
+  ["愛", "アイ", "FEMALE"], ["真央", "マオ", "FEMALE"], ["杏", "アン", "FEMALE"],
+  ["千夏", "チナツ", "FEMALE"], ["美穂", "ミホ", "FEMALE"], ["楓", "カエデ", "FEMALE"],
+  ["菜々", "ナナ", "FEMALE"], ["優花", "ユウカ", "FEMALE"], ["咲", "サキ", "FEMALE"],
+  ["詩織", "シオリ", "FEMALE"], ["七海", "ナナミ", "FEMALE"], ["莉子", "リコ", "FEMALE"],
+  ["葵", "アオイ", "FEMALE"], ["芽衣", "メイ", "FEMALE"], ["理沙", "リサ", "FEMALE"],
+  ["健太", "ケンタ", "MALE"], ["翔太", "ショウタ", "MALE"], ["大輔", "ダイスケ", "MALE"],
+  ["拓也", "タクヤ", "MALE"], ["涼", "リョウ", "MALE"], ["隼人", "ハヤト", "MALE"],
+  ["健", "ケン", "MALE"], ["亮", "リョウ", "MALE"], ["直人", "ナオト", "MALE"],
 ];
 
 const TAG_POOL = [
   "カジュアル", "モノトーン", "きれいめ", "ナチュラル", "トレンド重視",
   "セール狙い", "新作チェック", "アウター好き", "小物好き", "リネン好み",
+];
+
+/**
+ * 顧客セグメント。来店回数と来店時期の分布を決める。
+ * 実店舗の会員構成に近づけ、ランク・新規・休眠・リピート率が一様にならないようにする。
+ */
+const SEGMENTS = [
+  /** 常連上位。月4〜5回来店する少数の優良顧客 */
+  { key: "VIP", ratio: 0.05, visits: [22, 32] as const, windowStart: 175, windowEnd: 0 },
+  /** 定期的に来店するリピーター */
+  { key: "LOYAL", ratio: 0.14, visits: [8, 16] as const, windowStart: 170, windowEnd: 0 },
+  /** 年に数回来店する一般会員 */
+  { key: "REGULAR", ratio: 0.33, visits: [3, 7] as const, windowStart: 165, windowEnd: 0 },
+  /** 直近45日以内に入会した新規会員 */
+  { key: "NEW", ratio: 0.2, visits: [1, 2] as const, windowStart: 45, windowEnd: 0 },
+  /** 90日以上来店のない休眠会員。来店は期間前半に偏る */
+  { key: "DORMANT", ratio: 0.28, visits: [2, 6] as const, windowStart: 180, windowEnd: 95 },
 ];
 
 async function main() {
@@ -271,17 +285,17 @@ async function main() {
         });
 
         // 店舗ごとに初期在庫を投入 (入荷として履歴も残す)
+        const isCoreSize = ["M", "L", "F"].includes(sizeCode);
         for (const store of stores) {
           // 定番サイズ(M/L)は厚めに、端サイズは薄めに
-          const base = ["M", "L", "F"].includes(sizeCode) ? randInt(6, 18) : randInt(0, 8);
-          if (base === 0) continue;
+          const base = isCoreSize ? randInt(18, 40) : randInt(4, 16);
 
           await prisma.inventory.create({
             data: {
               storeId: store.id,
               variantId: variant.id,
               quantity: base,
-              safetyStock: ["M", "L", "F"].includes(sizeCode) ? 3 : 1,
+              safetyStock: isCoreSize ? 4 : 2,
             },
           });
           await prisma.stockMovement.create({
@@ -292,7 +306,7 @@ async function main() {
               quantity: base,
               balance: base,
               reason: "初回入荷",
-              createdAt: new Date(today.getTime() - randInt(60, 150) * 86_400_000),
+              createdAt: new Date(today.getTime() - randInt(150, 200) * 86_400_000),
             },
           });
         }
@@ -302,198 +316,286 @@ async function main() {
   console.log(`  -> ${PRODUCTS.length} 品番 / ${allVariants.length} SKU`);
 
   console.log("顧客を作成中...");
-  const customers = await Promise.all(
-    CUSTOMER_NAMES.map((entry, i) => {
-      const [lastName, firstName, lastNameKana, firstNameKana, gender] = entry;
-      const tags = Array.from({ length: randInt(1, 3) }, () => pick(TAG_POOL));
-      return prisma.customer.create({
-        data: {
-          memberCode: `M${String(10001 + i)}`,
-          lastName,
-          firstName,
-          lastNameKana,
-          firstNameKana,
-          gender,
-          phone: `090-${String(randInt(1000, 9999))}-${String(randInt(1000, 9999))}`,
-          email: `customer${i + 1}@example.com`,
-          birthday: new Date(randInt(1975, 2005), randInt(0, 11), randInt(1, 28)),
-          postalCode: `1${String(randInt(50, 99))}-00${randInt(10, 99)}`,
-          address: pick(["東京都渋谷区", "東京都世田谷区", "大阪府大阪市北区", "愛知県名古屋市中区"]),
-          storeId: pick(stores).id,
-          tags: Array.from(new Set(tags)).join(","),
-          note: rand() > 0.6 ? pick([
-            "普段はМサイズ着用。ゆったりめを好まれる。",
-            "通勤用のきれいめを探されることが多い。",
-            "セール時期にまとめ買いされる傾向。",
-            "ご主人へのギフト購入あり。",
-          ]) : null,
-        },
-      });
-    }),
-  );
+  const CUSTOMER_COUNT = 160;
 
-  console.log("LINE 連携を作成中...");
-  // 6割の顧客が LINE 連携済みという想定
-  const linkedCustomers = customers.filter(() => rand() < 0.6);
-  for (const customer of linkedCustomers) {
-    await prisma.lineAccount.create({
+  // セグメント比率に従って各顧客の来店パターンを決める
+  const segmentPlan: (typeof SEGMENTS)[number][] = [];
+  for (const segment of SEGMENTS) {
+    const count = Math.round(CUSTOMER_COUNT * segment.ratio);
+    for (let i = 0; i < count; i += 1) segmentPlan.push(segment);
+  }
+  while (segmentPlan.length < CUSTOMER_COUNT) segmentPlan.push(SEGMENTS[2]);
+
+  const usedNames = new Set<string>();
+  const customers = [];
+
+  for (let i = 0; i < CUSTOMER_COUNT; i += 1) {
+    // 姓名の組み合わせが重複しないように選び直す
+    let surname = pick(SURNAMES);
+    let given = pick(GIVEN_NAMES);
+    let guard = 0;
+    while (usedNames.has(`${surname[0]}${given[0]}`) && guard < 200) {
+      surname = pick(SURNAMES);
+      given = pick(GIVEN_NAMES);
+      guard += 1;
+    }
+    usedNames.add(`${surname[0]}${given[0]}`);
+
+    const segment = segmentPlan[i];
+    const visitCount = randInt(segment.visits[0], segment.visits[1]);
+
+    // 来店日をセグメントの期間内に散らす
+    const visitOffsets = Array.from({ length: visitCount }, () =>
+      randInt(segment.windowEnd, segment.windowStart),
+    ).sort((a, b) => b - a);
+
+    const firstVisitOffset = visitOffsets[0];
+    const tags = Array.from({ length: randInt(1, 3) }, () => pick(TAG_POOL));
+
+    const record = await prisma.customer.create({
       data: {
-        customerId: customer.id,
-        lineUserId: `U${String(randInt(10 ** 9, 10 ** 10 - 1))}${randInt(1000, 9999)}`,
-        displayName: `${customer.lastName}${pick(["", "🌸", "@お買い物垢", "ᐡ"])}`,
-        isFollowing: rand() > 0.08, // 一部はブロック済み
-        linkedAt: new Date(today.getTime() - randInt(10, 300) * 86_400_000),
+        memberCode: `M${String(10001 + i)}`,
+        lastName: surname[0],
+        firstName: given[0],
+        lastNameKana: surname[1],
+        firstNameKana: given[1],
+        gender: given[2],
+        phone: `090-${String(randInt(1000, 9999))}-${String(randInt(1000, 9999))}`,
+        email: `customer${i + 1}@example.com`,
+        birthday: new Date(randInt(1975, 2005), randInt(0, 11), randInt(1, 28)),
+        postalCode: `1${String(randInt(50, 99))}-00${randInt(10, 99)}`,
+        address: pick(["東京都渋谷区", "東京都世田谷区", "大阪府大阪市北区", "愛知県名古屋市中区"]),
+        storeId: pick(stores).id,
+        tags: Array.from(new Set(tags)).join(","),
+        // 入会日は初回来店日に合わせる
+        createdAt: new Date(today.getTime() - firstVisitOffset * 86_400_000),
+        note:
+          rand() > 0.6
+            ? pick([
+                "普段はMサイズ着用。ゆったりめを好まれる。",
+                "通勤用のきれいめを探されることが多い。",
+                "セール時期にまとめ買いされる傾向。",
+                "ご家族へのギフト購入あり。",
+                "同じ品番を色違いで購入されることが多い。",
+              ])
+            : null,
       },
     });
+
+    customers.push({
+      record,
+      segment: segment.key,
+      visitOffsets,
+      // 集計用の可変状態
+      points: 0,
+      totalSpent: 0,
+      visitCount: 0,
+      rank: "REGULAR",
+      firstVisitAt: null as Date | null,
+      lastVisitAt: null as Date | null,
+    });
   }
-  console.log(`  -> ${linkedCustomers.length} / ${customers.length} 名が連携済み`);
+
+  const segmentCounts = customers.reduce<Record<string, number>>((acc, c) => {
+    acc[c.segment] = (acc[c.segment] ?? 0) + 1;
+    return acc;
+  }, {});
+  console.log(`  -> ${customers.length} 名`, segmentCounts);
+
+  console.log("LINE 連携を作成中...");
+  // 新規会員ほど連携率が高く、休眠会員は低いという想定
+  const linkRate: Record<string, number> = {
+    VIP: 0.85,
+    LOYAL: 0.75,
+    REGULAR: 0.55,
+    NEW: 0.7,
+    DORMANT: 0.3,
+  };
+  let linkedCount = 0;
+  for (const customer of customers) {
+    if (rand() >= (linkRate[customer.segment] ?? 0.5)) continue;
+    const firstVisit = customer.visitOffsets[0] ?? 30;
+    await prisma.lineAccount.create({
+      data: {
+        customerId: customer.record.id,
+        lineUserId: `U${String(randInt(10 ** 9, 10 ** 10 - 1))}${randInt(1000, 9999)}`,
+        displayName: `${customer.record.lastName}${pick(["", "🌸", "@お買い物垢", "ᐡ"])}`,
+        // 休眠会員には一定割合でブロック済みを混ぜる
+        isFollowing: customer.segment === "DORMANT" ? rand() > 0.25 : rand() > 0.05,
+        linkedAt: new Date(today.getTime() - randInt(0, firstVisit) * 86_400_000),
+      },
+    });
+    linkedCount += 1;
+  }
+  console.log(`  -> ${linkedCount} / ${customers.length} 名が連携済み`);
 
   console.log("過去180日分の取引を作成中...");
   const paymentMethods = ["CASH", "CREDIT", "CREDIT", "E_MONEY", "QR"];
+
+  type Visit = { dayOffset: number; customer: (typeof customers)[number] | null };
+  const visits: Visit[] = [];
+
+  for (const customer of customers) {
+    for (const dayOffset of customer.visitOffsets) {
+      visits.push({ dayOffset, customer });
+    }
+  }
+
+  // 非会員(ウォークイン)の取引を全体の約3割になるよう追加する
+  const walkInCount = Math.round(visits.length * 0.43);
+  for (let i = 0; i < walkInCount; i += 1) {
+    let dayOffset = randInt(0, 180);
+    const date = new Date(today.getTime() - dayOffset * 86_400_000);
+    const dow = date.getDay();
+    // 週末に寄せるため、平日に当たったら一定確率で引き直す
+    if (dow !== 0 && dow !== 6 && rand() < 0.35) dayOffset = randInt(0, 180);
+    visits.push({ dayOffset, customer: null });
+  }
+
+  // 古い順に処理して、ポイント残高とランクが時系列で正しく積み上がるようにする
+  visits.sort((a, b) => b.dayOffset - a.dayOffset);
+
   let receiptSeq = 1;
   let saleCount = 0;
 
-  for (let dayOffset = 180; dayOffset >= 0; dayOffset -= 1) {
-    const date = new Date(today.getTime() - dayOffset * 86_400_000);
-    const dow = date.getDay();
-    // 週末は客数が増える。直近ほど微増するトレンドを与える
-    const weekendBoost = dow === 0 || dow === 6 ? 1.7 : 1;
-    const trendBoost = 1 + (180 - dayOffset) / 900;
-    const transactions = Math.round(randInt(3, 8) * weekendBoost * trendBoost);
+  for (const visit of visits) {
+    const store = pick(stores);
+    const storeStaff = staff.filter((s) => s.storeId === store.id);
+    const seller = pick(storeStaff);
+    const customer = visit.customer;
 
-    for (let t = 0; t < transactions; t += 1) {
-      const store = pick(stores);
-      const storeStaff = staff.filter((s) => s.storeId === store.id);
-      const seller = pick(storeStaff);
-      // 7割の取引が会員
-      const customer = rand() < 0.7 ? pick(customers) : null;
+    const soldAt = new Date(today.getTime() - visit.dayOffset * 86_400_000);
+    soldAt.setHours(randInt(11, 20), randInt(0, 59), 0, 0);
 
-      const soldAt = new Date(date);
-      soldAt.setHours(randInt(11, 20), randInt(0, 59), 0, 0);
+    // 買上点数は1点が中心。まとめ買いは少数
+    const roll = rand();
+    const lineCount = roll < 0.7 ? 1 : roll < 0.92 ? 2 : 3;
 
-      const lineCount = randInt(1, 3);
-      const chosen = new Map<string, { quantity: number; price: number; listPrice: number }>();
-      for (let l = 0; l < lineCount; l += 1) {
-        const variant = pick(allVariants);
-        const existing = chosen.get(variant.id);
-        const quantity = randInt(1, 2);
-        chosen.set(variant.id, {
-          quantity: (existing?.quantity ?? 0) + quantity,
-          price: variant.price,
-          listPrice: variant.listPrice,
-        });
-      }
+    const chosen = new Map<string, { quantity: number; price: number; listPrice: number }>();
+    for (let l = 0; l < lineCount; l += 1) {
+      const variant = pick(allVariants);
+      const existing = chosen.get(variant.id);
+      // 同じ SKU を2点買うのは稀 (色違い・サイズ違いが普通)
+      const quantity = existing ? 1 : rand() < 0.12 ? 2 : 1;
+      chosen.set(variant.id, {
+        quantity: (existing?.quantity ?? 0) + quantity,
+        price: variant.price,
+        listPrice: variant.listPrice,
+      });
+    }
 
-      const lines = Array.from(chosen.entries()).map(([variantId, item]) => ({
-        variantId,
-        quantity: item.quantity,
-        unitPrice: item.price,
-        discount: 0,
-        lineTotal: item.price * item.quantity,
-        listPriceAtSale: item.listPrice,
-      }));
+    const lines = Array.from(chosen.entries()).map(([variantId, item]) => ({
+      variantId,
+      quantity: item.quantity,
+      unitPrice: item.price,
+      discount: 0,
+      lineTotal: item.price * item.quantity,
+      listPriceAtSale: item.listPrice,
+    }));
 
-      const subtotal = lines.reduce((sum, line) => sum + line.lineTotal, 0);
-      // 1割の取引でスタッフ裁量値引き
-      const discount = rand() < 0.1 ? Math.round(subtotal * 0.05) : 0;
-      const taxable = subtotal - discount;
-      const tax = Math.round(taxable * 0.1);
-      const total = taxable + tax;
+    const subtotal = lines.reduce((sum, line) => sum + line.lineTotal, 0);
+    // 1割の取引でスタッフ裁量値引き
+    const discount = rand() < 0.1 ? Math.round(subtotal * 0.05) : 0;
+    const taxable = subtotal - discount;
+    const tax = Math.round(taxable * 0.1);
+    const total = taxable + tax;
 
-      const rank = customer ? rankForSpent(customer.totalSpent) : "REGULAR";
-      const pointsUsed = customer && rand() < 0.12 ? Math.min(customer.points, randInt(100, 500)) : 0;
-      const pointsEarned = customer ? calcEarnedPoints(Math.max(0, total - pointsUsed), rank) : 0;
+    const rank = customer ? customer.rank : "REGULAR";
+    const pointsUsed =
+      customer && customer.points >= 500 && rand() < 0.15
+        ? Math.min(customer.points, randInt(300, 1500))
+        : 0;
+    const pointsEarned = customer ? calcEarnedPoints(Math.max(0, total - pointsUsed), rank) : 0;
 
-      const sale = await prisma.sale.create({
+    const sale = await prisma.sale.create({
+      data: {
+        receiptNo: `${store.code}-${String(receiptSeq).padStart(6, "0")}`,
+        externalId: `POS-${store.code}-${String(receiptSeq).padStart(6, "0")}`,
+        source: "POS",
+        storeId: store.id,
+        staffId: seller?.id,
+        customerId: customer?.record.id,
+        soldAt,
+        subtotal,
+        discount,
+        tax,
+        total,
+        pointsUsed,
+        pointsEarned,
+        paymentMethod: pick(paymentMethods),
+        type: "SALE",
+        lines: { create: lines },
+      },
+    });
+    receiptSeq += 1;
+    saleCount += 1;
+
+    // 在庫を減らす (在庫が無ければスキップして履歴の整合を保つ)
+    for (const line of lines) {
+      const inv = await prisma.inventory.findUnique({
+        where: { storeId_variantId: { storeId: store.id, variantId: line.variantId } },
+      });
+      if (!inv) continue;
+      const balance = Math.max(0, inv.quantity - line.quantity);
+      await prisma.inventory.update({ where: { id: inv.id }, data: { quantity: balance } });
+      await prisma.stockMovement.create({
         data: {
-          receiptNo: `${store.code}-${String(receiptSeq).padStart(6, "0")}`,
-          externalId: `POS-${store.code}-${String(receiptSeq).padStart(6, "0")}`,
-          source: "POS",
           storeId: store.id,
-          staffId: seller?.id,
-          customerId: customer?.id,
-          soldAt,
-          subtotal,
-          discount,
-          tax,
-          total,
-          pointsUsed,
-          pointsEarned,
-          paymentMethod: pick(paymentMethods),
+          variantId: line.variantId,
           type: "SALE",
-          lines: { create: lines },
+          quantity: -line.quantity,
+          balance,
+          refType: "SALE",
+          refId: sale.id,
+          staffId: seller?.id,
+          createdAt: soldAt,
         },
       });
-      receiptSeq += 1;
-      saleCount += 1;
-
-      // 在庫を減らす (在庫が無ければスキップして履歴の整合を保つ)
-      for (const line of lines) {
-        const inv = await prisma.inventory.findUnique({
-          where: { storeId_variantId: { storeId: store.id, variantId: line.variantId } },
-        });
-        if (!inv) continue;
-        const balance = inv.quantity - line.quantity;
-        await prisma.inventory.update({ where: { id: inv.id }, data: { quantity: Math.max(0, balance) } });
-        await prisma.stockMovement.create({
-          data: {
-            storeId: store.id,
-            variantId: line.variantId,
-            type: "SALE",
-            quantity: -line.quantity,
-            balance: Math.max(0, balance),
-            refType: "SALE",
-            refId: sale.id,
-            staffId: seller?.id,
-            createdAt: soldAt,
-          },
-        });
-      }
-
-      if (!customer) continue;
-
-      // 顧客の累計・ポイントを更新
-      let balance = customer.points;
-      if (pointsUsed > 0) {
-        balance -= pointsUsed;
-        await prisma.pointEvent.create({
-          data: {
-            customerId: customer.id,
-            type: "REDEEM",
-            points: -pointsUsed,
-            balance,
-            saleId: sale.id,
-            createdAt: soldAt,
-          },
-        });
-      }
-      if (pointsEarned > 0) {
-        balance += pointsEarned;
-        await prisma.pointEvent.create({
-          data: {
-            customerId: customer.id,
-            type: "EARN",
-            points: pointsEarned,
-            balance,
-            saleId: sale.id,
-            createdAt: soldAt,
-          },
-        });
-      }
-
-      customer.points = balance;
-      customer.totalSpent += total;
-      customer.visitCount += 1;
-      customer.firstVisitAt = customer.firstVisitAt ?? soldAt;
-      customer.lastVisitAt = soldAt;
-      customer.rank = rankForSpent(customer.totalSpent);
     }
+
+    if (!customer) continue;
+
+    // 顧客の累計・ポイントを更新
+    let balance = customer.points;
+    if (pointsUsed > 0) {
+      balance -= pointsUsed;
+      await prisma.pointEvent.create({
+        data: {
+          customerId: customer.record.id,
+          type: "REDEEM",
+          points: -pointsUsed,
+          balance,
+          saleId: sale.id,
+          createdAt: soldAt,
+        },
+      });
+    }
+    if (pointsEarned > 0) {
+      balance += pointsEarned;
+      await prisma.pointEvent.create({
+        data: {
+          customerId: customer.record.id,
+          type: "EARN",
+          points: pointsEarned,
+          balance,
+          saleId: sale.id,
+          createdAt: soldAt,
+        },
+      });
+    }
+
+    customer.points = balance;
+    customer.totalSpent += total;
+    customer.visitCount += 1;
+    customer.firstVisitAt = customer.firstVisitAt ?? soldAt;
+    customer.lastVisitAt = soldAt;
+    customer.rank = rankForSpent(customer.totalSpent);
   }
 
   // 集計した顧客実績をまとめて反映
   for (const customer of customers) {
     await prisma.customer.update({
-      where: { id: customer.id },
+      where: { id: customer.record.id },
       data: {
         points: customer.points,
         totalSpent: customer.totalSpent,
@@ -506,11 +608,32 @@ async function main() {
   }
   console.log(`  -> ${saleCount} 件の取引`);
 
+  // 集計サマリを出して、分布が偏っていないか確認できるようにする
+  const rankCounts = customers.reduce<Record<string, number>>((acc, c) => {
+    acc[c.rank] = (acc[c.rank] ?? 0) + 1;
+    return acc;
+  }, {});
+  const totalSales = await prisma.sale.aggregate({ _sum: { total: true }, _count: { _all: true } });
+  const averageOrder = totalSales._count._all
+    ? Math.round((totalSales._sum.total ?? 0) / totalSales._count._all)
+    : 0;
+  const repeaters = customers.filter((c) => c.visitCount > 1).length;
+  const dormant = customers.filter(
+    (c) => c.lastVisitAt && today.getTime() - c.lastVisitAt.getTime() > 90 * 86_400_000,
+  ).length;
+  const newcomers = customers.filter(
+    (c) => c.firstVisitAt && today.getTime() - c.firstVisitAt.getTime() <= 30 * 86_400_000,
+  ).length;
+
   console.log("\n完了しました。");
   console.log(`  店舗: ${stores.length} / スタッフ: ${staff.length}`);
   console.log(`  品番: ${PRODUCTS.length} / SKU: ${allVariants.length}`);
-  console.log(`  顧客: ${customers.length} (LINE連携 ${linkedCustomers.length})`);
-  console.log(`  取引: ${saleCount}`);
+  console.log(`  顧客: ${customers.length} (LINE連携 ${linkedCount})`);
+  console.log(`  取引: ${saleCount} / 客単価: ¥${averageOrder.toLocaleString("ja-JP")}`);
+  console.log(`  ランク分布:`, rankCounts);
+  console.log(
+    `  直近30日の新規: ${newcomers} 名 / リピーター: ${repeaters} 名 / 休眠(90日以上): ${dormant} 名`,
+  );
 }
 
 main()
