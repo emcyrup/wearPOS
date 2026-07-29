@@ -1,0 +1,168 @@
+import { NextResponse } from "next/server";
+
+import { prisma } from "@/lib/db";
+import { formatYen, fullName } from "@/lib/format";
+import {
+  consumeLinkToken,
+  fetchLineProfile,
+  isLineConfigured,
+  linkSuccessMessage,
+  LINK_GUIDE_MESSAGE,
+  replyLineText,
+  verifyLineSignature,
+} from "@/lib/line";
+
+export const dynamic = "force-dynamic";
+
+type LineEvent = {
+  type: string;
+  replyToken?: string;
+  source?: { userId?: string; type?: string };
+  message?: { type?: string; text?: string };
+};
+
+/**
+ * LINE Messaging API の Webhook。
+ *
+ * POST /api/line/webhook
+ * - follow:   連携の案内を返す
+ * - unfollow: ブロックとして記録する
+ * - message:  6桁コードなら会員連携、それ以外はキーワード応答
+ *
+ * 署名検証に失敗したリクエストは 401 で拒否する。
+ */
+export async function POST(request: Request) {
+  if (!isLineConfigured()) {
+    return NextResponse.json({ error: "LINE の認証情報が未設定です" }, { status: 503 });
+  }
+
+  // 署名は生ボディに対して計算されるので、パース前に文字列で受け取る
+  const rawBody = await request.text();
+  const signature = request.headers.get("x-line-signature");
+
+  if (!verifyLineSignature(rawBody, signature)) {
+    return NextResponse.json({ error: "署名が不正です" }, { status: 401 });
+  }
+
+  let events: LineEvent[] = [];
+  try {
+    events = (JSON.parse(rawBody).events ?? []) as LineEvent[];
+  } catch {
+    return NextResponse.json({ error: "JSON の解析に失敗しました" }, { status: 400 });
+  }
+
+  for (const event of events) {
+    const lineUserId = event.source?.userId;
+    if (!lineUserId) continue;
+
+    try {
+      await handleEvent(event, lineUserId);
+    } catch (error) {
+      // 1件の失敗で全体を落とさない。LINE 側の再送を避けるため 200 を返し続ける
+      console.error("LINE イベントの処理に失敗しました", error);
+    }
+  }
+
+  return NextResponse.json({ ok: true });
+}
+
+async function handleEvent(event: LineEvent, lineUserId: string) {
+  if (event.type === "follow") {
+    await prisma.lineAccount.updateMany({
+      where: { lineUserId },
+      data: { isFollowing: true, unfollowedAt: null },
+    });
+    await logInbound(lineUserId, "EVENT", "follow");
+    if (event.replyToken) await replyLineText(event.replyToken, LINK_GUIDE_MESSAGE);
+    return;
+  }
+
+  if (event.type === "unfollow") {
+    await prisma.lineAccount.updateMany({
+      where: { lineUserId },
+      data: { isFollowing: false, unfollowedAt: new Date() },
+    });
+    await logInbound(lineUserId, "EVENT", "unfollow");
+    return;
+  }
+
+  if (event.type !== "message" || event.message?.type !== "text") return;
+
+  const text = (event.message.text ?? "").trim();
+  await logInbound(lineUserId, "TEXT", text);
+
+  const account = await prisma.lineAccount.findUnique({
+    where: { lineUserId },
+    include: { customer: true },
+  });
+
+  // 未連携で 6 桁コードらしき文字列なら連携を試みる
+  if (!account && /^[A-Za-z0-9]{6}$/.test(text)) {
+    const profile = await fetchLineProfile(lineUserId);
+    const customer = await consumeLinkToken(text, lineUserId, profile ?? undefined);
+
+    if (customer && event.replyToken) {
+      await replyLineText(event.replyToken, linkSuccessMessage(fullName(customer), customer.points));
+    } else if (event.replyToken) {
+      await replyLineText(
+        event.replyToken,
+        "連携コードが無効か、有効期限が切れています。店頭スタッフに再発行をご依頼ください。",
+      );
+    }
+    return;
+  }
+
+  if (!account) {
+    if (event.replyToken) await replyLineText(event.replyToken, LINK_GUIDE_MESSAGE);
+    return;
+  }
+
+  // 連携済み顧客からの問い合わせに応答する
+  const reply = await buildReply(text, account.customerId);
+  if (reply && event.replyToken) await replyLineText(event.replyToken, reply);
+}
+
+async function buildReply(text: string, customerId: string): Promise<string | null> {
+  const customer = await prisma.customer.findUnique({
+    where: { id: customerId },
+    include: { sales: { orderBy: { soldAt: "desc" }, take: 1, include: { store: true } } },
+  });
+  if (!customer) return null;
+
+  if (/ポイント|point|残高/i.test(text)) {
+    return `${fullName(customer)} 様の現在のポイントは ${customer.points} pt です。`;
+  }
+
+  if (/履歴|購入|買った/.test(text)) {
+    const last = customer.sales[0];
+    if (!last) return "お買い上げ履歴がまだございません。";
+    return [
+      "直近のお買い上げ内容です。",
+      `【日付】${last.soldAt.toLocaleDateString("ja-JP")}`,
+      `【店舗】${last.store.name}`,
+      `【金額】${formatYen(last.total)}`,
+    ].join("\n");
+  }
+
+  return [
+    "以下のキーワードにお答えできます。",
+    "・「ポイント」… 現在のポイント残高",
+    "・「履歴」… 直近のお買い上げ内容",
+    "",
+    "その他のお問い合わせは店頭スタッフまでお願いいたします。",
+  ].join("\n");
+}
+
+async function logInbound(lineUserId: string, messageType: string, body: string) {
+  const account = await prisma.lineAccount.findUnique({ where: { lineUserId } });
+  await prisma.lineMessageLog.create({
+    data: {
+      customerId: account?.customerId,
+      lineUserId,
+      direction: "INBOUND",
+      messageType,
+      body,
+      status: "RECEIVED",
+    },
+  });
+}

@@ -1,0 +1,188 @@
+import Link from "next/link";
+import { notFound } from "next/navigation";
+
+import { Badge, Card, PageHeader, Table } from "@/components/ui";
+import { markdownRate, PAYMENT_METHOD_LABEL, rankLabel } from "@/lib/apparel";
+import { prisma } from "@/lib/db";
+import { formatDateTime, formatPercent, formatYen, fullName } from "@/lib/format";
+
+export const dynamic = "force-dynamic";
+
+export default async function SaleDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+
+  const sale = await prisma.sale.findUnique({
+    where: { id },
+    include: {
+      store: true,
+      staff: true,
+      customer: true,
+      pointEvents: true,
+      lines: {
+        include: { variant: { include: { product: { include: { season: true, brand: true } } } } },
+      },
+    },
+  });
+
+  if (!sale) notFound();
+
+  const itemCount = sale.lines.reduce((sum, line) => sum + line.quantity, 0);
+
+  return (
+    <>
+      <div className="mb-2">
+        <Link href="/sales" className="text-sm text-ink-400 hover:text-ink-600">
+          ← 取引履歴
+        </Link>
+      </div>
+
+      <PageHeader
+        title={sale.receiptNo}
+        description={`${formatDateTime(sale.soldAt)} · ${sale.store.name}${
+          sale.staff ? ` · ${sale.staff.name}` : ""
+        }`}
+        action={
+          <div className="flex items-center gap-2">
+            <Badge tone={sale.type === "RETURN" ? "danger" : "success"}>
+              {sale.type === "RETURN" ? "返品" : "販売"}
+            </Badge>
+            <Badge tone="neutral">{sale.source}</Badge>
+          </div>
+        }
+      />
+
+      <div className="grid gap-4 lg:grid-cols-3">
+        <Card title="明細" className="lg:col-span-2">
+          <Table head={["商品", "SKU", "カラー / サイズ", "単価", "数量", "値引", "小計"]}>
+            {sale.lines.map((line) => {
+              const discountRate = markdownRate(line.listPriceAtSale, line.unitPrice);
+              return (
+                <tr key={line.id} className="border-b border-ink-100 last:border-0">
+                  <td className="px-2 py-2.5">
+                    <Link
+                      href={`/products/${line.variant.productId}`}
+                      className="font-medium text-ink-800 hover:text-accent"
+                    >
+                      {line.variant.product.name}
+                    </Link>
+                    <div className="text-xs text-ink-400">
+                      {line.variant.product.styleCode} · {line.variant.product.season.code}
+                      {discountRate > 0 && (
+                        <span className="ml-1 text-accent">
+                          値下げ販売 -{formatPercent(discountRate, 0)}
+                        </span>
+                      )}
+                    </div>
+                  </td>
+                  <td className="tabular px-2 py-2.5 text-xs text-ink-400">{line.variant.sku}</td>
+                  <td className="px-2 py-2.5 whitespace-nowrap">
+                    <span className="flex items-center gap-1.5 text-sm text-ink-600">
+                      <span
+                        className="inline-block h-3 w-3 rounded-full border border-ink-200"
+                        style={{ backgroundColor: line.variant.colorHex ?? "transparent" }}
+                      />
+                      {line.variant.colorName} / {line.variant.sizeName}
+                    </span>
+                  </td>
+                  <td className="tabular px-2 py-2.5">{formatYen(line.unitPrice)}</td>
+                  <td className="tabular px-2 py-2.5">{line.quantity}</td>
+                  <td className="tabular px-2 py-2.5 text-ink-400">
+                    {line.discount ? `-${formatYen(line.discount)}` : "—"}
+                  </td>
+                  <td className="tabular px-2 py-2.5 font-medium">{formatYen(line.lineTotal)}</td>
+                </tr>
+              );
+            })}
+          </Table>
+        </Card>
+
+        <div className="space-y-4">
+          <Card title="お会計">
+            <dl className="space-y-2.5 text-sm">
+              <div className="flex justify-between">
+                <dt className="text-ink-400">小計 (税抜)</dt>
+                <dd className="tabular">{formatYen(sale.subtotal)}</dd>
+              </div>
+              {sale.discount > 0 && (
+                <div className="flex justify-between">
+                  <dt className="text-ink-400">伝票値引き</dt>
+                  <dd className="tabular text-accent">-{formatYen(sale.discount)}</dd>
+                </div>
+              )}
+              <div className="flex justify-between">
+                <dt className="text-ink-400">消費税</dt>
+                <dd className="tabular">{formatYen(sale.tax)}</dd>
+              </div>
+              <div className="flex justify-between border-t border-ink-200 pt-2.5 text-base font-semibold">
+                <dt>合計 (税込)</dt>
+                <dd className="tabular">{formatYen(sale.total)}</dd>
+              </div>
+              <div className="flex justify-between pt-1">
+                <dt className="text-ink-400">支払方法</dt>
+                <dd>{PAYMENT_METHOD_LABEL[sale.paymentMethod] ?? sale.paymentMethod}</dd>
+              </div>
+              <div className="flex justify-between">
+                <dt className="text-ink-400">点数</dt>
+                <dd className="tabular">{itemCount} 点</dd>
+              </div>
+            </dl>
+          </Card>
+
+          <Card title="顧客 / ポイント">
+            {sale.customer ? (
+              <div className="space-y-2.5 text-sm">
+                <div className="flex items-center justify-between gap-2">
+                  <Link
+                    href={`/customers/${sale.customer.id}`}
+                    className="font-medium text-ink-900 hover:text-accent"
+                  >
+                    {fullName(sale.customer)}
+                  </Link>
+                  <Badge tone={sale.customer.rank === "PLATINUM" ? "accent" : "neutral"}>
+                    {rankLabel(sale.customer.rank)}
+                  </Badge>
+                </div>
+                <div className="tabular text-xs text-ink-400">{sale.customer.memberCode}</div>
+                <div className="flex justify-between border-t border-ink-100 pt-2.5">
+                  <dt className="text-ink-400">ポイント利用</dt>
+                  <dd className="tabular">{sale.pointsUsed} pt</dd>
+                </div>
+                <div className="flex justify-between">
+                  <dt className="text-ink-400">獲得ポイント</dt>
+                  <dd className="tabular text-emerald-700">+{sale.pointsEarned} pt</dd>
+                </div>
+                {sale.pointEvents.length > 0 && (
+                  <div className="border-t border-ink-100 pt-2.5 text-xs text-ink-400">
+                    取引後残高 {sale.pointEvents[sale.pointEvents.length - 1].balance} pt
+                  </div>
+                )}
+              </div>
+            ) : (
+              <p className="text-sm text-ink-400">非会員のお取引です</p>
+            )}
+          </Card>
+
+          <Card title="連携情報">
+            <dl className="space-y-2 text-sm">
+              <div className="flex justify-between gap-3">
+                <dt className="text-ink-400">連携元</dt>
+                <dd>{sale.source}</dd>
+              </div>
+              <div className="flex justify-between gap-3">
+                <dt className="text-ink-400">外部取引ID</dt>
+                <dd className="tabular text-right text-xs break-all">{sale.externalId ?? "—"}</dd>
+              </div>
+              <div className="flex justify-between gap-3">
+                <dt className="text-ink-400">取込日時</dt>
+                <dd className="tabular text-xs">{formatDateTime(sale.createdAt)}</dd>
+              </div>
+            </dl>
+            {sale.note && (
+              <p className="mt-3 rounded-lg bg-ink-50 px-3 py-2 text-xs text-ink-600">{sale.note}</p>
+            )}
+          </Card>
+        </div>
+      </div>
+    </>
+  );
+}

@@ -1,0 +1,240 @@
+import { Badge, Card, PageHeader, Table } from "@/components/ui";
+import { RANK_RULES, SEASON_PHASE_LABEL, SEASON_TERM_LABEL, seasonPhase } from "@/lib/apparel";
+import { prisma } from "@/lib/db";
+import { formatDate, formatPercent, formatYen } from "@/lib/format";
+import { isLineConfigured, lineConfig } from "@/lib/line";
+
+export const dynamic = "force-dynamic";
+
+function CodeBlock({ children }: { children: string }) {
+  return (
+    <pre className="overflow-x-auto rounded-lg bg-ink-900 px-4 py-3 text-xs leading-relaxed text-ink-100">
+      <code>{children}</code>
+    </pre>
+  );
+}
+
+export default async function SettingsPage() {
+  const [stores, seasons, staff, brands, categories] = await Promise.all([
+    prisma.store.findMany({ orderBy: { code: "asc" }, include: { _count: { select: { sales: true } } } }),
+    prisma.season.findMany({ orderBy: [{ year: "desc" }, { term: "asc" }] }),
+    prisma.staff.findMany({ orderBy: { code: "asc" }, include: { store: true } }),
+    prisma.brand.findMany({ orderBy: { code: "asc" } }),
+    prisma.category.findMany({ orderBy: { code: "asc" } }),
+  ]);
+
+  const lineReady = isLineConfigured();
+  const { pushEnabled } = lineConfig();
+  const posKeySet = Boolean(process.env.POS_API_KEY);
+
+  return (
+    <>
+      <PageHeader title="設定 / 連携" description="マスタの確認と、POSレジ・LINE公式アカウントの連携設定" />
+
+      <div className="grid gap-4 lg:grid-cols-2">
+        <Card
+          title="POSレジ連携"
+          action={
+            posKeySet ? <Badge tone="success">APIキー設定済み</Badge> : <Badge tone="danger">未設定</Badge>
+          }
+        >
+          <p className="mb-3 text-sm text-ink-600">
+            既存の POS レジから取引を送信すると、在庫の減算・顧客実績の更新・ポイント付与・LINE
+            通知までが自動で行われます。<code className="text-accent">externalId</code>{" "}
+            で冪等性を担保しているため、通信エラー時はそのまま再送して構いません。
+          </p>
+
+          <div className="space-y-3">
+            <div>
+              <p className="mb-1.5 text-xs font-medium text-ink-400">取引の送信</p>
+              <CodeBlock>{`POST /api/pos/sales
+X-API-Key: <POS_API_KEY>
+Content-Type: application/json
+
+{
+  "externalId": "POS-SHIBUYA-000123",
+  "storeCode": "SHIBUYA",
+  "staffCode": "S002",
+  "memberCode": "M10001",
+  "soldAt": "2026-07-29T14:32:00+09:00",
+  "type": "SALE",
+  "paymentMethod": "CREDIT",
+  "pointsUsed": 0,
+  "lines": [
+    { "sku": "26SS-SH-001-BLK-M", "quantity": 1, "unitPrice": 12800 },
+    { "barcode": "4912345678", "quantity": 2, "unitPrice": 6800, "discount": 500 }
+  ]
+}`}</CodeBlock>
+            </div>
+
+            <div>
+              <p className="mb-1.5 text-xs font-medium text-ink-400">マスタ / 在庫 / 会員の照会</p>
+              <CodeBlock>{`GET /api/pos/products?season=2026SS&updatedSince=2026-07-01T00:00:00Z
+GET /api/pos/inventory?storeCode=SHIBUYA&sku=26SS-SH-001-BLK-M
+GET /api/pos/customers?memberCode=M10001
+POST /api/pos/customers   # レジでの新規会員登録`}</CodeBlock>
+            </div>
+          </div>
+
+          <p className="mt-3 text-xs text-ink-400">
+            APIキーは環境変数 <code>POS_API_KEY</code> で設定します。複数店舗で同じキーを共有せず、
+            本番では店舗ごとに払い出すことを推奨します。
+          </p>
+        </Card>
+
+        <Card
+          title="LINE公式アカウント連携"
+          action={
+            lineReady ? (
+              <Badge tone={pushEnabled ? "success" : "warning"}>
+                {pushEnabled ? "連携中" : "送信オフ"}
+              </Badge>
+            ) : (
+              <Badge tone="danger">未設定</Badge>
+            )
+          }
+        >
+          <p className="mb-3 text-sm text-ink-600">
+            顧客詳細から発行した6桁の連携コードを、お客様が公式アカウントのトークへ送信すると会員情報が紐付きます。
+            連携後はお買い上げ内容とポイント残高が自動で通知されます。
+          </p>
+
+          <div className="space-y-3">
+            <div>
+              <p className="mb-1.5 text-xs font-medium text-ink-400">Webhook URL (LINE Developers に登録)</p>
+              <CodeBlock>{`POST /api/line/webhook`}</CodeBlock>
+            </div>
+            <div>
+              <p className="mb-1.5 text-xs font-medium text-ink-400">必要な環境変数</p>
+              <CodeBlock>{`LINE_CHANNEL_SECRET=...        # 署名検証に使用
+LINE_CHANNEL_ACCESS_TOKEN=...  # メッセージ送信に使用
+LINE_PUSH_ENABLED=true         # false で送信を停止 (ログのみ記録)`}</CodeBlock>
+            </div>
+          </div>
+
+          <dl className="mt-4 space-y-2 border-t border-ink-100 pt-3 text-sm">
+            <div className="flex justify-between">
+              <dt className="text-ink-400">チャネルシークレット</dt>
+              <dd>{process.env.LINE_CHANNEL_SECRET ? "設定済み" : "未設定"}</dd>
+            </div>
+            <div className="flex justify-between">
+              <dt className="text-ink-400">アクセストークン</dt>
+              <dd>{process.env.LINE_CHANNEL_ACCESS_TOKEN ? "設定済み" : "未設定"}</dd>
+            </div>
+            <div className="flex justify-between">
+              <dt className="text-ink-400">自動プッシュ通知</dt>
+              <dd>{pushEnabled ? "有効" : "無効"}</dd>
+            </div>
+          </dl>
+
+          {!lineReady && (
+            <p className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
+              認証情報が未設定のため、LINE への送信はスキップされ、送信ログのみが記録されます。
+              画面の動作確認はこの状態でも行えます。
+            </p>
+          )}
+        </Card>
+      </div>
+
+      <div className="mt-4 grid gap-4 lg:grid-cols-2">
+        <Card title="店舗">
+          <Table head={["コード", "店舗名", "電話", "取引数"]}>
+            {stores.map((store) => (
+              <tr key={store.id} className="border-b border-ink-100 last:border-0">
+                <td className="tabular px-2 py-2 text-xs text-ink-400">{store.code}</td>
+                <td className="px-2 py-2 font-medium text-ink-800">{store.name}</td>
+                <td className="tabular px-2 py-2 text-xs text-ink-400">{store.phone ?? "—"}</td>
+                <td className="tabular px-2 py-2">{store._count.sales}</td>
+              </tr>
+            ))}
+          </Table>
+        </Card>
+
+        <Card title="スタッフ">
+          <Table head={["コード", "氏名", "所属", "権限"]}>
+            {staff.map((person) => (
+              <tr key={person.id} className="border-b border-ink-100 last:border-0">
+                <td className="tabular px-2 py-2 text-xs text-ink-400">{person.code}</td>
+                <td className="px-2 py-2 font-medium text-ink-800">{person.name}</td>
+                <td className="px-2 py-2 text-ink-600">{person.store?.name ?? "—"}</td>
+                <td className="px-2 py-2">
+                  <Badge tone={person.role === "MANAGER" ? "info" : "neutral"}>{person.role}</Badge>
+                </td>
+              </tr>
+            ))}
+          </Table>
+        </Card>
+      </div>
+
+      <Card title="シーズン" className="mt-4">
+        <Table head={["コード", "名称", "期間", "セール開始", "状態"]}>
+          {seasons.map((season) => {
+            const phase = seasonPhase(season);
+            return (
+              <tr key={season.id} className="border-b border-ink-100 last:border-0">
+                <td className="tabular px-2 py-2 font-medium text-ink-800">{season.code}</td>
+                <td className="px-2 py-2 text-ink-600">
+                  {season.name}
+                  <span className="ml-2 text-xs text-ink-400">
+                    {SEASON_TERM_LABEL[season.term] ?? season.term}
+                  </span>
+                </td>
+                <td className="tabular px-2 py-2 text-xs text-ink-400">
+                  {formatDate(season.startsOn)} 〜 {formatDate(season.endsOn)}
+                </td>
+                <td className="tabular px-2 py-2 text-xs text-ink-400">
+                  {season.saleStartsOn ? formatDate(season.saleStartsOn) : "—"}
+                </td>
+                <td className="px-2 py-2">
+                  <Badge
+                    tone={phase === "PROPER" ? "success" : phase === "SALE" ? "warning" : "neutral"}
+                  >
+                    {SEASON_PHASE_LABEL[phase]}
+                  </Badge>
+                </td>
+              </tr>
+            );
+          })}
+        </Table>
+      </Card>
+
+      <div className="mt-4 grid gap-4 lg:grid-cols-2">
+        <Card title="会員ランクとポイント付与率">
+          <Table head={["ランク", "累計購入額", "付与率"]}>
+            {RANK_RULES.map((rule) => (
+              <tr key={rule.rank} className="border-b border-ink-100 last:border-0">
+                <td className="px-2 py-2">
+                  <Badge tone={rule.rank === "PLATINUM" ? "accent" : "neutral"}>{rule.label}</Badge>
+                </td>
+                <td className="tabular px-2 py-2 text-ink-600">{formatYen(rule.minSpent)} 以上</td>
+                <td className="tabular px-2 py-2 font-medium">{formatPercent(rule.pointRate, 0)}</td>
+              </tr>
+            ))}
+          </Table>
+          <p className="mt-3 text-xs text-ink-400">
+            ポイントは、ポイント利用分を差し引いた正味の支払額に対して付与されます (二重取り防止)。
+          </p>
+        </Card>
+
+        <Card title="ブランド / カテゴリ">
+          <p className="mb-2 text-xs font-medium text-ink-400">ブランド</p>
+          <div className="flex flex-wrap gap-1.5">
+            {brands.map((brand) => (
+              <Badge key={brand.id} tone="neutral">
+                {brand.name}
+              </Badge>
+            ))}
+          </div>
+          <p className="mt-4 mb-2 text-xs font-medium text-ink-400">カテゴリ</p>
+          <div className="flex flex-wrap gap-1.5">
+            {categories.map((category) => (
+              <Badge key={category.id} tone="neutral">
+                {category.name}
+              </Badge>
+            ))}
+          </div>
+        </Card>
+      </div>
+    </>
+  );
+}
