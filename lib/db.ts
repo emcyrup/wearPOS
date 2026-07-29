@@ -14,13 +14,16 @@ function createClient() {
   }
 
   // サーバーレス環境ではインスタンスごとに接続が作られるため、
-  // 1インスタンスあたりの接続数を絞り、アイドル接続を短時間で解放する。
-  // Neon などのプール付き接続文字列 (-pooler) と併用する前提。
+  // 1インスタンスあたりの接続数は絞る。
+  // 一方でアイドル接続を早く切ると、アクセスのたびに TCP・TLS・認証の
+  // ハンドシェイクをやり直すことになり、そのぶん表示が遅くなる。
+  // 実行環境が生きている間は接続を使い回せるよう、待機時間は長めにとる。
   const adapter = new PrismaPg({
     connectionString,
     max: Number(process.env.DATABASE_POOL_MAX ?? 5),
-    idleTimeoutMillis: 10_000,
+    idleTimeoutMillis: Number(process.env.DATABASE_IDLE_TIMEOUT_MS ?? 120_000),
     connectionTimeoutMillis: 10_000,
+    keepAlive: true,
   });
 
   return new PrismaClient({ adapter });
