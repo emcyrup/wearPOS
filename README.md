@@ -55,47 +55,18 @@ npm run dev              # http://localhost:3000
 
 ## Vercel + Neon へのデプロイ
 
-アプリを実際に動かす（動的配信）場合の手順です。Neon は Postgres のサーバーレス版で、
-Vercel の関数から接続してもコネクションが枯渇しないようプール付きの接続文字列を提供します。
+アプリを実際に動かす（動的配信）場合は、**[DEPLOY.md](./DEPLOY.md) に詳しい手順**があります。
+Neon でのデータベース作成、Vercel へのインポート、環境変数、デモデータ投入、LINE 連携の設定、
+トラブルシューティングまでを順に説明しています。
 
-### 1. Neon でデータベースを作る
+概要だけ示すと次のとおりです。
 
-1. [neon.tech](https://neon.tech) でプロジェクトを作成（無料枠あり）
-2. リージョンは Vercel と揃える（例: `ap-southeast-1`）
-3. 接続文字列は **Pooled connection**（ホスト名に `-pooler` が入るもの）を控える
+1. [Neon](https://neon.tech) で PostgreSQL を作り、**Pooled**（`-pooler` 入り）と **Direct** の
+   接続文字列を控える
+2. [Vercel](https://vercel.com) にリポジトリを Import し、環境変数を設定してからデプロイ
+3. 手元から本番 DB に対して `DATABASE_URL="<Direct 接続文字列>" npm run db:seed`
 
-```
-postgresql://user:pass@ep-xxx-pooler.ap-southeast-1.aws.neon.tech/wearpos?sslmode=require
-```
-
-### 2. Vercel にデプロイする
-
-1. [vercel.com](https://vercel.com) で GitHub リポジトリを Import
-2. Framework は Next.js が自動検出される（ビルド設定の変更は不要）
-3. **Environment Variables** に以下を設定してからデプロイ
-
-| 変数 | 値 |
-| --- | --- |
-| `DATABASE_URL` | Neon のプール付き接続文字列 |
-| `POS_API_KEY` | POS レジと共有する任意の文字列 |
-| `LINE_CHANNEL_SECRET` | LINE を使う場合のみ |
-| `LINE_CHANNEL_ACCESS_TOKEN` | LINE を使う場合のみ |
-
-`vercel-build` スクリプトが `prisma migrate deploy` を実行するため、デプロイのたびに
-マイグレーションが自動で適用されます。テーブル作成のために別途操作する必要はありません。
-
-### 3. デモデータを投入する
-
-初回デプロイ後、手元から本番 DB に対してシードを流します。
-
-```bash
-DATABASE_URL="<Neon の接続文字列>" npm run db:seed
-```
-
-### 4. LINE Webhook を向ける
-
-LINE Developers コンソールの Webhook URL に `https://<デプロイ先>/api/line/webhook` を設定します。
-Vercel は HTTPS が標準で有効なため、証明書の準備は不要です。
+`vercel-build` スクリプトが `prisma migrate deploy` を実行するため、テーブル作成は自動です。
 
 ### 注意: 画面に認証がありません
 
@@ -135,7 +106,8 @@ npm run demo:build    # ビルド → 各画面を取り込み → docs/index.ht
 
 | 変数 | 用途 |
 | --- | --- |
-| `DATABASE_URL` | PostgreSQL の接続文字列 |
+| `DATABASE_URL` | PostgreSQL の接続文字列。Neon ではプール付き (`-pooler`) を指定 |
+| `DIRECT_DATABASE_URL` | マイグレーション用の直結の接続文字列（Neon などプールを使う場合に必要）|
 | `DATABASE_POOL_MAX` | 1インスタンスあたりの最大接続数（省略時 5）|
 | `POS_API_KEY` | POS 連携 API の共有シークレット。未設定だと API は 503 を返します |
 | `LINE_CHANNEL_SECRET` | LINE Webhook の署名検証に使用 |
@@ -244,6 +216,7 @@ prisma/
   schema.prisma           データモデル
   migrations/             マイグレーション
   seed.ts                 デモデータ生成
+DEPLOY.md                 Vercel + Neon へのデプロイ手順
 scripts/
   build-demo.mjs          GitHub Pages 用の静的デモを生成
 docs/                     生成された静的デモ (GitHub Pages の公開元)
