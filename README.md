@@ -51,6 +51,33 @@ npm run dev              # http://localhost:3000
 
 デモデータを入れ直したいときは `npm run db:reset` を使います。
 
+### GitHub Pages での画面デモ公開
+
+`docs/index.html` に、全画面をデータ入りで確認できる静的デモを生成済みです。
+リポジトリの **Settings → Pages** で以下を選ぶと公開されます。
+
+| 項目 | 値 |
+| --- | --- |
+| Source | Deploy from a branch |
+| Branch | `main`（デモを置いたブランチ） |
+| Folder | `/docs` |
+
+公開 URL は `https://<ユーザー名>.github.io/wearPOS/` です。
+
+画面やデモデータを変更したあとは、次のコマンドで再生成します。
+
+```bash
+npm run db:reset      # デモデータを作り直す場合のみ
+npm run demo:build    # ビルド → 各画面を取り込み → docs/index.html を出力
+```
+
+`npm run demo:build` はアプリを一時的に起動し、ブラウザで描画された状態の HTML と CSS を
+1 枚のページにまとめます。グラフも SVG として保持されるため、画像ではなく実際の描画が残ります。
+
+**デモの制約**: GitHub Pages は静的ファイルのみを配信するため、サーバー処理は動きません。
+画面デザインとデータ表示は本物ですが、絞り込み・在庫登録・LINE 送信・POS 連携 API は動作しません
+（画面間のリンクとタブ切り替えのみ有効です）。実際に操作する場合は `npm run dev` で起動してください。
+
 ### 環境変数
 
 | 変数 | 用途 |
