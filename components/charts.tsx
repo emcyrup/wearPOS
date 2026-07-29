@@ -27,7 +27,7 @@ function shortDate(value: string) {
 export function SalesTrendChart({
   data,
 }: {
-  data: { date: string; sales: number; items: number; orders: number }[];
+  data: { date: string; sales: number; orders: number }[];
 }) {
   return (
     <ResponsiveContainer width="100%" height={260}>

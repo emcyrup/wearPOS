@@ -4,6 +4,7 @@ import { StockAdjustForm } from "@/components/stock-adjust-form";
 import { Badge, Card, EmptyState, PageHeader, StockCell, Table } from "@/components/ui";
 import { MOVEMENT_TYPE_LABEL } from "@/lib/apparel";
 import { prisma } from "@/lib/db";
+import { inventoryList, recentMovements } from "@/lib/inventory";
 import { formatDateTime, formatNumber } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
@@ -21,41 +22,13 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
 
   const storeId = stores.some((s) => s.id === params.store) ? params.store : undefined;
 
-  const inventory = await prisma.inventory.findMany({
-    where: {
-      ...(storeId ? { storeId } : {}),
-      ...(q
-        ? {
-            variant: {
-              OR: [
-                { sku: { contains: q } },
-                { barcode: { contains: q } },
-                { product: { name: { contains: q } } },
-                { product: { styleCode: { contains: q } } },
-              ],
-            },
-          }
-        : {}),
-    },
-    include: {
-      store: true,
-      variant: { include: { product: { include: { season: true } } } },
-    },
-    orderBy: [{ variant: { sku: "asc" } }],
-    take: 400,
-  });
-
-  const rows = params.low === "1" ? inventory.filter((i) => i.quantity <= i.safetyStock) : inventory;
-
-  const movements = await prisma.stockMovement.findMany({
-    where: storeId ? { storeId } : {},
-    include: { store: true, variant: { include: { product: true } }, staff: true },
-    orderBy: { createdAt: "desc" },
-    take: 20,
-  });
+  const [rows, movements] = await Promise.all([
+    inventoryList({ storeId, keyword: q, lowOnly: params.low === "1" }),
+    recentMovements(storeId),
+  ]);
 
   const totalUnits = rows.reduce((sum, item) => sum + item.quantity, 0);
-  const lowCount = inventory.filter((i) => i.safetyStock > 0 && i.quantity <= i.safetyStock).length;
+  const lowCount = rows.filter((i) => i.safetyStock > 0 && i.quantity <= i.safetyStock).length;
 
   return (
     <>
@@ -134,30 +107,28 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
           <Table head={["店舗", "SKU", "商品", "カラー / サイズ", "シーズン", "在庫", "発注点"]}>
             {rows.map((item) => (
               <tr key={item.id} className="border-b border-ink-100 last:border-0 hover:bg-ink-50">
-                <td className="px-2 py-2 whitespace-nowrap text-ink-600">{item.store.name}</td>
-                <td className="tabular px-2 py-2 text-xs text-ink-400">{item.variant.sku}</td>
+                <td className="px-2 py-2 whitespace-nowrap text-ink-600">{item.storeName}</td>
+                <td className="tabular px-2 py-2 text-xs text-ink-400">{item.sku}</td>
                 <td className="px-2 py-2">
                   <Link
-                    href={`/products/${item.variant.productId}`}
+                    href={`/products/${item.productId}`}
                     className="font-medium text-ink-800 hover:text-accent"
                   >
-                    {item.variant.product.name}
+                    {item.productName}
                   </Link>
                 </td>
                 <td className="px-2 py-2 whitespace-nowrap">
                   <span className="flex items-center gap-1.5">
                     <span
                       className="inline-block h-3 w-3 rounded-full border border-ink-200"
-                      style={{ backgroundColor: item.variant.colorHex ?? "transparent" }}
+                      style={{ backgroundColor: item.colorHex ?? "transparent" }}
                     />
                     <span className="text-ink-600">
-                      {item.variant.colorName} / {item.variant.sizeName}
+                      {item.colorName} / {item.sizeName}
                     </span>
                   </span>
                 </td>
-                <td className="tabular px-2 py-2 text-xs text-ink-400">
-                  {item.variant.product.season.code}
-                </td>
+                <td className="tabular px-2 py-2 text-xs text-ink-400">{item.seasonCode}</td>
                 <td className="px-2 py-2">
                   <StockCell quantity={item.quantity} safetyStock={item.safetyStock} />
                 </td>
@@ -178,7 +149,7 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
                 <td className="tabular px-2 py-2 whitespace-nowrap text-xs text-ink-400">
                   {formatDateTime(movement.createdAt)}
                 </td>
-                <td className="px-2 py-2 whitespace-nowrap text-ink-600">{movement.store.name}</td>
+                <td className="px-2 py-2 whitespace-nowrap text-ink-600">{movement.storeName}</td>
                 <td className="px-2 py-2">
                   <Badge
                     tone={
@@ -193,8 +164,8 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
                   </Badge>
                 </td>
                 <td className="px-2 py-2">
-                  <div className="text-ink-800">{movement.variant.product.name}</div>
-                  <div className="tabular text-xs text-ink-400">{movement.variant.sku}</div>
+                  <div className="text-ink-800">{movement.productName}</div>
+                  <div className="tabular text-xs text-ink-400">{movement.sku}</div>
                 </td>
                 <td
                   className={`tabular px-2 py-2 font-medium ${
@@ -204,7 +175,7 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
                   {movement.quantity > 0 ? `+${movement.quantity}` : movement.quantity}
                 </td>
                 <td className="tabular px-2 py-2">{movement.balance}</td>
-                <td className="px-2 py-2 text-xs text-ink-400">{movement.staff?.name ?? "—"}</td>
+                <td className="px-2 py-2 text-xs text-ink-400">{movement.staffName ?? "—"}</td>
               </tr>
             ))}
           </Table>

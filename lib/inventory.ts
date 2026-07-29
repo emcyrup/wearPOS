@@ -1,4 +1,4 @@
-import type { Prisma } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 
 import { prisma } from "@/lib/db";
 
@@ -83,16 +83,110 @@ export async function totalOnHandByVariant(variantIds: string[]) {
   return new Map(rows.map((row) => [row.variantId, row._sum.quantity ?? 0]));
 }
 
-/** 発注点を下回っている在庫 (安全在庫割れ) */
-export async function lowStockItems(limit = 20) {
-  const items = await prisma.inventory.findMany({
-    where: { safetyStock: { gt: 0 } },
-    include: {
-      store: true,
-      variant: { include: { product: { include: { brand: true } } } },
-    },
-    orderBy: { quantity: "asc" },
-    take: 200,
-  });
-  return items.filter((item) => item.quantity <= item.safetyStock).slice(0, limit);
+export type InventoryRow = {
+  id: string;
+  quantity: number;
+  safetyStock: number;
+  storeName: string;
+  sku: string;
+  colorName: string;
+  colorHex: string | null;
+  sizeName: string;
+  productId: string;
+  productName: string;
+  seasonCode: string;
+};
+
+/**
+ * 在庫一覧。
+ *
+ * Prisma のネストした include は関連ごとに問い合わせが分かれるため、
+ * 1画面で 12 回の往復が発生していた。結合済みの1クエリにまとめている。
+ */
+export async function inventoryList(params: {
+  storeId?: string;
+  keyword?: string;
+  lowOnly?: boolean;
+  limit?: number;
+}): Promise<InventoryRow[]> {
+  const keyword = params.keyword?.trim();
+  const like = keyword ? `%${keyword}%` : null;
+
+  const rows = await prisma.$queryRaw<Record<string, unknown>[]>(Prisma.sql`
+    SELECT i.id, i.quantity, i."safetyStock",
+           st.name AS store_name,
+           v.sku, v."colorName", v."colorHex", v."sizeName",
+           p.id AS product_id, p.name AS product_name,
+           se.code AS season_code
+    FROM "Inventory" i
+    JOIN "Store" st ON st.id = i."storeId"
+    JOIN "ProductVariant" v ON v.id = i."variantId"
+    JOIN "Product" p ON p.id = v."productId"
+    JOIN "Season" se ON se.id = p."seasonId"
+    WHERE TRUE
+      ${params.storeId ? Prisma.sql`AND i."storeId" = ${params.storeId}` : Prisma.empty}
+      ${params.lowOnly ? Prisma.sql`AND i.quantity <= i."safetyStock"` : Prisma.empty}
+      ${
+        like
+          ? Prisma.sql`AND (v.sku ILIKE ${like} OR v.barcode ILIKE ${like}
+              OR p.name ILIKE ${like} OR p."styleCode" ILIKE ${like})`
+          : Prisma.empty
+      }
+    ORDER BY v.sku ASC, st.code ASC
+    LIMIT ${params.limit ?? 200}
+  `);
+
+  return rows.map((row) => ({
+    id: String(row.id),
+    quantity: Number(row.quantity ?? 0),
+    safetyStock: Number(row.safetyStock ?? 0),
+    storeName: String(row.store_name),
+    sku: String(row.sku),
+    colorName: String(row.colorName),
+    colorHex: (row.colorHex as string | null) ?? null,
+    sizeName: String(row.sizeName),
+    productId: String(row.product_id),
+    productName: String(row.product_name),
+    seasonCode: String(row.season_code),
+  }));
+}
+
+export type MovementRow = {
+  id: string;
+  createdAt: Date;
+  type: string;
+  quantity: number;
+  balance: number;
+  storeName: string;
+  sku: string;
+  productName: string;
+  staffName: string | null;
+};
+
+/** 直近の在庫変動。こちらも結合済みの1クエリで取得する */
+export async function recentMovements(storeId?: string, limit = 20): Promise<MovementRow[]> {
+  const rows = await prisma.$queryRaw<Record<string, unknown>[]>(Prisma.sql`
+    SELECT m.id, m."createdAt", m.type, m.quantity, m.balance,
+           st.name AS store_name, v.sku, p.name AS product_name, sf.name AS staff_name
+    FROM "StockMovement" m
+    JOIN "Store" st ON st.id = m."storeId"
+    JOIN "ProductVariant" v ON v.id = m."variantId"
+    JOIN "Product" p ON p.id = v."productId"
+    LEFT JOIN "Staff" sf ON sf.id = m."staffId"
+    WHERE TRUE ${storeId ? Prisma.sql`AND m."storeId" = ${storeId}` : Prisma.empty}
+    ORDER BY m."createdAt" DESC
+    LIMIT ${limit}
+  `);
+
+  return rows.map((row) => ({
+    id: String(row.id),
+    createdAt: new Date(row.createdAt as string),
+    type: String(row.type),
+    quantity: Number(row.quantity ?? 0),
+    balance: Number(row.balance ?? 0),
+    storeName: String(row.store_name),
+    sku: String(row.sku),
+    productName: String(row.product_name),
+    staffName: (row.staff_name as string | null) ?? null,
+  }));
 }

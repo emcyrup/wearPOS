@@ -1,4 +1,6 @@
-import { DORMANT_DAYS, properSellThroughRate } from "@/lib/apparel";
+import { Prisma } from "@prisma/client";
+
+import { DORMANT_DAYS } from "@/lib/apparel";
 import { prisma } from "@/lib/db";
 
 export type DateRange = { from: Date; to: Date };
@@ -37,14 +39,24 @@ export function previousRange(range: DateRange): DateRange {
   };
 }
 
-type SaleFilter = { range: DateRange; storeId?: string };
+/**
+ * 集計はすべて SQL 側で行う。
+ *
+ * 以前は取引と明細を丸ごと取得して JS で集計していたため、
+ * ダッシュボード1画面で 32 回の問い合わせが発生していた。
+ * サーバーレス環境ではデータベースとの往復遅延がそのまま表示速度に効くため、
+ * 「1指標 = 1クエリ、返るのは集計済みの数行」に変更している。
+ */
 
-function saleWhere({ range, storeId }: SaleFilter) {
-  return {
-    soldAt: { gte: range.from, lte: range.to },
-    ...(storeId ? { storeId } : {}),
-  };
+/** 店舗の絞り込み条件。指定が無ければ空の断片を返す */
+function storeFilter(storeId: string | undefined, alias = "s") {
+  return storeId
+    ? Prisma.sql`AND ${Prisma.raw(`"${alias}"`)}."storeId" = ${storeId}`
+    : Prisma.empty;
 }
+
+/** COUNT/SUM は bigint や numeric で返るため数値に揃える */
+const num = (value: unknown): number => Number(value ?? 0);
 
 export type SalesSummary = {
   netSales: number;
@@ -58,48 +70,48 @@ export type SalesSummary = {
   properSellThrough: number;
 };
 
-/** 期間の売上サマリ。返品は売上からマイナスする */
-export async function salesSummary(filter: SaleFilter): Promise<SalesSummary> {
-  const sales = await prisma.sale.findMany({
-    where: saleWhere(filter),
-    select: {
-      id: true,
-      type: true,
-      total: true,
-      customerId: true,
-      lines: {
-        select: { quantity: true, unitPrice: true, discount: true, listPriceAtSale: true },
-      },
-    },
-  });
+/**
+ * 期間の売上サマリ。返品は売上からマイナスする。
+ * 伝票側の集計と明細側の集計を CTE でまとめ、1往復で取得する。
+ */
+export async function salesSummary(range: DateRange, storeId?: string): Promise<SalesSummary> {
+  const rows = await prisma.$queryRaw<Record<string, unknown>[]>(Prisma.sql`
+    WITH sale_totals AS (
+      SELECT
+        COALESCE(SUM(s.total) FILTER (WHERE s.type = 'SALE'), 0) AS gross,
+        COALESCE(SUM(s.total) FILTER (WHERE s.type = 'RETURN'), 0) AS returns,
+        COUNT(*) FILTER (WHERE s.type = 'SALE') AS orders,
+        COALESCE(SUM(s.total) FILTER (WHERE s.type = 'SALE' AND s."customerId" IS NOT NULL), 0) AS member_sales
+      FROM "Sale" s
+      WHERE s."soldAt" BETWEEN ${range.from} AND ${range.to}
+      ${storeFilter(storeId)}
+    ),
+    line_totals AS (
+      SELECT
+        COALESCE(SUM(l.quantity), 0) AS items,
+        COALESCE(SUM(l.quantity) FILTER (
+          WHERE l."listPriceAtSale" > 0
+            AND l."unitPrice" - (l.discount::numeric / NULLIF(l.quantity, 0)) >= l."listPriceAtSale"
+        ), 0) AS proper_items
+      FROM "SaleLine" l
+      JOIN "Sale" s ON s.id = l."saleId"
+      WHERE s.type = 'SALE'
+        AND s."soldAt" BETWEEN ${range.from} AND ${range.to}
+        ${storeFilter(storeId)}
+    )
+    SELECT * FROM sale_totals, line_totals
+  `);
 
-  let grossSales = 0;
-  let returns = 0;
-  let transactionCount = 0;
-  let itemCount = 0;
-  let memberSales = 0;
-  const allLines: { quantity: number; unitPrice: number; discount: number; listPriceAtSale: number }[] =
-    [];
-
-  for (const sale of sales) {
-    const isReturn = sale.type === "RETURN";
-    if (isReturn) {
-      returns += sale.total;
-    } else {
-      grossSales += sale.total;
-      transactionCount += 1;
-      if (sale.customerId) memberSales += sale.total;
-      for (const line of sale.lines) {
-        itemCount += line.quantity;
-        allLines.push(line);
-      }
-    }
-  }
-
-  const netSales = grossSales - returns;
+  const row = rows[0] ?? {};
+  const grossSales = num(row.gross);
+  const returns = num(row.returns);
+  const transactionCount = num(row.orders);
+  const itemCount = num(row.items);
+  const properItems = num(row.proper_items);
+  const memberSales = num(row.member_sales);
 
   return {
-    netSales,
+    netSales: grossSales - returns,
     grossSales,
     returns,
     transactionCount,
@@ -107,211 +119,202 @@ export async function salesSummary(filter: SaleFilter): Promise<SalesSummary> {
     averageOrderValue: transactionCount ? Math.round(grossSales / transactionCount) : 0,
     unitsPerTransaction: transactionCount ? itemCount / transactionCount : 0,
     memberSalesRatio: grossSales ? memberSales / grossSales : 0,
-    properSellThrough: properSellThroughRate(allLines),
+    properSellThrough: itemCount ? properItems / itemCount : 0,
   };
 }
 
-/** 日別売上の推移 */
-export async function dailySalesTrend(filter: SaleFilter) {
-  const sales = await prisma.sale.findMany({
-    where: saleWhere(filter),
-    select: { soldAt: true, total: true, type: true, customerId: true, lines: { select: { quantity: true } } },
-    orderBy: { soldAt: "asc" },
-  });
+/** 日別売上の推移。取引が無い日も 0 で埋めてグラフが途切れないようにする */
+export async function dailySalesTrend(range: DateRange, storeId?: string) {
+  const rows = await prisma.$queryRaw<Record<string, unknown>[]>(Prisma.sql`
+    SELECT
+      date_trunc('day', s."soldAt") AS day,
+      COALESCE(SUM(CASE WHEN s.type = 'RETURN' THEN -s.total ELSE s.total END), 0) AS sales,
+      COUNT(*) FILTER (WHERE s.type = 'SALE') AS orders
+    FROM "Sale" s
+    WHERE s."soldAt" BETWEEN ${range.from} AND ${range.to}
+    ${storeFilter(storeId)}
+    GROUP BY 1
+    ORDER BY 1
+  `);
 
-  const buckets = new Map<string, { date: string; sales: number; items: number; orders: number }>();
+  const byDate = new Map(
+    rows.map((row) => [
+      startOfDay(new Date(row.day as string)).toISOString().slice(0, 10),
+      { sales: num(row.sales), orders: num(row.orders) },
+    ]),
+  );
 
-  // 空の日も 0 で埋めてグラフが途切れないようにする
-  for (let d = startOfDay(filter.range.from); d <= filter.range.to; d = addDays(d, 1)) {
+  const buckets: { date: string; sales: number; orders: number }[] = [];
+  for (let d = startOfDay(range.from); d <= range.to; d = addDays(d, 1)) {
     const key = d.toISOString().slice(0, 10);
-    buckets.set(key, { date: key, sales: 0, items: 0, orders: 0 });
+    const found = byDate.get(key);
+    buckets.push({ date: key, sales: found?.sales ?? 0, orders: found?.orders ?? 0 });
   }
-
-  for (const sale of sales) {
-    const key = startOfDay(sale.soldAt).toISOString().slice(0, 10);
-    const bucket = buckets.get(key);
-    if (!bucket) continue;
-    const sign = sale.type === "RETURN" ? -1 : 1;
-    bucket.sales += sale.total * sign;
-    if (sale.type !== "RETURN") {
-      bucket.orders += 1;
-      bucket.items += sale.lines.reduce((sum, line) => sum + line.quantity, 0);
-    }
-  }
-
-  return Array.from(buckets.values());
+  return buckets;
 }
 
 /** 店舗別売上 */
 export async function salesByStore(range: DateRange) {
-  const rows = await prisma.sale.groupBy({
-    by: ["storeId"],
-    where: { soldAt: { gte: range.from, lte: range.to }, type: "SALE" },
-    _sum: { total: true },
-    _count: { _all: true },
-  });
+  const rows = await prisma.$queryRaw<Record<string, unknown>[]>(Prisma.sql`
+    SELECT st.id AS store_id, st.name AS store_name,
+           COALESCE(SUM(s.total), 0) AS sales,
+           COUNT(*) AS orders
+    FROM "Sale" s
+    JOIN "Store" st ON st.id = s."storeId"
+    WHERE s.type = 'SALE' AND s."soldAt" BETWEEN ${range.from} AND ${range.to}
+    GROUP BY st.id, st.name
+    ORDER BY sales DESC
+  `);
 
-  const stores = await prisma.store.findMany();
-  const nameById = new Map(stores.map((s) => [s.id, s.name]));
-
-  return rows
-    .map((row) => ({
-      storeId: row.storeId,
-      storeName: nameById.get(row.storeId) ?? "不明な店舗",
-      sales: row._sum.total ?? 0,
-      orders: row._count._all,
-    }))
-    .sort((a, b) => b.sales - a.sales);
+  return rows.map((row) => ({
+    storeId: String(row.store_id),
+    storeName: String(row.store_name),
+    sales: num(row.sales),
+    orders: num(row.orders),
+  }));
 }
 
 /** スタッフ別売上 */
-export async function salesByStaff(filter: SaleFilter, limit = 10) {
-  const rows = await prisma.sale.groupBy({
-    by: ["staffId"],
-    where: { ...saleWhere(filter), type: "SALE", staffId: { not: null } },
-    _sum: { total: true },
-    _count: { _all: true },
+export async function salesByStaff(range: DateRange, storeId?: string, limit = 10) {
+  const rows = await prisma.$queryRaw<Record<string, unknown>[]>(Prisma.sql`
+    SELECT sf.id AS staff_id, sf.name AS staff_name,
+           COALESCE(SUM(s.total), 0) AS sales,
+           COUNT(*) AS orders
+    FROM "Sale" s
+    JOIN "Staff" sf ON sf.id = s."staffId"
+    WHERE s.type = 'SALE' AND s."soldAt" BETWEEN ${range.from} AND ${range.to}
+    ${storeFilter(storeId)}
+    GROUP BY sf.id, sf.name
+    ORDER BY sales DESC
+    LIMIT ${limit}
+  `);
+
+  return rows.map((row) => {
+    const sales = num(row.sales);
+    const orders = num(row.orders);
+    return {
+      staffId: String(row.staff_id),
+      staffName: String(row.staff_name),
+      sales,
+      orders,
+      averageOrderValue: orders ? Math.round(sales / orders) : 0,
+    };
   });
-
-  const staffIds = rows.map((r) => r.staffId).filter((id): id is string => Boolean(id));
-  const staff = await prisma.staff.findMany({ where: { id: { in: staffIds } } });
-  const byId = new Map(staff.map((s) => [s.id, s]));
-
-  return rows
-    .map((row) => ({
-      staffId: row.staffId as string,
-      staffName: byId.get(row.staffId as string)?.name ?? "不明",
-      sales: row._sum.total ?? 0,
-      orders: row._count._all,
-      averageOrderValue: row._count._all ? Math.round((row._sum.total ?? 0) / row._count._all) : 0,
-    }))
-    .sort((a, b) => b.sales - a.sales)
-    .slice(0, limit);
 }
 
 /** SKU 別の売れ筋ランキング */
-export async function topSellingVariants(filter: SaleFilter, limit = 10) {
-  const rows = await prisma.saleLine.groupBy({
-    by: ["variantId"],
-    where: { sale: { ...saleWhere(filter), type: "SALE" } },
-    _sum: { quantity: true, lineTotal: true },
-  });
+export async function topSellingVariants(range: DateRange, storeId?: string, limit = 10) {
+  const rows = await prisma.$queryRaw<Record<string, unknown>[]>(Prisma.sql`
+    SELECT v.id AS variant_id, v.sku, v."colorName", v."sizeName",
+           p.name AS product_name, p."styleCode",
+           b.name AS brand_name, se.code AS season_code,
+           SUM(l.quantity) AS quantity,
+           SUM(l."lineTotal") AS sales
+    FROM "SaleLine" l
+    JOIN "Sale" s ON s.id = l."saleId"
+    JOIN "ProductVariant" v ON v.id = l."variantId"
+    JOIN "Product" p ON p.id = v."productId"
+    JOIN "Brand" b ON b.id = p."brandId"
+    JOIN "Season" se ON se.id = p."seasonId"
+    WHERE s.type = 'SALE' AND s."soldAt" BETWEEN ${range.from} AND ${range.to}
+    ${storeFilter(storeId)}
+    GROUP BY v.id, v.sku, v."colorName", v."sizeName", p.name, p."styleCode", b.name, se.code
+    ORDER BY quantity DESC
+    LIMIT ${limit}
+  `);
 
-  const sorted = rows
-    .sort((a, b) => (b._sum.quantity ?? 0) - (a._sum.quantity ?? 0))
-    .slice(0, limit);
-
-  const variants = await prisma.productVariant.findMany({
-    where: { id: { in: sorted.map((r) => r.variantId) } },
-    include: { product: { include: { brand: true, season: true } } },
-  });
-  const byId = new Map(variants.map((v) => [v.id, v]));
-
-  return sorted
-    .map((row) => {
-      const variant = byId.get(row.variantId);
-      if (!variant) return null;
-      return {
-        variantId: row.variantId,
-        sku: variant.sku,
-        productName: variant.product.name,
-        styleCode: variant.product.styleCode,
-        brandName: variant.product.brand.name,
-        seasonCode: variant.product.season.code,
-        colorName: variant.colorName,
-        sizeName: variant.sizeName,
-        quantity: row._sum.quantity ?? 0,
-        sales: row._sum.lineTotal ?? 0,
-      };
-    })
-    .filter((v): v is NonNullable<typeof v> => v !== null);
+  return rows.map((row) => ({
+    variantId: String(row.variant_id),
+    sku: String(row.sku),
+    productName: String(row.product_name),
+    styleCode: String(row.styleCode),
+    brandName: String(row.brand_name),
+    seasonCode: String(row.season_code),
+    colorName: String(row.colorName),
+    sizeName: String(row.sizeName),
+    quantity: num(row.quantity),
+    sales: num(row.sales),
+  }));
 }
 
-/** カラー別・サイズ別の販売構成 (アパレルの定番分析軸) */
-export async function salesByColorAndSize(filter: SaleFilter) {
-  const lines = await prisma.saleLine.findMany({
-    where: { sale: { ...saleWhere(filter), type: "SALE" } },
-    select: {
-      quantity: true,
-      lineTotal: true,
-      variant: { select: { colorName: true, colorHex: true, sizeName: true, sizeOrder: true } },
-    },
-  });
+/** カラー別・サイズ別の販売構成 (アパレルの定番分析軸)。1往復で両方を取得する */
+export async function salesByColorAndSize(range: DateRange, storeId?: string) {
+  const rows = await prisma.$queryRaw<Record<string, unknown>[]>(Prisma.sql`
+    SELECT 'color' AS axis, v."colorName" AS name, MIN(v."colorHex") AS hex, 0 AS sort,
+           SUM(l.quantity) AS quantity, SUM(l."lineTotal") AS sales
+    FROM "SaleLine" l
+    JOIN "Sale" s ON s.id = l."saleId"
+    JOIN "ProductVariant" v ON v.id = l."variantId"
+    WHERE s.type = 'SALE' AND s."soldAt" BETWEEN ${range.from} AND ${range.to}
+    ${storeFilter(storeId)}
+    GROUP BY v."colorName"
 
-  const colors = new Map<string, { name: string; hex: string | null; quantity: number; sales: number }>();
-  const sizes = new Map<string, { name: string; order: number; quantity: number; sales: number }>();
+    UNION ALL
 
-  for (const line of lines) {
-    const color = colors.get(line.variant.colorName) ?? {
-      name: line.variant.colorName,
-      hex: line.variant.colorHex,
-      quantity: 0,
-      sales: 0,
-    };
-    color.quantity += line.quantity;
-    color.sales += line.lineTotal;
-    colors.set(line.variant.colorName, color);
+    SELECT 'size', v."sizeName", NULL, MIN(v."sizeOrder"),
+           SUM(l.quantity), SUM(l."lineTotal")
+    FROM "SaleLine" l
+    JOIN "Sale" s ON s.id = l."saleId"
+    JOIN "ProductVariant" v ON v.id = l."variantId"
+    WHERE s.type = 'SALE' AND s."soldAt" BETWEEN ${range.from} AND ${range.to}
+    ${storeFilter(storeId)}
+    GROUP BY v."sizeName"
+  `);
 
-    const size = sizes.get(line.variant.sizeName) ?? {
-      name: line.variant.sizeName,
-      order: line.variant.sizeOrder,
-      quantity: 0,
-      sales: 0,
-    };
-    size.quantity += line.quantity;
-    size.sales += line.lineTotal;
-    sizes.set(line.variant.sizeName, size);
-  }
-
-  return {
-    colors: Array.from(colors.values()).sort((a, b) => b.quantity - a.quantity),
-    sizes: Array.from(sizes.values()).sort((a, b) => a.order - b.order),
-  };
-}
-
-/** シーズン別の売上構成。今季と過去シーズンの比率を見る */
-export async function salesBySeason(filter: SaleFilter) {
-  const lines = await prisma.saleLine.findMany({
-    where: { sale: { ...saleWhere(filter), type: "SALE" } },
-    select: {
-      quantity: true,
-      lineTotal: true,
-      unitPrice: true,
-      discount: true,
-      listPriceAtSale: true,
-      variant: { select: { product: { select: { season: { select: { code: true, name: true } } } } } },
-    },
-  });
-
-  const map = new Map<
-    string,
-    { code: string; name: string; quantity: number; sales: number; lines: typeof lines }
-  >();
-
-  for (const line of lines) {
-    const season = line.variant.product.season;
-    const entry = map.get(season.code) ?? {
-      code: season.code,
-      name: season.name,
-      quantity: 0,
-      sales: 0,
-      lines: [] as typeof lines,
-    };
-    entry.quantity += line.quantity;
-    entry.sales += line.lineTotal;
-    entry.lines.push(line);
-    map.set(season.code, entry);
-  }
-
-  return Array.from(map.values())
-    .map((entry) => ({
-      code: entry.code,
-      name: entry.name,
-      quantity: entry.quantity,
-      sales: entry.sales,
-      properRate: properSellThroughRate(entry.lines),
+  const colors = rows
+    .filter((row) => row.axis === "color")
+    .map((row) => ({
+      name: String(row.name),
+      hex: (row.hex as string | null) ?? null,
+      quantity: num(row.quantity),
+      sales: num(row.sales),
     }))
-    .sort((a, b) => b.sales - a.sales);
+    .sort((a, b) => b.quantity - a.quantity);
+
+  const sizes = rows
+    .filter((row) => row.axis === "size")
+    .map((row) => ({
+      name: String(row.name),
+      order: num(row.sort),
+      quantity: num(row.quantity),
+      sales: num(row.sales),
+    }))
+    .sort((a, b) => a.order - b.order);
+
+  return { colors, sizes };
+}
+
+/** シーズン別の売上構成。今季と過去シーズンの比率、プロパー消化率を見る */
+export async function salesBySeason(range: DateRange, storeId?: string) {
+  const rows = await prisma.$queryRaw<Record<string, unknown>[]>(Prisma.sql`
+    SELECT se.code, se.name,
+           SUM(l.quantity) AS quantity,
+           SUM(l."lineTotal") AS sales,
+           COALESCE(SUM(l.quantity) FILTER (
+             WHERE l."listPriceAtSale" > 0
+               AND l."unitPrice" - (l.discount::numeric / NULLIF(l.quantity, 0)) >= l."listPriceAtSale"
+           ), 0) AS proper_quantity
+    FROM "SaleLine" l
+    JOIN "Sale" s ON s.id = l."saleId"
+    JOIN "ProductVariant" v ON v.id = l."variantId"
+    JOIN "Product" p ON p.id = v."productId"
+    JOIN "Season" se ON se.id = p."seasonId"
+    WHERE s.type = 'SALE' AND s."soldAt" BETWEEN ${range.from} AND ${range.to}
+    ${storeFilter(storeId)}
+    GROUP BY se.code, se.name
+    ORDER BY sales DESC
+  `);
+
+  return rows.map((row) => {
+    const quantity = num(row.quantity);
+    return {
+      code: String(row.code),
+      name: String(row.name),
+      quantity,
+      sales: num(row.sales),
+      properRate: quantity ? num(row.proper_quantity) / quantity : 0,
+    };
+  });
 }
 
 export type CustomerInsights = {
@@ -324,35 +327,58 @@ export type CustomerInsights = {
   rankCounts: { rank: string; count: number }[];
 };
 
-/** 顧客サイドの指標 */
+/** 顧客サイドの指標。ランク別の件数と全体の指標を1往復で取得する */
 export async function customerInsights(range: DateRange): Promise<CustomerInsights> {
   const dormantBefore = addDays(new Date(), -DORMANT_DAYS);
 
-  const [totalCustomers, newCustomers, repeatCustomers, dormantCustomers, lineLinkedCount, rankRows] =
-    await Promise.all([
-      prisma.customer.count({ where: { isActive: true } }),
-      prisma.customer.count({
-        where: { isActive: true, firstVisitAt: { gte: range.from, lte: range.to } },
-      }),
-      prisma.customer.count({ where: { isActive: true, visitCount: { gt: 1 } } }),
-      prisma.customer.count({
-        where: { isActive: true, lastVisitAt: { lt: dormantBefore } },
-      }),
-      prisma.lineAccount.count({ where: { isFollowing: true } }),
-      prisma.customer.groupBy({
-        by: ["rank"],
-        where: { isActive: true },
-        _count: { _all: true },
-      }),
-    ]);
+  const rows = await prisma.$queryRaw<Record<string, unknown>[]>(Prisma.sql`
+    SELECT c.rank,
+           COUNT(*) AS total,
+           COUNT(*) FILTER (WHERE c."visitCount" > 1) AS repeaters,
+           COUNT(*) FILTER (WHERE c."firstVisitAt" BETWEEN ${range.from} AND ${range.to}) AS newcomers,
+           COUNT(*) FILTER (WHERE c."lastVisitAt" < ${dormantBefore}) AS dormant,
+           (SELECT COUNT(*) FROM "LineAccount" la WHERE la."isFollowing") AS line_linked
+    FROM "Customer" c
+    WHERE c."isActive"
+    GROUP BY c.rank
+  `);
+
+  const totalCustomers = rows.reduce((sum, row) => sum + num(row.total), 0);
+  const repeatCustomers = rows.reduce((sum, row) => sum + num(row.repeaters), 0);
+  const lineLinkedCount = num(rows[0]?.line_linked);
 
   return {
     totalCustomers,
-    newCustomers,
+    newCustomers: rows.reduce((sum, row) => sum + num(row.newcomers), 0),
     repeatRate: totalCustomers ? repeatCustomers / totalCustomers : 0,
-    dormantCustomers,
+    dormantCustomers: rows.reduce((sum, row) => sum + num(row.dormant), 0),
     lineLinkedCount,
     lineLinkRate: totalCustomers ? lineLinkedCount / totalCustomers : 0,
-    rankCounts: rankRows.map((row) => ({ rank: row.rank, count: row._count._all })),
+    rankCounts: rows.map((row) => ({ rank: String(row.rank), count: num(row.total) })),
   };
+}
+
+/** 発注点を下回っている在庫 (安全在庫割れ) */
+export async function lowStockItems(limit = 8) {
+  const rows = await prisma.$queryRaw<Record<string, unknown>[]>(Prisma.sql`
+    SELECT i.id, i.quantity, i."safetyStock",
+           st.name AS store_name,
+           v.sku, p.name AS product_name
+    FROM "Inventory" i
+    JOIN "Store" st ON st.id = i."storeId"
+    JOIN "ProductVariant" v ON v.id = i."variantId"
+    JOIN "Product" p ON p.id = v."productId"
+    WHERE i."safetyStock" > 0 AND i.quantity <= i."safetyStock"
+    ORDER BY i.quantity ASC, v.sku ASC
+    LIMIT ${limit}
+  `);
+
+  return rows.map((row) => ({
+    id: String(row.id),
+    quantity: num(row.quantity),
+    safetyStock: num(row.safetyStock),
+    storeName: String(row.store_name),
+    sku: String(row.sku),
+    productName: String(row.product_name),
+  }));
 }

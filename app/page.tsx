@@ -6,6 +6,7 @@ import {
   customerInsights,
   dailySalesTrend,
   lastNDays,
+  lowStockItems,
   previousRange,
   salesByColorAndSize,
   salesBySeason,
@@ -15,7 +16,6 @@ import {
   topSellingVariants,
 } from "@/lib/analytics";
 import { rankLabel } from "@/lib/apparel";
-import { lowStockItems } from "@/lib/inventory";
 import { formatNumber, formatPercent, formatYen } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
@@ -44,14 +44,14 @@ export default async function DashboardPage({
 
   const [summary, prevSummary, trend, stores, staff, topSkus, mix, seasons, customers, lowStock] =
     await Promise.all([
-      salesSummary({ range }),
-      salesSummary({ range: prev }),
-      dailySalesTrend({ range }),
+      salesSummary(range),
+      salesSummary(prev),
+      dailySalesTrend(range),
       salesByStore(range),
-      salesByStaff({ range }),
-      topSellingVariants({ range }),
-      salesByColorAndSize({ range }),
-      salesBySeason({ range }),
+      salesByStaff(range),
+      topSellingVariants(range),
+      salesByColorAndSize(range),
+      salesBySeason(range),
       customerInsights(range),
       lowStockItems(8),
     ]);
@@ -270,10 +270,10 @@ export default async function DashboardPage({
             <Table head={["店舗", "SKU", "在庫", "発注点"]}>
               {lowStock.map((item) => (
                 <tr key={item.id} className="border-b border-ink-100 last:border-0">
-                  <td className="px-2 py-2 text-ink-600">{item.store.name}</td>
+                  <td className="px-2 py-2 text-ink-600">{item.storeName}</td>
                   <td className="px-2 py-2">
-                    <div className="font-medium text-ink-800">{item.variant.product.name}</div>
-                    <div className="tabular text-xs text-ink-400">{item.variant.sku}</div>
+                    <div className="font-medium text-ink-800">{item.productName}</div>
+                    <div className="tabular text-xs text-ink-400">{item.sku}</div>
                   </td>
                   <td className="px-2 py-2">
                     <StockCell quantity={item.quantity} safetyStock={item.safetyStock} />
