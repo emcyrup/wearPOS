@@ -1,0 +1,22 @@
+# ローカル開発用の PostgreSQL
+#   docker compose up -d
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: wearpos
+      POSTGRES_PASSWORD: wearpos
+      POSTGRES_DB: wearpos
+    ports:
+      - "5432:5432"
+    volumes:
+      - wearpos-db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U wearpos"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  wearpos-db:

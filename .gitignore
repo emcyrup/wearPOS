@@ -6,10 +6,6 @@ build
 .env
 .env*.local
 !.env.example
-*.db
-*.db-journal
-*.db-wal
-*.db-shm
 next-env.d.ts
 .DS_Store
 tsconfig.tsbuildinfo

@@ -44,14 +44,67 @@
 ```bash
 npm install
 cp .env.example .env     # 必要に応じて値を編集
-npm run db:push          # SQLite にスキーマを反映
+docker compose up -d     # ローカル用の PostgreSQL を起動
+npm run db:migrate       # マイグレーションを適用
 npm run db:seed          # デモデータ (3店舗 / 140SKU / 180日分の取引) を投入
 npm run dev              # http://localhost:3000
 ```
 
-デモデータを入れ直したいときは `npm run db:reset` を使います。
+デモデータを入れ直すだけなら `npm run db:seed` を再実行します（全件削除して作り直します）。
+スキーマごと作り直す場合は `npm run db:reset`（**データベースの中身を完全に削除します。本番では実行しないでください**）。
 
-### GitHub Pages での画面デモ公開
+## Vercel + Neon へのデプロイ
+
+アプリを実際に動かす（動的配信）場合の手順です。Neon は Postgres のサーバーレス版で、
+Vercel の関数から接続してもコネクションが枯渇しないようプール付きの接続文字列を提供します。
+
+### 1. Neon でデータベースを作る
+
+1. [neon.tech](https://neon.tech) でプロジェクトを作成（無料枠あり）
+2. リージョンは Vercel と揃える（例: `ap-southeast-1`）
+3. 接続文字列は **Pooled connection**（ホスト名に `-pooler` が入るもの）を控える
+
+```
+postgresql://user:pass@ep-xxx-pooler.ap-southeast-1.aws.neon.tech/wearpos?sslmode=require
+```
+
+### 2. Vercel にデプロイする
+
+1. [vercel.com](https://vercel.com) で GitHub リポジトリを Import
+2. Framework は Next.js が自動検出される（ビルド設定の変更は不要）
+3. **Environment Variables** に以下を設定してからデプロイ
+
+| 変数 | 値 |
+| --- | --- |
+| `DATABASE_URL` | Neon のプール付き接続文字列 |
+| `POS_API_KEY` | POS レジと共有する任意の文字列 |
+| `LINE_CHANNEL_SECRET` | LINE を使う場合のみ |
+| `LINE_CHANNEL_ACCESS_TOKEN` | LINE を使う場合のみ |
+
+`vercel-build` スクリプトが `prisma migrate deploy` を実行するため、デプロイのたびに
+マイグレーションが自動で適用されます。テーブル作成のために別途操作する必要はありません。
+
+### 3. デモデータを投入する
+
+初回デプロイ後、手元から本番 DB に対してシードを流します。
+
+```bash
+DATABASE_URL="<Neon の接続文字列>" npm run db:seed
+```
+
+### 4. LINE Webhook を向ける
+
+LINE Developers コンソールの Webhook URL に `https://<デプロイ先>/api/line/webhook` を設定します。
+Vercel は HTTPS が標準で有効なため、証明書の準備は不要です。
+
+### 注意: 画面に認証がありません
+
+POS 連携 API は API キー、LINE Webhook は署名で保護していますが、**画面側には認証がありません**。
+URL を知っていれば誰でも顧客の氏名・電話番号・購買履歴を閲覧できる状態です。
+公開する場合はデモデータのみを投入し、実在の顧客データは入れないでください。
+実運用にはスタッフログインの追加が必要です。
+
+## GitHub Pages での画面デモ公開
 
 `docs/index.html` に、全画面をデータ入りで確認できる静的デモを生成済みです。
 リポジトリの **Settings → Pages** で以下を選ぶと公開されます。
@@ -67,7 +120,7 @@ npm run dev              # http://localhost:3000
 画面やデモデータを変更したあとは、次のコマンドで再生成します。
 
 ```bash
-npm run db:reset      # デモデータを作り直す場合のみ
+npm run db:seed       # デモデータを作り直す場合のみ
 npm run demo:build    # ビルド → 各画面を取り込み → docs/index.html を出力
 ```
 
@@ -82,7 +135,8 @@ npm run demo:build    # ビルド → 各画面を取り込み → docs/index.ht
 
 | 変数 | 用途 |
 | --- | --- |
-| `DATABASE_URL` | データベース接続先。既定は `file:./dev.db` (SQLite) |
+| `DATABASE_URL` | PostgreSQL の接続文字列 |
+| `DATABASE_POOL_MAX` | 1インスタンスあたりの最大接続数（省略時 5）|
 | `POS_API_KEY` | POS 連携 API の共有シークレット。未設定だと API は 503 を返します |
 | `LINE_CHANNEL_SECRET` | LINE Webhook の署名検証に使用 |
 | `LINE_CHANNEL_ACCESS_TOKEN` | LINE へのメッセージ送信に使用 |
@@ -160,13 +214,13 @@ POST /api/line/webhook
 ## 技術構成
 
 - **Next.js 15** (App Router / Server Components / Server Actions)
-- **Prisma 7** + SQLite（`prisma.config.ts` + better-sqlite3 ドライバアダプタ構成）
+- **Prisma 7** + PostgreSQL（`prisma.config.ts` + pg ドライバアダプタ構成）
 - **Tailwind CSS v4**
 - **Recharts** — ダッシュボードのグラフ
 - **Zod** — API とフォームの入力検証
 
-本番で PostgreSQL に切り替える場合は、`prisma/schema.prisma` の `datasource` プロバイダと
-`lib/db.ts` のアダプタを差し替えてください。
+データベース接続はモジュール読み込み時ではなく初回利用時に作られるため、
+`DATABASE_URL` が無い環境でも `next build` は通ります。
 
 ## ディレクトリ構成
 
@@ -188,7 +242,11 @@ lib/
   analytics.ts            売上分析クエリ
 prisma/
   schema.prisma           データモデル
+  migrations/             マイグレーション
   seed.ts                 デモデータ生成
+scripts/
+  build-demo.mjs          GitHub Pages 用の静的デモを生成
+docs/                     生成された静的デモ (GitHub Pages の公開元)
 ```
 
 ## 補足
