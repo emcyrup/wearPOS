@@ -40,6 +40,8 @@ const server = spawn("npx", ["next", "start", "-p", String(PORT)], {
   cwd: ROOT,
   stdio: "ignore",
   detached: false,
+  // 静的デモは画面の見た目を取り込むだけなので、認証はスキップする
+  env: { ...process.env, AUTH_DISABLED: "1" },
 });
 
 let browser;

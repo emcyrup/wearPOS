@@ -1,5 +1,7 @@
 import { Badge, Card, PageHeader, Table } from "@/components/ui";
+import { UserManager } from "@/components/user-manager";
 import { RANK_RULES, SEASON_PHASE_LABEL, SEASON_TERM_LABEL, seasonPhase } from "@/lib/apparel";
+import { DEFAULT_STAFF_FEATURES, FEATURES, getSessionUser } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { formatDate, formatPercent, formatYen } from "@/lib/format";
 import { isLineConfigured, lineConfig } from "@/lib/line";
@@ -15,12 +17,16 @@ function CodeBlock({ children }: { children: string }) {
 }
 
 export default async function SettingsPage() {
-  const [stores, seasons, staff, brands, categories] = await Promise.all([
+  const sessionUser = await getSessionUser();
+  const isAdmin = sessionUser?.role === "ADMIN";
+
+  const [stores, seasons, staff, brands, categories, appUsers] = await Promise.all([
     prisma.store.findMany({ orderBy: { code: "asc" }, include: { _count: { select: { sales: true } } } }),
     prisma.season.findMany({ orderBy: [{ year: "desc" }, { term: "asc" }] }),
     prisma.staff.findMany({ orderBy: { code: "asc" }, include: { store: true } }),
     prisma.brand.findMany({ orderBy: { code: "asc" } }),
     prisma.category.findMany({ orderBy: { code: "asc" } }),
+    isAdmin ? prisma.appUser.findMany({ orderBy: { createdAt: "asc" } }) : Promise.resolve([]),
   ]);
 
   const lineReady = isLineConfigured();
@@ -30,6 +36,28 @@ export default async function SettingsPage() {
   return (
     <>
       <PageHeader title="設定 / 連携" description="マスタの確認と、POSレジ・LINE公式アカウントの連携設定" />
+
+      {isAdmin && sessionUser && (
+        <Card title="ユーザーと権限" className="mb-4">
+          <p className="mb-3 text-sm text-ink-600">
+            ログインユーザーごとに使える機能を制限できます。管理者は全機能、スタッフは
+            チェックした機能のページだけ表示・アクセスできます。
+          </p>
+          <UserManager
+            users={appUsers.map((u) => ({
+              id: u.id,
+              username: u.username,
+              displayName: u.displayName,
+              role: u.role,
+              features: u.features,
+              isActive: u.isActive,
+            }))}
+            features={FEATURES.map((f) => ({ key: f.key, label: f.label }))}
+            currentUserId={sessionUser.uid}
+            defaultStaffFeatures={DEFAULT_STAFF_FEATURES}
+          />
+        </Card>
+      )}
 
       <div className="grid gap-4 lg:grid-cols-2">
         <Card

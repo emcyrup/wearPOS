@@ -5,8 +5,9 @@ import { useCallback, useEffect, useRef, useState } from "react";
 /**
  * カメラでバーコードを読み取るコンポーネント。
  *
- * ブラウザ標準の BarcodeDetector API を使う (Chrome / Edge / Android)。
- * 非対応ブラウザ (iOS Safari など) では案内を出して手入力にフォールバックする。
+ * ブラウザ標準の BarcodeDetector API があればそれを使い (Android Chrome / Edge)、
+ * 無いブラウザ (iPhone の Chrome / Safari など) では ZXing を動的に読み込んで
+ * フレーム解析にフォールバックする。どちらもカメラ利用に HTTPS が必要。
  * USB / Bluetooth 接続のバーコードリーダーはキーボード入力として動作するため、
  * このコンポーネントを使わずとも既存の入力欄でそのまま使える。
  */
@@ -41,59 +42,99 @@ export function BarcodeScanner({
   }, []);
 
   useEffect(() => {
-    const Detector = getBarcodeDetector();
-    if (!Detector) {
-      setError(
-        "このブラウザはカメラ読み取りに対応していません (Chrome / Edge / Android でご利用ください)。コードを直接入力するか、キーボード接続のバーコードリーダーをお使いください。",
-      );
-      return;
-    }
-
     let raf = 0;
-    const detector = new Detector({
-      formats: ["ean_13", "ean_8", "code_128", "code_39", "qr_code"],
-    });
+    let zxingControls: { stop(): void } | null = null;
+    const Detector = getBarcodeDetector();
+
+    const cameraError = () =>
+      setError(
+        "カメラを起動できませんでした。ブラウザのカメラ許可を確認してください (HTTPS 接続が必要です)。",
+      );
 
     (async () => {
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: "environment" },
-          audio: false,
+      if (Detector) {
+        // ブラウザ標準 API (Android Chrome / Edge など)
+        const detector = new Detector({
+          formats: ["ean_13", "ean_8", "code_128", "code_39", "qr_code"],
         });
-        if (stoppedRef.current) {
-          stream.getTracks().forEach((track) => track.stop());
-          return;
-        }
-        streamRef.current = stream;
-        const video = videoRef.current;
-        if (!video) return;
-        video.srcObject = stream;
-        await video.play();
-
-        const scan = async () => {
-          if (stoppedRef.current || !videoRef.current) return;
-          try {
-            const results = await detector.detect(videoRef.current);
-            if (results.length > 0) {
-              stop();
-              onDetect(results[0].rawValue, results[0].format);
-              return;
-            }
-          } catch {
-            // フレーム未確定時は無視して次のフレームへ
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({
+            video: { facingMode: "environment" },
+            audio: false,
+          });
+          if (stoppedRef.current) {
+            stream.getTracks().forEach((track) => track.stop());
+            return;
           }
+          streamRef.current = stream;
+          const video = videoRef.current;
+          if (!video) return;
+          video.srcObject = stream;
+          await video.play();
+
+          const scan = async () => {
+            if (stoppedRef.current || !videoRef.current) return;
+            try {
+              const results = await detector.detect(videoRef.current);
+              if (results.length > 0) {
+                stop();
+                onDetect(results[0].rawValue, results[0].format);
+                return;
+              }
+            } catch {
+              // フレーム未確定時は無視して次のフレームへ
+            }
+            raf = requestAnimationFrame(scan);
+          };
           raf = requestAnimationFrame(scan);
-        };
-        raf = requestAnimationFrame(scan);
-      } catch {
-        setError(
-          "カメラを起動できませんでした。ブラウザのカメラ許可を確認してください (HTTPS 接続が必要です)。",
+        } catch {
+          cameraError();
+        }
+        return;
+      }
+
+      // BarcodeDetector が無いブラウザ (iPhone の Chrome / Safari など) は ZXing で解析する。
+      // 使うときだけ動的に読み込むので、通常ページの JS サイズには影響しない
+      try {
+        const [{ BrowserMultiFormatReader }, { BarcodeFormat, DecodeHintType }] =
+          await Promise.all([import("@zxing/browser"), import("@zxing/library")]);
+        if (stoppedRef.current || !videoRef.current) return;
+
+        const hints = new Map();
+        hints.set(DecodeHintType.POSSIBLE_FORMATS, [
+          BarcodeFormat.EAN_13,
+          BarcodeFormat.EAN_8,
+          BarcodeFormat.CODE_128,
+          BarcodeFormat.CODE_39,
+          BarcodeFormat.QR_CODE,
+        ]);
+        const reader = new BrowserMultiFormatReader(hints, {
+          delayBetweenScanAttempts: 150,
+          delayBetweenScanSuccess: 300,
+        });
+        zxingControls = await reader.decodeFromConstraints(
+          { video: { facingMode: "environment" }, audio: false },
+          videoRef.current,
+          (result) => {
+            if (!result || stoppedRef.current) return;
+            stoppedRef.current = true;
+            zxingControls?.stop();
+            onDetect(
+              result.getText(),
+              BarcodeFormat[result.getBarcodeFormat()]?.toLowerCase() ?? "unknown",
+            );
+          },
         );
+        // 起動待ちの間に閉じられていたら即停止する
+        if (stoppedRef.current) zxingControls.stop();
+      } catch {
+        cameraError();
       }
     })();
 
     return () => {
       cancelAnimationFrame(raf);
+      zxingControls?.stop();
       stop();
     };
   }, [onDetect, stop]);

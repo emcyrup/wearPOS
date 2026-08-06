@@ -434,3 +434,20 @@ model LineMessageLog {
   @@index([lineUserId, createdAt])
   @@index([customerId, createdAt])
 }
+
+/// アプリのログインユーザー。店舗スタッフ (Staff) とは別で、画面へのアクセス権を持つ
+model AppUser {
+  id           String   @id @default(cuid())
+  username     String   @unique
+  displayName  String
+  passwordHash String
+  /// ADMIN(全機能) | STAFF(features で許可された機能のみ)
+  role         String   @default("STAFF")
+  /// STAFF が使える機能キー (register / inventory / scan など)
+  features     String[] @default([])
+  /// ダッシュボードで非表示にするセクションのキー
+  dashboardHidden String[] @default([])
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}

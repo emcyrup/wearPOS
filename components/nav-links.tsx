@@ -4,23 +4,14 @@ import clsx from "clsx";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
-const NAV = [
-  { href: "/", label: "ダッシュボード", exact: true },
-  { href: "/register", label: "レジ" },
-  { href: "/products", label: "商品 / SKU" },
-  { href: "/inventory", label: "在庫" },
-  { href: "/customers", label: "顧客 (CRM)" },
-  { href: "/sales", label: "取引履歴" },
-  { href: "/scan", label: "スキャン" },
-  { href: "/settings", label: "設定 / 連携" },
-];
+export type NavItem = { href: string; label: string; exact?: boolean };
 
-export function NavLinks() {
+export function NavLinks({ items }: { items: NavItem[] }) {
   const pathname = usePathname();
 
   return (
     <nav className="flex gap-1 overflow-x-auto px-3 pb-3 lg:flex-col lg:overflow-visible lg:px-3">
-      {NAV.map((item) => {
+      {items.map((item) => {
         const active = item.exact ? pathname === item.href : pathname.startsWith(item.href);
         return (
           <Link

@@ -18,8 +18,12 @@ import {
   topSellingVariants,
 } from "@/lib/analytics";
 import { AiInsights } from "@/components/ai-insights";
+import { DashboardCustomizer } from "@/components/dashboard-customizer";
 import { DateRangePicker } from "@/components/date-range-picker";
 import { rankLabel } from "@/lib/apparel";
+import { getSessionUser } from "@/lib/auth";
+import { type DashboardSectionKey } from "@/lib/dashboard";
+import { prisma } from "@/lib/db";
 import { formatNumber, formatPercent, formatYen, toDateInputValue } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
@@ -65,18 +69,31 @@ export default async function DashboardPage({
     ? `${toDateInputValue(range.from).replaceAll("-", "/")} 〜 ${toDateInputValue(range.to).replaceAll("-", "/")}`
     : `直近${days}日間`;
 
+  // ユーザーごとの表示カスタマイズ (非表示セクションは取得もスキップする)
+  const sessionUser = await getSessionUser();
+  const hidden = sessionUser?.uid
+    ? ((
+        await prisma.appUser.findUnique({
+          where: { id: sessionUser.uid },
+          select: { dashboardHidden: true },
+        })
+      )?.dashboardHidden ?? [])
+    : [];
+  const show = (key: DashboardSectionKey) => !hidden.includes(key);
+
+  const empty = { colors: [], sizes: [] };
   const [summary, prevSummary, trend, stores, staff, topSkus, mix, seasons, customers, lowStock] =
     await Promise.all([
       salesSummary(range),
-      salesSummary(prev),
-      dailySalesTrend(range),
-      salesByStore(range),
-      salesByStaff(range),
-      topSellingVariants(range),
-      salesByColorAndSize(range),
-      salesBySeason(range),
-      customerInsights(range),
-      lowStockItems(8),
+      show("kpi") ? salesSummary(prev) : null,
+      show("trend") ? dailySalesTrend(range) : [],
+      show("store") ? salesByStore(range) : [],
+      show("staffPerf") ? salesByStaff(range) : [],
+      show("topSku") ? topSellingVariants(range) : [],
+      show("mix") ? salesByColorAndSize(range) : empty,
+      show("season") ? salesBySeason(range) : [],
+      show("customers") ? customerInsights(range) : null,
+      show("lowStock") ? lowStockItems(8) : [],
     ]);
 
   const hasSales = summary.transactionCount > 0;
@@ -108,6 +125,7 @@ export default async function DashboardPage({
               to={toDateInputValue(range.to)}
               active={isCustom}
             />
+            {sessionUser?.uid && <DashboardCustomizer hidden={hidden} />}
           </div>
         }
       />
@@ -118,23 +136,24 @@ export default async function DashboardPage({
         デスクトップ: AI考察のみ order-last で従来どおり最下部に置く。
       */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+      {show("kpi") && (
       <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:col-span-3 xl:grid-cols-4">
         <StatCard
           label="純売上 (税込)"
           value={formatYen(summary.netSales)}
-          trend={growth(summary.netSales, prevSummary.netSales)}
+          trend={prevSummary ? growth(summary.netSales, prevSummary.netSales) : null}
           sub={summary.returns > 0 ? `返品 ${formatYen(summary.returns)}` : undefined}
         />
         <StatCard
           label="客数"
           value={formatNumber(summary.transactionCount)}
-          trend={growth(summary.transactionCount, prevSummary.transactionCount)}
+          trend={prevSummary ? growth(summary.transactionCount, prevSummary.transactionCount) : null}
           sub={`${formatNumber(summary.itemCount)} 点`}
         />
         <StatCard
           label="客単価"
           value={formatYen(summary.averageOrderValue)}
-          trend={growth(summary.averageOrderValue, prevSummary.averageOrderValue)}
+          trend={prevSummary ? growth(summary.averageOrderValue, prevSummary.averageOrderValue) : null}
           sub={`1会計 ${summary.unitsPerTransaction.toFixed(2)} 点`}
         />
         <StatCard
@@ -143,7 +162,9 @@ export default async function DashboardPage({
           sub={`会員売上比 ${formatPercent(summary.memberSalesRatio, 0)}`}
         />
       </div>
+      )}
 
+      {show("trend") && (
       <Card title="売上推移" className="lg:col-span-2">
         {hasSales ? (
           <SalesTrendChart data={trend} />
@@ -154,12 +175,16 @@ export default async function DashboardPage({
           />
         )}
       </Card>
+      )}
 
       {/* モバイルではここ (売上推移の直下)、lg 以上では order-last で最下部 */}
+      {show("ai") && (
       <div className="min-w-0 lg:order-last lg:col-span-3">
         <AiInsights from={toDateInputValue(range.from)} to={toDateInputValue(range.to)} />
       </div>
+      )}
 
+      {show("customers") && customers && (
       <Card title="顧客サマリ" action={<Link href="/customers" className="text-xs text-accent">一覧へ</Link>}>
           <dl className="space-y-3 text-sm">
             <div className="flex items-baseline justify-between">
@@ -199,7 +224,9 @@ export default async function DashboardPage({
             ))}
           </div>
       </Card>
+      )}
 
+      {show("mix") && (
       <div className="grid grid-cols-1 gap-4 lg:col-span-3 lg:grid-cols-2">
         <Card title="カラー別 販売構成">
           {mix.colors.length ? (
@@ -216,8 +243,11 @@ export default async function DashboardPage({
           )}
         </Card>
       </div>
+      )}
 
+      {(show("topSku") || show("season") || show("store")) && (
       <div className="grid grid-cols-1 gap-4 lg:col-span-3 lg:grid-cols-2">
+        {show("topSku") && (
         <Card title="売れ筋 SKU TOP10">
           {topSkus.length ? (
             <Table head={["SKU", "商品", "点数", "売上"]}>
@@ -241,8 +271,11 @@ export default async function DashboardPage({
             <EmptyState message="販売実績がありません" />
           )}
         </Card>
+        )}
 
+        {(show("season") || show("store")) && (
         <div className="space-y-4">
+          {show("season") && (
           <Card title="シーズン別 売上">
             {seasons.length ? (
               <Table head={["シーズン", "点数", "売上", "プロパー率"]}>
@@ -262,7 +295,9 @@ export default async function DashboardPage({
               <EmptyState message="販売実績がありません" />
             )}
           </Card>
+          )}
 
+          {show("store") && (
           <Card title="店舗別 売上">
             {stores.length ? (
               <Table head={["店舗", "客数", "売上"]}>
@@ -278,10 +313,15 @@ export default async function DashboardPage({
               <EmptyState message="販売実績がありません" />
             )}
           </Card>
+          )}
         </div>
+        )}
       </div>
+      )}
 
+      {(show("staffPerf") || show("lowStock")) && (
       <div className="grid grid-cols-1 gap-4 lg:col-span-3 lg:grid-cols-2">
+        {show("staffPerf") && (
         <Card title="スタッフ別 実績">
           {staff.length ? (
             <Table head={["スタッフ", "客数", "客単価", "売上"]}>
@@ -298,7 +338,9 @@ export default async function DashboardPage({
             <EmptyState message="販売実績がありません" />
           )}
         </Card>
+        )}
 
+        {show("lowStock") && (
         <Card
           title="在庫アラート (安全在庫割れ)"
           action={
@@ -327,7 +369,9 @@ export default async function DashboardPage({
             <EmptyState message="安全在庫を下回っている SKU はありません" />
           )}
         </Card>
+        )}
       </div>
+      )}
       </div>
     </>
   );

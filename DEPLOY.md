@@ -104,6 +104,13 @@ Configure Project 画面の **Environment Variables**（デプロイ後なら Se
 | `LINE_CHANNEL_ACCESS_TOKEN` | LINE のチャネルアクセストークン | LINE を使う場合 |
 | `LINE_PUSH_ENABLED` | `false` にすると LINE 送信を止めてログだけ残す | 任意 |
 | `ANTHROPIC_API_KEY` | [Anthropic Console](https://console.anthropic.com/) で発行した API キー。ダッシュボードの AI考察 (壁打ち) に使用 | AI考察を使う場合 |
+| `AUTH_SECRET` | ログインセッションの署名鍵。`openssl rand -base64 32` で生成した値 | 推奨 |
+
+> **ログインについて**: デプロイ後の初回アクセスはログイン画面になります。
+> シード (`npm run db:seed`) を実行済みなら `admin` / `admin1234` でログインできます
+> （ログイン後に設定 → ユーザーと権限でパスワードを変更してください）。
+> シードを使わない場合は、ユーザーが1人もいない状態で表示される初期セットアップ画面から
+> 管理者アカウントを作成します。
 | `DATABASE_POOL_MAX` | 1インスタンスあたりの最大接続数（既定 5） | 任意 |
 | `DATABASE_IDLE_TIMEOUT_MS` | 接続を保持する時間（既定 120000ms）。短くすると再接続が増え遅くなる | 任意 |
 

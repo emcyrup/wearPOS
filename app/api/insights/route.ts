@@ -79,7 +79,8 @@ export async function POST(request: Request) {
 
   const stream = client.beta.messages.stream({
     model: "claude-opus-5",
-    max_tokens: 16000,
+    // 考察は200文字程度に絞っているため、出力上限も小さくてよい
+    max_tokens: 2000,
     // 安全分類器が申告を拒否した場合に別モデルへ自動で引き継ぐ
     betas: ["server-side-fallback-2026-07-01"],
     fallbacks: "default",

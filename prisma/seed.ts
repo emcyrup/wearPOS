@@ -3,6 +3,7 @@ import { PrismaClient } from "@prisma/client";
 import "dotenv/config";
 
 import { buildSku, calcEarnedPoints, rankForSpent, sizeOrderOf } from "../lib/apparel";
+import { hashPassword } from "../lib/password";
 import { ean13CheckDigit } from "../lib/barcode";
 
 const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL });
@@ -156,6 +157,29 @@ async function main() {
   await prisma.customer.deleteMany();
   await prisma.staff.deleteMany();
   await prisma.store.deleteMany();
+  await prisma.appUser.deleteMany();
+
+  // ログインユーザー (デモ用)。本番ではログイン後に必ずパスワードを変更する
+  console.log("ログインユーザーを作成中...");
+  await prisma.appUser.createMany({
+    data: [
+      {
+        id: makeId(),
+        username: "admin",
+        displayName: "管理者",
+        passwordHash: hashPassword("admin1234"),
+        role: "ADMIN",
+      },
+      {
+        id: makeId(),
+        username: "staff",
+        displayName: "店頭スタッフ",
+        passwordHash: hashPassword("staff1234"),
+        role: "STAFF",
+        features: ["register", "scan", "inventory"],
+      },
+    ],
+  });
 
   const today = new Date();
   const daysAgo = (days: number) => new Date(today.getTime() - days * 86_400_000);
