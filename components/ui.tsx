@@ -16,7 +16,8 @@ export function Card({
   return (
     <section
       className={clsx(
-        "rounded-xl border border-ink-200 bg-white shadow-[0_1px_2px_rgba(22,22,28,0.04)]",
+        // min-w-0: グリッド内でテーブル等の中身に引っ張られて親からはみ出さないようにする
+        "min-w-0 rounded-xl border border-ink-200 bg-white shadow-[0_1px_2px_rgba(22,22,28,0.04)]",
         className,
       )}
     >
@@ -44,10 +45,13 @@ export function StatCard({
   trend?: number | null;
 }) {
   return (
-    <div className="rounded-xl border border-ink-200 bg-white px-5 py-4">
-      <p className="text-xs font-medium text-ink-400">{label}</p>
-      <p className="tabular mt-1.5 text-2xl font-semibold tracking-tight text-ink-900">{value}</p>
-      <div className="mt-1 flex items-center gap-2 text-xs">
+    // スマートフォンでは2枚並びになるため、パディングと数値を一段小さくする
+    <div className="min-w-0 rounded-xl border border-ink-200 bg-white px-3.5 py-3 sm:px-5 sm:py-4">
+      <p className="truncate text-xs font-medium text-ink-400">{label}</p>
+      <p className="tabular mt-1.5 text-lg font-semibold tracking-tight text-ink-900 sm:text-2xl">
+        {value}
+      </p>
+      <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
         {trend !== undefined && trend !== null && (
           <span
             className={clsx(

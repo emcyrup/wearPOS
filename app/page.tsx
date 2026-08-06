@@ -112,7 +112,13 @@ export default async function DashboardPage({
         }
       />
 
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      {/*
+        全セクションを1つのグリッドに載せ、CSS order でモバイルとデスクトップの
+        並び順を切り替える。モバイル: KPI → 売上推移 → AI考察 → その他。
+        デスクトップ: AI考察のみ order-last で従来どおり最下部に置く。
+      */}
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+      <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:col-span-3 xl:grid-cols-4">
         <StatCard
           label="純売上 (税込)"
           value={formatYen(summary.netSales)}
@@ -138,19 +144,23 @@ export default async function DashboardPage({
         />
       </div>
 
-      <div className="mt-4 grid gap-4 lg:grid-cols-3">
-        <Card title="売上推移" className="lg:col-span-2">
-          {hasSales ? (
-            <SalesTrendChart data={trend} />
-          ) : (
-            <EmptyState
-              message="この期間の取引がまだありません"
-              hint="POS連携APIから取引を送信するとここに表示されます"
-            />
-          )}
-        </Card>
+      <Card title="売上推移" className="lg:col-span-2">
+        {hasSales ? (
+          <SalesTrendChart data={trend} />
+        ) : (
+          <EmptyState
+            message="この期間の取引がまだありません"
+            hint="POS連携APIから取引を送信するとここに表示されます"
+          />
+        )}
+      </Card>
 
-        <Card title="顧客サマリ" action={<Link href="/customers" className="text-xs text-accent">一覧へ</Link>}>
+      {/* モバイルではここ (売上推移の直下)、lg 以上では order-last で最下部 */}
+      <div className="min-w-0 lg:order-last lg:col-span-3">
+        <AiInsights from={toDateInputValue(range.from)} to={toDateInputValue(range.to)} />
+      </div>
+
+      <Card title="顧客サマリ" action={<Link href="/customers" className="text-xs text-accent">一覧へ</Link>}>
           <dl className="space-y-3 text-sm">
             <div className="flex items-baseline justify-between">
               <dt className="text-ink-400">会員数</dt>
@@ -188,10 +198,9 @@ export default async function DashboardPage({
               </Badge>
             ))}
           </div>
-        </Card>
-      </div>
+      </Card>
 
-      <div className="mt-4 grid gap-4 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 lg:col-span-3 lg:grid-cols-2">
         <Card title="カラー別 販売構成">
           {mix.colors.length ? (
             <ColorMixChart data={mix.colors.slice(0, 8)} />
@@ -208,7 +217,7 @@ export default async function DashboardPage({
         </Card>
       </div>
 
-      <div className="mt-4 grid gap-4 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 lg:col-span-3 lg:grid-cols-2">
         <Card title="売れ筋 SKU TOP10">
           {topSkus.length ? (
             <Table head={["SKU", "商品", "点数", "売上"]}>
@@ -272,7 +281,7 @@ export default async function DashboardPage({
         </div>
       </div>
 
-      <div className="mt-4 grid gap-4 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 lg:col-span-3 lg:grid-cols-2">
         <Card title="スタッフ別 実績">
           {staff.length ? (
             <Table head={["スタッフ", "客数", "客単価", "売上"]}>
@@ -319,9 +328,6 @@ export default async function DashboardPage({
           )}
         </Card>
       </div>
-
-      <div className="mt-4">
-        <AiInsights from={toDateInputValue(range.from)} to={toDateInputValue(range.to)} />
       </div>
     </>
   );
