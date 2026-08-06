@@ -4,12 +4,25 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
 import { serializeTags } from "@/lib/apparel";
+import {
+  buildRecommendDraft,
+  buildRevisitDraft,
+  campaignRecipients,
+  runCampaign,
+} from "@/lib/campaign";
+import {
+  CAMPAIGN_TARGETS,
+  CAMPAIGN_TYPES,
+  type CampaignResult,
+  type CampaignTarget,
+  type CampaignType,
+} from "@/lib/campaign-options";
 import { prisma } from "@/lib/db";
 import { issueLinkToken, LINK_TOKEN_TTL_MINUTES, pushLineText } from "@/lib/line";
 
+// "use server" ファイルは async 関数以外を export できないため、
+// ActionState の初期値は使う側 (components/customer-forms.tsx) で定義する
 export type ActionState = { status: "idle" | "success" | "error"; message: string };
-
-export const INITIAL_STATE: ActionState = { status: "idle", message: "" };
 
 /** 店頭で顧客に伝える LINE 連携コードを発行する */
 export async function createLineLinkToken(
@@ -144,4 +157,51 @@ export async function adjustPoints(_prev: ActionState, formData: FormData): Prom
 
   revalidatePath(`/customers/${customer.id}`);
   return { status: "success", message: `ポイントを調整しました (残高 ${balance} pt)` };
+}
+
+// ---------------------------------------------------------------------------
+// 再来店・おすすめ商品メッセージ
+// ---------------------------------------------------------------------------
+
+export type DraftResult = { ok: boolean; draft?: string; error?: string };
+
+/** 再来店促進メッセージの下書きを作る (送信はしない) */
+export async function draftRevisitMessage(customerId: string): Promise<DraftResult> {
+  const draft = await buildRevisitDraft(customerId);
+  return draft ? { ok: true, draft } : { ok: false, error: "顧客が見つかりません" };
+}
+
+/** おすすめ商品メッセージの下書きを作る (送信はしない) */
+export async function draftRecommendMessage(customerId: string): Promise<DraftResult> {
+  const exists = await prisma.customer.findUnique({ where: { id: customerId }, select: { id: true } });
+  if (!exists) return { ok: false, error: "顧客が見つかりません" };
+  const draft = await buildRecommendDraft(customerId);
+  return draft
+    ? { ok: true, draft }
+    : { ok: false, error: "提案できる在庫商品が見つかりませんでした (購入済み・在庫切れを除外しています)" };
+}
+
+const campaignSchema = z.object({
+  target: z.enum(CAMPAIGN_TARGETS.map((t) => t.key) as [CampaignTarget, ...CampaignTarget[]]),
+  type: z.enum(CAMPAIGN_TYPES.map((t) => t.key) as [CampaignType, ...CampaignType[]]),
+});
+
+/** 一斉配信の対象人数を確認する */
+export async function previewCampaign(input: unknown): Promise<{ ok: boolean; count?: number; error?: string }> {
+  const parsed = campaignSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: "対象の指定が不正です" };
+  const recipients = await campaignRecipients(parsed.data.target);
+  return { ok: true, count: recipients.length };
+}
+
+/** 一斉配信を実行する。1通ずつ購買傾向に合わせた文面を組み立てて送る */
+export async function sendCampaign(
+  input: unknown,
+): Promise<{ ok: boolean; result?: CampaignResult; error?: string }> {
+  const parsed = campaignSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: "対象の指定が不正です" };
+
+  const result = await runCampaign(parsed.data.target, parsed.data.type);
+  revalidatePath("/customers");
+  return { ok: true, result };
 }

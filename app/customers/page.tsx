@@ -1,11 +1,14 @@
 import Link from "next/link";
 
+import { LineCampaign } from "@/components/line-campaign";
 import { Badge, Card, EmptyState, PAGE_SIZE, PageHeader, Pagination, Table } from "@/components/ui";
 import { DORMANT_DAYS, MEMBER_RANKS, parseTags, rankLabel } from "@/lib/apparel";
 import { prisma } from "@/lib/db";
 import { daysSince, formatDate, formatNumber, formatYen, fullName, fullNameKana } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
+// LINE 一斉配信 (Server Action) は対象人数に応じて時間がかかるため上限を延ばす
+export const maxDuration = 300;
 
 type Search = { q?: string; rank?: string; line?: string; sort?: string; dormant?: string; page?: string };
 
@@ -64,6 +67,10 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
         description="購買履歴・ポイント・LINE 連携をまとめて管理します"
         action={<Badge tone="neutral">{total.toLocaleString("ja-JP")} 名</Badge>}
       />
+
+      <Card title="LINE 一斉配信" className="mb-4">
+        <LineCampaign />
+      </Card>
 
       <Card className="mb-4">
         <form className="flex flex-wrap items-end gap-3" method="get">

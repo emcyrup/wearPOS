@@ -1,16 +1,19 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState, useTransition } from "react";
 import { useFormStatus } from "react-dom";
 
 import {
   adjustPoints,
   createLineLinkToken,
-  INITIAL_STATE,
+  draftRecommendMessage,
+  draftRevisitMessage,
   sendLineMessage,
   updateCustomerProfile,
   type ActionState,
 } from "@/app/customers/actions";
+
+const INITIAL_STATE: ActionState = { status: "idle", message: "" };
 
 function StateMessage({ state }: { state: ActionState }) {
   if (state.status === "idle") return null;
@@ -53,9 +56,12 @@ export function LineLinkForm({ customerId }: { customerId: string }) {
   );
 }
 
-/** LINE 個別メッセージ送信 */
+/** LINE 個別メッセージ送信。再来店・おすすめ商品の下書きを自動生成できる */
 export function LineMessageForm({ customerId, disabled }: { customerId: string; disabled: boolean }) {
   const [state, formAction] = useActionState(sendLineMessage, INITIAL_STATE);
+  const [body, setBody] = useState("");
+  const [draftError, setDraftError] = useState<string | null>(null);
+  const [drafting, startDrafting] = useTransition();
 
   if (disabled) {
     return (
@@ -65,14 +71,51 @@ export function LineMessageForm({ customerId, disabled }: { customerId: string; 
     );
   }
 
+  const applyDraft = (kind: "revisit" | "recommend") =>
+    startDrafting(async () => {
+      setDraftError(null);
+      const result =
+        kind === "revisit"
+          ? await draftRevisitMessage(customerId)
+          : await draftRecommendMessage(customerId);
+      if (result.ok && result.draft) {
+        setBody(result.draft);
+      } else {
+        setDraftError(result.error ?? "下書きを作成できませんでした");
+      }
+    });
+
   return (
     <form action={formAction}>
       <input type="hidden" name="customerId" value={customerId} />
+      <div className="mb-2 flex flex-wrap items-center gap-2">
+        <span className="text-xs text-ink-400">文面を作成:</span>
+        <button
+          type="button"
+          disabled={drafting}
+          onClick={() => applyDraft("revisit")}
+          className="rounded-lg border border-ink-200 bg-white px-2.5 py-1 text-xs text-ink-600 hover:bg-ink-50 disabled:opacity-50"
+        >
+          再来店の呼びかけ
+        </button>
+        <button
+          type="button"
+          disabled={drafting}
+          onClick={() => applyDraft("recommend")}
+          className="rounded-lg border border-ink-200 bg-white px-2.5 py-1 text-xs text-ink-600 hover:bg-ink-50 disabled:opacity-50"
+        >
+          おすすめ商品の提案
+        </button>
+        {drafting && <span className="text-xs text-ink-400">作成中...</span>}
+      </div>
+      {draftError && <p className="mb-2 text-xs text-rose-700">{draftError}</p>}
       <textarea
         name="body"
-        rows={4}
+        rows={8}
         required
-        placeholder="お取り置きのご連絡や、新作入荷のご案内など"
+        value={body}
+        onChange={(event) => setBody(event.target.value)}
+        placeholder="お取り置きのご連絡や、新作入荷のご案内など。上のボタンで購買傾向に合わせた下書きを作れます"
         className="w-full rounded-lg border border-ink-200 px-3 py-2 text-sm outline-none focus:border-ink-400"
       />
       <div className="mt-2">
