@@ -36,6 +36,7 @@ export async function GET(request: Request) {
     seasonCode: variant.product.season.code,
     price: variant.priceOverride ?? variant.product.currentPrice,
     listPrice: variant.product.listPrice,
+    taxRate: variant.product.taxRate,
     sku: variant.sku,
     barcode: variant.barcode,
     colorName: variant.colorName,

@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
-import { Badge, Card, PageHeader, Table } from "@/components/ui";
+import { Badge, Card, LinkButton, PageHeader, Table } from "@/components/ui";
 import { markdownRate, PAYMENT_METHOD_LABEL, rankLabel } from "@/lib/apparel";
 import { prisma } from "@/lib/db";
 import { formatDateTime, formatPercent, formatYen, fullName } from "@/lib/format";
@@ -47,6 +47,7 @@ export default async function SaleDetailPage({ params }: { params: Promise<{ id:
               {sale.type === "RETURN" ? "返品" : "販売"}
             </Badge>
             <Badge tone="neutral">{sale.source}</Badge>
+            <LinkButton href={`/sales/${sale.id}/receipt`}>レシート印刷</LinkButton>
           </div>
         }
       />

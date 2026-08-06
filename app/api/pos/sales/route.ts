@@ -1,10 +1,12 @@
 import { NextResponse } from "next/server";
 
 import { authorizePosRequest } from "@/lib/api-auth";
-import { prisma } from "@/lib/db";
-import { purchaseThanksMessage, pushLineText } from "@/lib/line";
-import { ingestPosSale, posSaleSchema, SaleIngestError } from "@/lib/sales";
-import { fullName } from "@/lib/format";
+import {
+  ingestPosSale,
+  posSaleSchema,
+  SaleIngestError,
+  sendPurchaseLineNotification,
+} from "@/lib/sales";
 
 export const dynamic = "force-dynamic";
 
@@ -57,25 +59,7 @@ export async function POST(request: Request) {
       const result = await ingestPosSale(parsed.data);
 
       // 会員かつ LINE 連携済みなら購入通知を送る
-      if (result.lineNotification) {
-        const [customer, sale] = await Promise.all([
-          prisma.customer.findUnique({ where: { id: result.lineNotification.customerId } }),
-          prisma.sale.findUnique({ where: { id: result.saleId }, include: { store: true } }),
-        ]);
-        if (customer && sale) {
-          await pushLineText(
-            result.lineNotification.lineUserId,
-            purchaseThanksMessage({
-              customerName: fullName(customer),
-              storeName: sale.store.name,
-              total: sale.total,
-              pointsEarned: sale.pointsEarned,
-              pointsBalance: customer.points,
-            }),
-            { customerId: customer.id, template: "PURCHASE_THANKS" },
-          );
-        }
-      }
+      await sendPurchaseLineNotification(result);
 
       results.push({
         externalId: parsed.data.externalId,

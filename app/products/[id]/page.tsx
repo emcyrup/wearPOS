@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
+import { AssignBarcodesButton } from "@/components/assign-barcodes-button";
 import { Barcode } from "@/components/barcode";
 import { Badge, Card, EmptyState, LinkButton, PageHeader, StockCell, Table } from "@/components/ui";
 import {
@@ -71,6 +72,7 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
   const totalSales = allLines.reduce((sum, line) => sum + line.lineTotal, 0);
   const discount = markdownRate(product.listPrice, product.currentPrice);
   const phase = seasonPhase(product.season);
+  const missingBarcodes = product.variants.filter((v) => !v.barcode).length;
 
   // 店舗別の在庫合計
   const storeTotals = stores.map((store) => ({
@@ -288,7 +290,14 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
       <Card
         title="SKU 一覧"
         className="mt-4"
-        action={<LinkButton href={`/products/${product.id}/labels`}>値札ラベルを印刷</LinkButton>}
+        action={
+          <div className="flex flex-wrap items-center gap-2">
+            {missingBarcodes > 0 && (
+              <AssignBarcodesButton productId={product.id} missingCount={missingBarcodes} />
+            )}
+            <LinkButton href={`/products/${product.id}/labels`}>値札ラベルを印刷</LinkButton>
+          </div>
+        }
       >
         <Table head={["SKU", "カラー", "サイズ", "バーコード (JAN)", "在庫", "累計販売"]}>
           {product.variants.map((variant) => {

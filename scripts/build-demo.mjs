@@ -67,6 +67,7 @@ try {
 
   const screens = [
     { id: "dashboard", label: "ダッシュボード", note: "直近30日の売上・顧客サマリ", path: "/" },
+    { id: "register", label: "レジ", note: "スキャン→カート→会計", path: "/register" },
     { id: "products", label: "商品 / SKU", note: "品番一覧とシーズン・値下げ状況", path: "/products" },
     { id: "product", label: "商品詳細", note: "カラー×サイズ 在庫マトリクス", path: productHref },
     {

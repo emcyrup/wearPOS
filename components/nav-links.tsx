@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 
 const NAV = [
   { href: "/", label: "ダッシュボード", exact: true },
+  { href: "/register", label: "レジ" },
   { href: "/products", label: "商品 / SKU" },
   { href: "/inventory", label: "在庫" },
   { href: "/customers", label: "顧客 (CRM)" },

@@ -2,7 +2,9 @@ import { z } from "zod";
 
 import { calcEarnedPoints, rankForSpent } from "@/lib/apparel";
 import { prisma } from "@/lib/db";
+import { fullName } from "@/lib/format";
 import { applyStockMovement } from "@/lib/inventory";
+import { purchaseThanksMessage, pushLineText } from "@/lib/line";
 
 /**
  * 外部 POS レジから送られてくる取引ペイロード。
@@ -253,4 +255,30 @@ export async function ingestPosSale(input: PosSaleInput): Promise<IngestResult> 
     customerId: result.customerId,
     lineNotification,
   };
+}
+
+/**
+ * 会計完了後の LINE 購入通知。
+ * 外部 API 呼び出しのためトランザクションの外で呼ぶ。連携がなければ何もしない。
+ */
+export async function sendPurchaseLineNotification(result: IngestResult): Promise<void> {
+  if (!result.lineNotification) return;
+
+  const [customer, sale] = await Promise.all([
+    prisma.customer.findUnique({ where: { id: result.lineNotification.customerId } }),
+    prisma.sale.findUnique({ where: { id: result.saleId }, include: { store: true } }),
+  ]);
+  if (!customer || !sale) return;
+
+  await pushLineText(
+    result.lineNotification.lineUserId,
+    purchaseThanksMessage({
+      customerName: fullName(customer),
+      storeName: sale.store.name,
+      total: sale.total,
+      pointsEarned: sale.pointsEarned,
+      pointsBalance: customer.points,
+    }),
+    { customerId: customer.id, template: "PURCHASE_THANKS" },
+  );
 }
