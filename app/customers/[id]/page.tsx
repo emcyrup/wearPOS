@@ -10,6 +10,7 @@ import {
 import { Badge, Card, EmptyState, PageHeader, Table } from "@/components/ui";
 import { DORMANT_DAYS, parseTags, PAYMENT_METHOD_LABEL, pointRateForRank, rankLabel, RANK_RULES } from "@/lib/apparel";
 import { prisma } from "@/lib/db";
+import { signMemberCardToken } from "@/lib/session";
 import {
   daysSince,
   formatDate,
@@ -70,6 +71,8 @@ export default async function CustomerDetailPage({ params }: { params: Promise<{
   const averageOrder = customer.visitCount ? Math.round(customer.totalSpent / customer.visitCount) : 0;
   const since = daysSince(customer.lastVisitAt);
   const dormant = since !== null && since >= DORMANT_DAYS;
+  // LINE の「会員証」キーワードで返すものと同じデジタル会員証リンク
+  const cardToken = await signMemberCardToken(customer.id);
 
   const nextRank = RANK_RULES.slice()
     .reverse()
@@ -107,6 +110,13 @@ export default async function CustomerDetailPage({ params }: { params: Promise<{
               <Badge tone="neutral">LINE 未連携</Badge>
             )}
             {dormant && <Badge tone="warning">休眠中</Badge>}
+            <a
+              href={`/card/${cardToken}`}
+              target="_blank"
+              className="inline-flex items-center rounded-lg border border-ink-200 bg-white px-3 py-1.5 text-sm font-medium text-ink-600 hover:bg-ink-50"
+            >
+              会員証を表示
+            </a>
           </div>
         }
       />

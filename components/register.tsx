@@ -144,14 +144,16 @@ export function Register({ stores, staff }: { stores: StoreOption[]; staff: Staf
     );
   };
 
-  const attachMember = async () => {
+  const attachMember = async (code?: string) => {
+    const value = (code ?? memberInput).trim();
+    if (!value) return;
     setMemberError(null);
-    const result = await lookupMember(memberInput);
+    const result = await lookupMember(value);
     if (result.found) {
       setMember(result);
       setMemberInput("");
     } else {
-      setMemberError(`会員番号「${memberInput.trim()}」が見つかりません`);
+      setMemberError(`会員番号「${value}」が見つかりません`);
     }
   };
 
@@ -436,9 +438,16 @@ export function Register({ stores, staff }: { stores: StoreOption[]; staff: Staf
               <input
                 value={memberInput}
                 onChange={(event) => setMemberInput(event.target.value)}
-                placeholder="会員番号 (例: M-100001)"
+                placeholder="会員番号 (例: M10001)"
                 autoComplete="off"
                 className="tabular w-full rounded-lg border border-ink-200 px-3 py-1.5 text-sm outline-none focus:border-ink-400"
+              />
+              {/* お客様の LINE に表示した会員証バーコードをそのままスキャンできる */}
+              <ScanButton
+                onDetect={(value) => {
+                  setMemberInput(value);
+                  void attachMember(value);
+                }}
               />
               <button
                 type="submit"

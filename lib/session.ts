@@ -101,3 +101,31 @@ export async function verifySession(token: string | undefined): Promise<SessionP
 export function isAuthDisabled(): boolean {
   return process.env.AUTH_DISABLED === "1";
 }
+
+// ---- 会員証リンク ----
+// お客様の LINE に送る会員証ページ (/card/<token>) 用。ログイン不要でアクセスできるため、
+// 顧客IDに署名を付けて推測できないようにする。
+
+export async function signMemberCardToken(customerId: string): Promise<string> {
+  const signature = await crypto.subtle.sign(
+    "HMAC",
+    await hmacKey(),
+    encoder.encode(`member-card:${customerId}`),
+  );
+  return `${customerId}.${toBase64Url(new Uint8Array(signature))}`;
+}
+
+/** 会員証トークンを検証し、正当なら顧客IDを返す */
+export async function verifyMemberCardToken(token: string): Promise<string | null> {
+  const [customerId, signature] = token.split(".");
+  if (!customerId || !signature) return null;
+  const signatureBytes = fromBase64Url(signature);
+  if (!signatureBytes) return null;
+  const valid = await crypto.subtle.verify(
+    "HMAC",
+    await hmacKey(),
+    signatureBytes as BufferSource,
+    encoder.encode(`member-card:${customerId}`),
+  );
+  return valid ? customerId : null;
+}

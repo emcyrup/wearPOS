@@ -53,7 +53,8 @@ export function DashboardCustomizer({ hidden }: { hidden: string[] }) {
         表示項目
       </button>
       {open && (
-        <div className="absolute right-0 z-40 mt-1.5 w-64 rounded-xl border border-ink-200 bg-white p-3 shadow-lg">
+        // スマートフォンでは画面幅に合わせた固定パネル、sm 以上ではボタン直下のドロップダウン
+        <div className="fixed inset-x-4 top-16 z-40 max-h-[70vh] overflow-y-auto rounded-xl border border-ink-200 bg-white p-3 shadow-lg sm:absolute sm:inset-x-auto sm:top-full sm:right-0 sm:mt-1.5 sm:w-64">
           <p className="mb-2 text-xs font-medium text-ink-400">表示するセクション</p>
           <div className="space-y-1.5">
             {DASHBOARD_SECTIONS.map((section) => (

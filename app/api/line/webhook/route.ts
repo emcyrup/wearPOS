@@ -11,6 +11,7 @@ import {
   replyLineText,
   verifyLineSignature,
 } from "@/lib/line";
+import { signMemberCardToken } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
 
@@ -56,7 +57,7 @@ export async function POST(request: Request) {
     if (!lineUserId) continue;
 
     try {
-      await handleEvent(event, lineUserId);
+      await handleEvent(event, lineUserId, appOrigin(request));
     } catch (error) {
       // 1件の失敗で全体を落とさない。LINE 側の再送を避けるため 200 を返し続ける
       console.error("LINE イベントの処理に失敗しました", error);
@@ -66,7 +67,15 @@ export async function POST(request: Request) {
   return NextResponse.json({ ok: true });
 }
 
-async function handleEvent(event: LineEvent, lineUserId: string) {
+/** 会員証リンクなどに使う自アプリの公開 URL。プロキシ配下でも正しいホストを使う */
+function appOrigin(request: Request): string {
+  const url = new URL(request.url);
+  const host = request.headers.get("x-forwarded-host") ?? url.host;
+  const proto = request.headers.get("x-forwarded-proto") ?? url.protocol.replace(":", "");
+  return process.env.APP_URL ?? `${proto}://${host}`;
+}
+
+async function handleEvent(event: LineEvent, lineUserId: string, origin: string) {
   if (event.type === "follow") {
     await prisma.lineAccount.updateMany({
       where: { lineUserId },
@@ -118,16 +127,26 @@ async function handleEvent(event: LineEvent, lineUserId: string) {
   }
 
   // 連携済み顧客からの問い合わせに応答する
-  const reply = await buildReply(text, account.customerId);
+  const reply = await buildReply(text, account.customerId, origin);
   if (reply && event.replyToken) await replyLineText(event.replyToken, reply);
 }
 
-async function buildReply(text: string, customerId: string): Promise<string | null> {
+async function buildReply(text: string, customerId: string, origin: string): Promise<string | null> {
   const customer = await prisma.customer.findUnique({
     where: { id: customerId },
     include: { sales: { orderBy: { soldAt: "desc" }, take: 1, include: { store: true } } },
   });
   if (!customer) return null;
+
+  if (/会員証|カード|バーコード/i.test(text)) {
+    const token = await signMemberCardToken(customer.id);
+    return [
+      `${fullName(customer)} 様の会員証はこちらです。`,
+      `${origin}/card/${token}`,
+      "",
+      "お会計の際に、開いたバーコードをレジでご提示ください。",
+    ].join("\n");
+  }
 
   if (/ポイント|point|残高/i.test(text)) {
     return `${fullName(customer)} 様の現在のポイントは ${customer.points} pt です。`;
@@ -146,6 +165,7 @@ async function buildReply(text: string, customerId: string): Promise<string | nu
 
   return [
     "以下のキーワードにお答えできます。",
+    "・「会員証」… レジで提示できる会員証バーコード",
     "・「ポイント」… 現在のポイント残高",
     "・「履歴」… 直近のお買い上げ内容",
     "",
