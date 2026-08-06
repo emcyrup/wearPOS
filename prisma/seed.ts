@@ -3,6 +3,7 @@ import { PrismaClient } from "@prisma/client";
 import "dotenv/config";
 
 import { buildSku, calcEarnedPoints, rankForSpent, sizeOrderOf } from "../lib/apparel";
+import { ean13CheckDigit } from "../lib/barcode";
 
 const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL });
 const prisma = new PrismaClient({ adapter });
@@ -305,7 +306,11 @@ async function main() {
           sizeCode,
           sizeName: sizeCode === "F" ? "FREE" : sizeCode,
           sizeOrder: sizeOrderOf(sizeCode),
-          barcode: `49${String(randInt(10_000_000, 99_999_999))}${randInt(0, 9)}`,
+          // 国コード 49 (日本) で始まる 13 桁の JAN。チェックディジットを正しく計算する
+          barcode: (() => {
+            const first12 = `49${String(randInt(10 ** 9, 10 ** 10 - 1))}`;
+            return `${first12}${ean13CheckDigit(first12)}`;
+          })(),
         });
         sellableVariants.push({ id: variantId, price: currentPrice, listPrice: spec.listPrice });
 

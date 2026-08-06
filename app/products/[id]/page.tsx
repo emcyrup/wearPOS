@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
-import { Badge, Card, EmptyState, PageHeader, StockCell, Table } from "@/components/ui";
+import { Barcode } from "@/components/barcode";
+import { Badge, Card, EmptyState, LinkButton, PageHeader, StockCell, Table } from "@/components/ui";
 import {
   markdownRate,
   properSellThroughRate,
@@ -284,8 +285,12 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
         </dl>
       </Card>
 
-      <Card title="SKU 一覧" className="mt-4">
-        <Table head={["SKU", "カラー", "サイズ", "JAN", "在庫", "累計販売"]}>
+      <Card
+        title="SKU 一覧"
+        className="mt-4"
+        action={<LinkButton href={`/products/${product.id}/labels`}>値札ラベルを印刷</LinkButton>}
+      >
+        <Table head={["SKU", "カラー", "サイズ", "バーコード (JAN)", "在庫", "累計販売"]}>
           {product.variants.map((variant) => {
             const cell = cellByKey.get(`${variant.colorCode}:${variant.sizeCode}`);
             return (
@@ -301,7 +306,13 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
                   </span>
                 </td>
                 <td className="px-2 py-2">{variant.sizeName}</td>
-                <td className="tabular px-2 py-2 text-xs text-ink-400">{variant.barcode ?? "—"}</td>
+                <td className="px-2 py-2">
+                  {variant.barcode ? (
+                    <Barcode code={variant.barcode} moduleWidth={1.2} height={28} />
+                  ) : (
+                    <span className="text-xs text-ink-400">—</span>
+                  )}
+                </td>
                 <td className="px-2 py-2">
                   <StockCell quantity={cell?.onHand ?? 0} />
                 </td>

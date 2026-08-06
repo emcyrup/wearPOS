@@ -103,6 +103,7 @@ Configure Project 画面の **Environment Variables**（デプロイ後なら Se
 | `LINE_CHANNEL_SECRET` | LINE 公式アカウントのチャネルシークレット | LINE を使う場合 |
 | `LINE_CHANNEL_ACCESS_TOKEN` | LINE のチャネルアクセストークン | LINE を使う場合 |
 | `LINE_PUSH_ENABLED` | `false` にすると LINE 送信を止めてログだけ残す | 任意 |
+| `ANTHROPIC_API_KEY` | [Anthropic Console](https://console.anthropic.com/) で発行した API キー。ダッシュボードの AI考察 (壁打ち) に使用 | AI考察を使う場合 |
 | `DATABASE_POOL_MAX` | 1インスタンスあたりの最大接続数（既定 5） | 任意 |
 | `DATABASE_IDLE_TIMEOUT_MS` | 接続を保持する時間（既定 120000ms）。短くすると再接続が増え遅くなる | 任意 |
 

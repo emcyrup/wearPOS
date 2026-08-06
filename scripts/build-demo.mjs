@@ -79,6 +79,7 @@ try {
     { id: "customer", label: "顧客詳細", note: "購買傾向・ポイント・LINE連携", path: customerHref },
     { id: "sales", label: "取引履歴", note: "POS連携で取り込んだ伝票", path: "/sales" },
     { id: "sale", label: "伝票詳細", note: "明細・お会計・連携情報", path: saleHref },
+    { id: "scan", label: "スキャン", note: "バーコードで商品・在庫を照会", path: "/scan" },
     { id: "settings", label: "設定 / 連携", note: "POS API と LINE の連携設定", path: "/settings" },
   ];
 

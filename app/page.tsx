@@ -5,9 +5,11 @@ import { Badge, Card, EmptyState, PageHeader, StatCard, StockCell, Table } from 
 import {
   customerInsights,
   dailySalesTrend,
+  endOfDay,
   lastNDays,
   lowStockItems,
   previousRange,
+  startOfDay,
   salesByColorAndSize,
   salesBySeason,
   salesByStaff,
@@ -15,8 +17,10 @@ import {
   salesSummary,
   topSellingVariants,
 } from "@/lib/analytics";
+import { AiInsights } from "@/components/ai-insights";
+import { DateRangePicker } from "@/components/date-range-picker";
 import { rankLabel } from "@/lib/apparel";
-import { formatNumber, formatPercent, formatYen } from "@/lib/format";
+import { formatNumber, formatPercent, formatYen, toDateInputValue } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 
@@ -31,16 +35,35 @@ function growth(current: number, previous: number): number | null {
   return (current - previous) / previous;
 }
 
+/** YYYY-MM-DD をローカル日付として安全に読む。不正なら null */
+function parseDateParam(value: string | undefined): Date | null {
+  if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
+  const date = new Date(`${value}T00:00:00`);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
 export default async function DashboardPage({
   searchParams,
 }: {
-  searchParams: Promise<{ days?: string }>;
+  searchParams: Promise<{ days?: string; from?: string; to?: string }>;
 }) {
   const params = await searchParams;
-  const days = PERIODS.some((p) => String(p.days) === params.days) ? Number(params.days) : 30;
 
-  const range = lastNDays(days);
+  // カレンダー指定 (from/to) を優先し、無ければ従来のプリセット日数
+  const fromParam = parseDateParam(params.from);
+  const toParam = parseDateParam(params.to);
+  const isCustom = Boolean(fromParam && toParam && fromParam <= toParam);
+
+  const days = PERIODS.some((p) => String(p.days) === params.days) ? Number(params.days) : 30;
+  const range = isCustom
+    ? { from: startOfDay(fromParam as Date), to: endOfDay(toParam as Date) }
+    : lastNDays(days);
   const prev = previousRange(range);
+
+  const rangeDays = Math.round((range.to.getTime() - range.from.getTime()) / 86_400_000);
+  const rangeLabel = isCustom
+    ? `${toDateInputValue(range.from).replaceAll("-", "/")} 〜 ${toDateInputValue(range.to).replaceAll("-", "/")}`
+    : `直近${days}日間`;
 
   const [summary, prevSummary, trend, stores, staff, topSkus, mix, seasons, customers, lowStock] =
     await Promise.all([
@@ -62,20 +85,29 @@ export default async function DashboardPage({
     <>
       <PageHeader
         title="売上ダッシュボード"
-        description={`直近${days}日間の実績 — 前${days}日間との比較`}
+        description={`${rangeLabel}の実績 — 直前の同じ長さの期間 (${rangeDays}日間) との比較`}
         action={
-          <div className="flex gap-1 rounded-lg border border-ink-200 bg-white p-0.5">
-            {PERIODS.map((period) => (
-              <Link
-                key={period.days}
-                href={`/?days=${period.days}`}
-                className={`rounded-md px-3 py-1 text-sm font-medium transition-colors ${
-                  period.days === days ? "bg-ink-900 text-white" : "text-ink-600 hover:bg-ink-50"
-                }`}
-              >
-                {period.label}
-              </Link>
-            ))}
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex gap-1 rounded-lg border border-ink-200 bg-white p-0.5">
+              {PERIODS.map((period) => (
+                <Link
+                  key={period.days}
+                  href={`/?days=${period.days}`}
+                  className={`rounded-md px-3 py-1 text-sm font-medium transition-colors ${
+                    !isCustom && period.days === days
+                      ? "bg-ink-900 text-white"
+                      : "text-ink-600 hover:bg-ink-50"
+                  }`}
+                >
+                  {period.label}
+                </Link>
+              ))}
+            </div>
+            <DateRangePicker
+              from={toDateInputValue(range.from)}
+              to={toDateInputValue(range.to)}
+              active={isCustom}
+            />
           </div>
         }
       />
@@ -286,6 +318,10 @@ export default async function DashboardPage({
             <EmptyState message="安全在庫を下回っている SKU はありません" />
           )}
         </Card>
+      </div>
+
+      <div className="mt-4">
+        <AiInsights from={toDateInputValue(range.from)} to={toDateInputValue(range.to)} />
       </div>
     </>
   );

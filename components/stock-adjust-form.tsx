@@ -1,9 +1,10 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import { useFormStatus } from "react-dom";
 
 import { adjustStock, type AdjustState } from "@/app/inventory/actions";
+import { ScanButton } from "@/components/barcode-scanner";
 
 const INITIAL: AdjustState = { status: "idle", message: "" };
 
@@ -34,6 +35,7 @@ export function StockAdjustForm({
   staff: { id: string; name: string; storeId: string | null }[];
 }) {
   const [state, formAction] = useActionState(adjustStock, INITIAL);
+  const [skuValue, setSkuValue] = useState("");
 
   return (
     <form action={formAction} className="space-y-3">
@@ -69,13 +71,18 @@ export function StockAdjustForm({
 
         <label className="flex flex-col gap-1">
           <span className="text-xs text-ink-400">SKU / JANコード</span>
-          <input
-            name="skuOrBarcode"
-            required
-            placeholder="26SS-SH-001-BLK-M"
-            autoComplete="off"
-            className="tabular rounded-lg border border-ink-200 px-3 py-1.5 text-sm outline-none focus:border-ink-400"
-          />
+          <span className="flex gap-2">
+            <input
+              name="skuOrBarcode"
+              required
+              placeholder="26SS-SH-001-BLK-M"
+              autoComplete="off"
+              value={skuValue}
+              onChange={(event) => setSkuValue(event.target.value)}
+              className="tabular w-full rounded-lg border border-ink-200 px-3 py-1.5 text-sm outline-none focus:border-ink-400"
+            />
+            <ScanButton onDetect={setSkuValue} />
+          </span>
         </label>
 
         <label className="flex flex-col gap-1">

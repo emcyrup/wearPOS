@@ -10,6 +10,7 @@ const NAV = [
   { href: "/inventory", label: "在庫" },
   { href: "/customers", label: "顧客 (CRM)" },
   { href: "/sales", label: "取引履歴" },
+  { href: "/scan", label: "スキャン" },
   { href: "/settings", label: "設定 / 連携" },
 ];
 
