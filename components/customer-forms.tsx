@@ -9,6 +9,7 @@ import {
   draftRecommendMessage,
   draftRevisitMessage,
   sendLineMessage,
+  setReminderOptOut,
   updateCustomerProfile,
   type ActionState,
 } from "@/app/customers/actions";
@@ -194,5 +195,38 @@ export function PointAdjustForm({ customerId }: { customerId: string }) {
         <StateMessage state={state} />
       </div>
     </form>
+  );
+}
+
+/** LINE 自動リマインドの顧客ごとの停止/再開 */
+export function ReminderOptOutToggle({
+  customerId,
+  optOut,
+}: {
+  customerId: string;
+  optOut: boolean;
+}) {
+  const [current, setCurrent] = useState(optOut);
+  const [pending, startTransition] = useTransition();
+
+  const toggle = (next: boolean) =>
+    startTransition(async () => {
+      setCurrent(next);
+      const result = await setReminderOptOut(customerId, next);
+      if (!result.ok) setCurrent(!next);
+    });
+
+  return (
+    <label className="flex items-center gap-2 text-sm text-ink-600">
+      <input
+        type="checkbox"
+        checked={current}
+        disabled={pending}
+        onChange={(event) => toggle(event.target.checked)}
+        className="h-4 w-4 accent-ink-900"
+      />
+      このお客様への自動リマインドを停止する
+      <span className="text-xs text-ink-400">(購入通知・手動送信は対象外)</span>
+    </label>
   );
 }

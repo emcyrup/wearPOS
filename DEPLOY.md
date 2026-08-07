@@ -105,6 +105,7 @@ Configure Project 画面の **Environment Variables**（デプロイ後なら Se
 | `LINE_PUSH_ENABLED` | `false` にすると LINE 送信を止めてログだけ残す | 任意 |
 | `ANTHROPIC_API_KEY` | [Anthropic Console](https://console.anthropic.com/) で発行した API キー。ダッシュボードの AI考察 (壁打ち) に使用 | AI考察を使う場合 |
 | `AUTH_SECRET` | ログインセッションの署名鍵。`openssl rand -base64 32` で生成した値 | 推奨 |
+| `CRON_SECRET` | LINE 自動リマインド (毎日 10:00 JST の Vercel Cron) の認証キー。ランダム値を設定 | リマインドを使う場合 |
 
 > **ログインについて**: デプロイ後の初回アクセスはログイン画面になります。
 > シード (`npm run db:seed`) を実行済みなら `admin` / `admin1234` でログインできます

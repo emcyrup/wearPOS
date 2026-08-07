@@ -1,5 +1,7 @@
 import { Badge, Card, PageHeader, Table } from "@/components/ui";
+import { ReminderSettings } from "@/components/reminder-settings";
 import { UserManager } from "@/components/user-manager";
+import { ensureReminderRules } from "@/lib/reminders";
 import { RANK_RULES, SEASON_PHASE_LABEL, SEASON_TERM_LABEL, seasonPhase } from "@/lib/apparel";
 import { DEFAULT_STAFF_FEATURES, FEATURES, getSessionUser } from "@/lib/auth";
 import { prisma } from "@/lib/db";
@@ -29,6 +31,16 @@ export default async function SettingsPage() {
     isAdmin ? prisma.appUser.findMany({ orderBy: { createdAt: "asc" } }) : Promise.resolve([]),
   ]);
 
+  // LINE 自動リマインドの設定と、テンプレートごとの累計送信数
+  const reminderRules = await ensureReminderRules();
+  const reminderCounts = await prisma.lineMessageLog.groupBy({
+    by: ["template"],
+    where: { direction: "OUTBOUND", template: { startsWith: "REMINDER_" }, status: "SENT" },
+    _count: true,
+  });
+  const sentCountOf = (key: string) =>
+    reminderCounts.find((row) => row.template === `REMINDER_${key}`)?._count ?? 0;
+
   const lineReady = isLineConfigured();
   const { pushEnabled } = lineConfig();
   const posKeySet = Boolean(process.env.POS_API_KEY);
@@ -36,6 +48,20 @@ export default async function SettingsPage() {
   return (
     <>
       <PageHeader title="設定 / 連携" description="マスタの確認と、POSレジ・LINE公式アカウントの連携設定" />
+
+      <Card title="リマインド設定 (LINE 自動配信)" className="mb-4">
+        <ReminderSettings
+          rules={reminderRules.map(({ def, rule }) => ({
+            key: def.key,
+            label: def.label,
+            description: def.describe(rule.days),
+            enabled: rule.enabled,
+            days: rule.days,
+            daysEditable: def.daysEditable,
+            sentCount: sentCountOf(def.key),
+          }))}
+        />
+      </Card>
 
       {isAdmin && sessionUser && (
         <Card title="ユーザーと権限" className="mb-4">

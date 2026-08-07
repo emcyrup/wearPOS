@@ -205,3 +205,20 @@ export async function sendCampaign(
   revalidatePath("/customers");
   return { ok: true, result };
 }
+
+/** LINE 自動リマインドの停止/再開を切り替える */
+export async function setReminderOptOut(
+  customerId: string,
+  optOut: boolean,
+): Promise<{ ok: boolean; error?: string }> {
+  const customer = await prisma.customer.findUnique({ where: { id: customerId } });
+  if (!customer) return { ok: false, error: "顧客が見つかりません" };
+
+  await prisma.customer.update({
+    where: { id: customerId },
+    data: { reminderOptOut: optOut },
+  });
+
+  revalidatePath(`/customers/${customerId}`);
+  return { ok: true };
+}

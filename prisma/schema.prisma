@@ -279,6 +279,8 @@ model Customer {
   note        String?
   /// カンマ区切りの好みタグ (例: "カジュアル,モノトーン")
   tags        String?
+  /// true にすると LINE 自動リマインドの対象から外す (手動送信・購入通知は対象のまま)
+  reminderOptOut Boolean @default(false)
   isActive    Boolean   @default(true)
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
@@ -450,4 +452,14 @@ model AppUser {
   isActive     Boolean  @default(true)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
+}
+
+/// LINE 自動リマインドの店舗全体設定 (1ルール1行)
+model ReminderRule {
+  /// PURCHASE_FOLLOW | REVISIT | DORMANT | BIRTHDAY
+  key       String   @id
+  enabled   Boolean  @default(true)
+  /// 経過日数などのしきい値 (誕生日ルールでは未使用)
+  days      Int
+  updatedAt DateTime @updatedAt
 }

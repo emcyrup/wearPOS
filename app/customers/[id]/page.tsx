@@ -6,6 +6,7 @@ import {
   LineMessageForm,
   PointAdjustForm,
   ProfileForm,
+  ReminderOptOutToggle,
 } from "@/components/customer-forms";
 import { Badge, Card, EmptyState, PageHeader, Table } from "@/components/ui";
 import { DORMANT_DAYS, parseTags, PAYMENT_METHOD_LABEL, pointRateForRank, rankLabel, RANK_RULES } from "@/lib/apparel";
@@ -268,6 +269,13 @@ export default async function CustomerDetailPage({ params }: { params: Promise<{
                 <LineMessageForm
                   customerId={customer.id}
                   disabled={!customer.lineAccount.isFollowing}
+                />
+              </div>
+              <div className="border-t border-ink-100 pt-3">
+                <p className="mb-2 text-xs font-medium text-ink-400">このお客様へのリマインド設定</p>
+                <ReminderOptOutToggle
+                  customerId={customer.id}
+                  optOut={customer.reminderOptOut}
                 />
               </div>
             </div>
