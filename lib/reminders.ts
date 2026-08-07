@@ -182,7 +182,11 @@ export async function runReminders(now = new Date()): Promise<ReminderRunResult[
     results.push(result);
     if (!rule.enabled) continue;
 
-    // 候補の抽出
+    // 候補の抽出。顧客ごとにルール単位で停止できる (reminderDisabledKeys)
+    const ruleWhere = {
+      ...BASE_WHERE,
+      NOT: { reminderDisabledKeys: { has: def.key } },
+    };
     let candidates: { id: string; lastVisitAt: Date | null; lineUserId: string }[] = [];
 
     if (def.key === "BIRTHDAY") {
@@ -192,7 +196,7 @@ export async function runReminders(now = new Date()): Promise<ReminderRunResult[
       const isFeb28NonLeap =
         month === 1 && day === 28 && new Date(now.getFullYear(), 1, 29).getMonth() !== 1;
       const rows = await prisma.customer.findMany({
-        where: { ...BASE_WHERE, birthday: { not: null } },
+        where: { ...ruleWhere, birthday: { not: null } },
         include: { lineAccount: true },
       });
       candidates = rows
@@ -212,7 +216,7 @@ export async function runReminders(now = new Date()): Promise<ReminderRunResult[
         def.key === "DORMANT" ? null : daysAgoStart(rule.days + 14, now);
       const rows = await prisma.customer.findMany({
         where: {
-          ...BASE_WHERE,
+          ...ruleWhere,
           lastVisitAt: {
             lte: daysAgoStart(rule.days, now),
             ...(upperBound ? { gte: upperBound } : {}),

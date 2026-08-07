@@ -2,15 +2,16 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import {
+  CustomerReminderSettings,
   LineLinkForm,
   LineMessageForm,
   PointAdjustForm,
   ProfileForm,
-  ReminderOptOutToggle,
 } from "@/components/customer-forms";
 import { Badge, Card, EmptyState, PageHeader, Table } from "@/components/ui";
 import { DORMANT_DAYS, parseTags, PAYMENT_METHOD_LABEL, pointRateForRank, rankLabel, RANK_RULES } from "@/lib/apparel";
 import { prisma } from "@/lib/db";
+import { ensureReminderRules } from "@/lib/reminders";
 import { signMemberCardToken } from "@/lib/session";
 import {
   daysSince,
@@ -74,6 +75,8 @@ export default async function CustomerDetailPage({ params }: { params: Promise<{
   const dormant = since !== null && since >= DORMANT_DAYS;
   // LINE の「会員証」キーワードで返すものと同じデジタル会員証リンク
   const cardToken = await signMemberCardToken(customer.id);
+  // このお客様へのリマインド個別設定に表示するルール一覧
+  const reminderRules = await ensureReminderRules();
 
   const nextRank = RANK_RULES.slice()
     .reverse()
@@ -273,9 +276,15 @@ export default async function CustomerDetailPage({ params }: { params: Promise<{
               </div>
               <div className="border-t border-ink-100 pt-3">
                 <p className="mb-2 text-xs font-medium text-ink-400">このお客様へのリマインド設定</p>
-                <ReminderOptOutToggle
+                <CustomerReminderSettings
                   customerId={customer.id}
                   optOut={customer.reminderOptOut}
+                  disabledKeys={customer.reminderDisabledKeys}
+                  rules={reminderRules.map(({ def, rule }) => ({
+                    key: def.key,
+                    label: def.label,
+                    globalEnabled: rule.enabled,
+                  }))}
                 />
               </div>
             </div>

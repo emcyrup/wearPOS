@@ -281,6 +281,8 @@ model Customer {
   tags        String?
   /// true にすると LINE 自動リマインドの対象から外す (手動送信・購入通知は対象のまま)
   reminderOptOut Boolean @default(false)
+  /// この顧客に送らないリマインドのルールキー (例: ["BIRTHDAY"])。全停止は reminderOptOut
+  reminderDisabledKeys String[] @default([])
   isActive    Boolean   @default(true)
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt

@@ -8,8 +8,8 @@ import {
   createLineLinkToken,
   draftRecommendMessage,
   draftRevisitMessage,
+  saveCustomerReminderSettings,
   sendLineMessage,
-  setReminderOptOut,
   updateCustomerProfile,
   type ActionState,
 } from "@/app/customers/actions";
@@ -198,35 +198,99 @@ export function PointAdjustForm({ customerId }: { customerId: string }) {
   );
 }
 
-/** LINE 自動リマインドの顧客ごとの停止/再開 */
-export function ReminderOptOutToggle({
+export type CustomerReminderRule = {
+  key: string;
+  label: string;
+  /** 店舗全体設定で有効になっているか */
+  globalEnabled: boolean;
+};
+
+/**
+ * このお客様へのリマインド設定。
+ * 店舗全体の設定 (設定 → リマインド設定) をベースに、お客様ごとにルール単位で停止できる。
+ */
+export function CustomerReminderSettings({
   customerId,
   optOut,
+  disabledKeys,
+  rules,
 }: {
   customerId: string;
   optOut: boolean;
+  disabledKeys: string[];
+  rules: CustomerReminderRule[];
 }) {
-  const [current, setCurrent] = useState(optOut);
+  const [currentOptOut, setCurrentOptOut] = useState(optOut);
+  const [disabled, setDisabled] = useState<string[]>(disabledKeys);
+  const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
-  const toggle = (next: boolean) =>
+  const save = (next: { optOut?: boolean; disabledKeys?: string[] }) =>
     startTransition(async () => {
-      setCurrent(next);
-      const result = await setReminderOptOut(customerId, next);
-      if (!result.ok) setCurrent(!next);
+      setError(null);
+      const payload = {
+        customerId,
+        optOut: next.optOut ?? currentOptOut,
+        disabledKeys: next.disabledKeys ?? disabled,
+      };
+      const result = await saveCustomerReminderSettings(payload);
+      if (!result.ok) {
+        setError(result.error ?? "保存に失敗しました");
+        setCurrentOptOut(optOut);
+        setDisabled(disabledKeys);
+      }
     });
 
+  const toggleRule = (key: string, enabled: boolean) => {
+    const next = enabled ? disabled.filter((k) => k !== key) : [...disabled, key];
+    setDisabled(next);
+    save({ disabledKeys: next });
+  };
+
   return (
-    <label className="flex items-center gap-2 text-sm text-ink-600">
-      <input
-        type="checkbox"
-        checked={current}
-        disabled={pending}
-        onChange={(event) => toggle(event.target.checked)}
-        className="h-4 w-4 accent-ink-900"
-      />
-      このお客様への自動リマインドを停止する
-      <span className="text-xs text-ink-400">(購入通知・手動送信は対象外)</span>
-    </label>
+    <div className="space-y-2">
+      {rules.map((rule) => {
+        const on = !disabled.includes(rule.key);
+        const effective = on && !currentOptOut && rule.globalEnabled;
+        return (
+          <label
+            key={rule.key}
+            className={`flex items-center justify-between gap-3 text-sm ${
+              currentOptOut ? "opacity-50" : ""
+            }`}
+          >
+            <span className="flex items-center gap-2 text-ink-700">
+              <input
+                type="checkbox"
+                checked={on}
+                disabled={pending || currentOptOut}
+                onChange={(event) => toggleRule(rule.key, event.target.checked)}
+                className="h-4 w-4 accent-ink-900"
+              />
+              {rule.label}
+            </span>
+            <span className="shrink-0 text-xs text-ink-400">
+              {!rule.globalEnabled ? "店舗設定で停止中" : effective ? "配信対象" : "停止中"}
+            </span>
+          </label>
+        );
+      })}
+
+      <label className="mt-1 flex items-center gap-2 border-t border-ink-100 pt-2.5 text-sm text-ink-600">
+        <input
+          type="checkbox"
+          checked={currentOptOut}
+          disabled={pending}
+          onChange={(event) => {
+            setCurrentOptOut(event.target.checked);
+            save({ optOut: event.target.checked });
+          }}
+          className="h-4 w-4 accent-ink-900"
+        />
+        すべての自動リマインドを停止する
+        <span className="text-xs text-ink-400">(購入通知・手動送信は対象外)</span>
+      </label>
+      {error && <p className="text-xs text-rose-700">{error}</p>}
+    </div>
   );
 }

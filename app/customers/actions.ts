@@ -206,19 +206,34 @@ export async function sendCampaign(
   return { ok: true, result };
 }
 
-/** LINE 自動リマインドの停止/再開を切り替える */
-export async function setReminderOptOut(
-  customerId: string,
-  optOut: boolean,
+const reminderSettingsSchema = z.object({
+  customerId: z.string().min(1),
+  /** true なら全ルール停止 */
+  optOut: z.boolean(),
+  /** ルール単位で停止するキー */
+  disabledKeys: z
+    .array(z.enum(["PURCHASE_FOLLOW", "REVISIT", "DORMANT", "BIRTHDAY"]))
+    .max(10),
+});
+
+/** この顧客への自動リマインド設定 (全停止 + ルール単位の停止) を保存する */
+export async function saveCustomerReminderSettings(
+  input: unknown,
 ): Promise<{ ok: boolean; error?: string }> {
-  const customer = await prisma.customer.findUnique({ where: { id: customerId } });
+  const parsed = reminderSettingsSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: "設定内容が不正です" };
+
+  const customer = await prisma.customer.findUnique({ where: { id: parsed.data.customerId } });
   if (!customer) return { ok: false, error: "顧客が見つかりません" };
 
   await prisma.customer.update({
-    where: { id: customerId },
-    data: { reminderOptOut: optOut },
+    where: { id: customer.id },
+    data: {
+      reminderOptOut: parsed.data.optOut,
+      reminderDisabledKeys: parsed.data.disabledKeys,
+    },
   });
 
-  revalidatePath(`/customers/${customerId}`);
+  revalidatePath(`/customers/${customer.id}`);
   return { ok: true };
 }
