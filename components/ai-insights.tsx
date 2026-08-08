@@ -2,18 +2,18 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
-type Speaker = "claude" | "gemini" | "user" | "note";
+type Speaker = "claude" | "chatgpt" | "user" | "note";
 type DebateMessage = { speaker: Speaker; content: string };
 type ApiMessage = { role: "user" | "assistant"; content: string };
 
-const SPEAKER_META: Record<"claude" | "gemini", { label: string; chip: string }> = {
+const SPEAKER_META: Record<"claude" | "chatgpt", { label: string; chip: string }> = {
   claude: { label: "Claude", chip: "bg-accent-soft text-accent" },
-  gemini: { label: "Gemini", chip: "bg-sky-50 text-sky-700" },
+  chatgpt: { label: "ChatGPT", chip: "bg-emerald-50 text-emerald-700" },
 };
 
 /**
  * AI考察パネル。
- * 表示中の期間データについて Claude と Gemini が討論し、その経過と結論を表示する。
+ * 表示中の期間データについて Claude と ChatGPT が討論し、その経過と結論を表示する。
  * 追加の質問は討論の文脈を踏まえて Claude が答える (壁打ち)。
  */
 export function AiInsights({ from, to }: { from: string; to: string }) {
@@ -89,7 +89,7 @@ export function AiInsights({ from, to }: { from: string; to: string }) {
             return;
           }
           if (event.e === "start") {
-            current = { speaker: event.s === "gemini" ? "gemini" : "claude", content: "" };
+            current = { speaker: event.s === "chatgpt" ? "chatgpt" : "claude", content: "" };
             setStreaming({ ...current });
           } else if (event.e === "t" && current) {
             current.content += event.t ?? "";
@@ -135,7 +135,7 @@ export function AiInsights({ from, to }: { from: string; to: string }) {
   /** 討論の発言一覧を、追加質問用の会話履歴 (assistant 1件) に変換する */
   const toTranscript = (turns: DebateMessage[]): string =>
     turns
-      .map((turn) => `【${turn.speaker === "gemini" ? "Gemini" : "Claude"}】\n${turn.content}`)
+      .map((turn) => `【${turn.speaker === "chatgpt" ? "ChatGPT" : "Claude"}】\n${turn.content}`)
       .join("\n\n");
 
   const start = useCallback(async () => {
@@ -202,7 +202,7 @@ export function AiInsights({ from, to }: { from: string; to: string }) {
     <section className="rounded-xl border border-ink-200 bg-white">
       <header className="flex flex-wrap items-center justify-between gap-3 border-b border-ink-100 px-5 py-4">
         <div>
-          <h2 className="text-sm font-semibold text-ink-900">AI考察 (Claude × Gemini 討論)</h2>
+          <h2 className="text-sm font-semibold text-ink-900">AI考察 (Claude × ChatGPT 討論)</h2>
           <p className="mt-0.5 text-xs text-ink-400">
             {from.replaceAll("-", "/")} 〜 {to.replaceAll("-", "/")} の実績を2つのAIが討論して考察します
           </p>
@@ -224,7 +224,7 @@ export function AiInsights({ from, to }: { from: string; to: string }) {
       <div className="px-5 py-4">
         {!started && !error && (
           <p className="text-sm text-ink-400">
-            「討論を開始」を押すと、この期間の実績について Claude が考察し、Gemini
+            「討論を開始」を押すと、この期間の実績について Claude が考察し、ChatGPT
             が別の視点から検証、最後に Claude が結論をまとめます。生成後は追加の質問もできます。
           </p>
         )}
@@ -240,10 +240,10 @@ export function AiInsights({ from, to }: { from: string; to: string }) {
               <div>
                 <span
                   className={`mb-1 inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${
-                    SPEAKER_META[streaming.speaker === "gemini" ? "gemini" : "claude"].chip
+                    SPEAKER_META[streaming.speaker === "chatgpt" ? "chatgpt" : "claude"].chip
                   }`}
                 >
-                  {SPEAKER_META[streaming.speaker === "gemini" ? "gemini" : "claude"].label}
+                  {SPEAKER_META[streaming.speaker === "chatgpt" ? "chatgpt" : "claude"].label}
                 </span>
                 <div className="whitespace-pre-wrap text-sm leading-relaxed text-ink-800">
                   {streaming.content}

@@ -55,9 +55,9 @@
 - 純売上・客数・客単価・プロパー消化率・会員売上比
 - 日別の売上と客数の推移
 - カラー別 / サイズ別の販売構成、シーズン別売上、売れ筋 SKU、店舗別・スタッフ別実績
-- **AI考察 (Claude × Gemini 討論)**: 表示中の期間の集計データについて Claude が考察 →
-  Gemini が別視点から検証 → Claude が最終結論、の討論形式で分析。追加の質問での壁打ちも可能
-  （`ANTHROPIC_API_KEY` 必須、`GEMINI_API_KEY` 未設定時は Claude 単独）
+- **AI考察 (Claude × ChatGPT 討論)**: 表示中の期間の集計データについて Claude が考察 →
+  ChatGPT が別視点から検証 → Claude が最終結論、の討論形式で分析。追加の質問での壁打ちも可能
+  （`ANTHROPIC_API_KEY` 必須、`OPENAI_API_KEY` 未設定時は Claude 単独）
 
 ### ログインと権限
 - ユーザー名 / パスワードでログイン。ユーザーが1人もいない状態では初期セットアップ画面から
@@ -162,7 +162,7 @@ npm run demo:build    # ビルド → 各画面を取り込み → docs/index.ht
 | `LINE_CHANNEL_ACCESS_TOKEN` | LINE へのメッセージ送信に使用 |
 | `LINE_PUSH_ENABLED` | `false` で LINE への送信を停止（送信ログのみ記録）|
 | `ANTHROPIC_API_KEY` | ダッシュボードの AI考察 (壁打ち) に使用。未設定だと考察機能のみ使えません |
-| `GEMINI_API_KEY` | AI考察の討論相手 (Gemini)。未設定なら Claude 単独の考察になる |
+| `OPENAI_API_KEY` | AI考察の討論相手 (ChatGPT)。未設定なら Claude 単独の考察になる |
 | `AUTH_SECRET` | ログインセッションの署名鍵。本番では必ずランダム値を設定（未設定時は `POS_API_KEY` から導出）|
 | `AUTH_DISABLED` | `1` でログインを無効化（静的デモ生成・ローカル確認用）|
 | `CRON_SECRET` | リマインド実行 API (`/api/reminders/run`) の認証。Vercel Cron が自動で付与（`POS_API_KEY` でも実行可）|

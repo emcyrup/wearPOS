@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { endOfDay, startOfDay } from "@/lib/analytics";
-import { geminiGenerate, isGeminiConfigured } from "@/lib/gemini";
+import { chatGptGenerate, isChatGptConfigured } from "@/lib/chatgpt";
 import { buildInsightData, INSIGHT_SYSTEM_PROMPT } from "@/lib/insights";
 
 export const dynamic = "force-dynamic";
@@ -25,19 +25,19 @@ const requestSchema = z.object({
     .default([]),
 });
 
-const GEMINI_SYSTEM_PROMPT = `あなたは Gemini。アパレル小売に詳しい経営分析者として、Claude の考察を批判的に検証する討論者です。
+const CHATGPT_SYSTEM_PROMPT = `あなたは ChatGPT。アパレル小売に詳しい経営分析者として、Claude の考察を批判的に検証する討論者です。
 - 与えられた POS データの数値を根拠に、Claude が見落としている点・別の解釈・打ち手のリスクを指摘する
 - 同意できる点があれば短く認めた上で、必ず1つは異なる視点を出す
 - 200文字程度 (最大300文字)。見出しや箇条書きは使わず、短い文章で
 - 専門用語は噛み砕いた言葉に言い換える`;
 
 /**
- * 期間データをもとに Claude と Gemini に討論させ、結果をストリーミングで返す。
+ * 期間データをもとに Claude と ChatGPT に討論させ、結果をストリーミングで返す。
  *
  * POST /api/insights
  * Body: { from, to, messages? }
  * Response: NDJSON のストリーム。1行ごとに以下のイベント:
- *   {e:"start", s:"claude"|"gemini"} 発言の開始
+ *   {e:"start", s:"claude"|"chatgpt"} 発言の開始
  *   {e:"t", t:"..."}                 発言本文の断片
  *   {e:"end"}                        発言の終了
  *   {e:"note", t:"..."}              補足 (フォールバック案内など)
@@ -136,46 +136,46 @@ export async function POST(request: Request) {
           );
         } else {
           // ---- 討論モード ----
-          const geminiAvailable = isGeminiConfigured();
+          const chatGptAvailable = isChatGptConfigured();
 
           // 1. Claude の考察
           const opening =
             "この期間の実績を分析してください。いちばん大事な気づきと、明日からできる打ち手を述べてください。";
           const claudeView = await claudeTurn(
             [{ role: "user", content: opening }],
-            geminiAvailable
-              ? "\n\nあなたは Claude として Gemini と討論します。まず自分の考察を述べてください。"
+            chatGptAvailable
+              ? "\n\nあなたは Claude として ChatGPT と討論します。まず自分の考察を述べてください。"
               : "",
           );
 
-          if (!geminiAvailable) {
+          if (!chatGptAvailable) {
             emit({
               e: "note",
-              t: "GEMINI_API_KEY が未設定のため、Claude 単独の考察を表示しています。設定すると Claude × Gemini の討論になります。",
+              t: "OPENAI_API_KEY が未設定のため、Claude 単独の考察を表示しています。設定すると Claude × ChatGPT の討論になります。",
             });
             controller.close();
             return;
           }
 
-          // 2. Gemini の反論・別視点
-          let geminiView: string;
+          // 2. ChatGPT の反論・別視点
+          let chatGptView: string;
           try {
-            geminiView = await geminiGenerate({
-              system: GEMINI_SYSTEM_PROMPT,
+            chatGptView = await chatGptGenerate({
+              system: CHATGPT_SYSTEM_PROMPT,
               prompt: `${dataText}\n\n【Claude の考察】\n${claudeView}\n\nこの考察を批判的に検証し、反論や補足を述べてください。`,
             });
           } catch (error) {
             emit({
               e: "note",
-              t: `Gemini に接続できなかったため、Claude の考察のみ表示しています (${
+              t: `ChatGPT に接続できなかったため、Claude の考察のみ表示しています (${
                 error instanceof Error ? error.message : "接続エラー"
               })`,
             });
             controller.close();
             return;
           }
-          emit({ e: "start", s: "gemini" });
-          emit({ e: "t", t: geminiView });
+          emit({ e: "start", s: "chatgpt" });
+          emit({ e: "t", t: chatGptView });
           emit({ e: "end" });
 
           // 3. Claude が指摘を踏まえて統合・最終結論
@@ -185,10 +185,10 @@ export async function POST(request: Request) {
               { role: "assistant", content: claudeView },
               {
                 role: "user",
-                content: `Gemini から次の指摘がありました。\n\n${geminiView}\n\n同意できる点・同意できない点を整理した上で、最終結論と明日からの打ち手を200文字程度でまとめてください。`,
+                content: `ChatGPT から次の指摘がありました。\n\n${chatGptView}\n\n同意できる点・同意できない点を整理した上で、最終結論と明日からの打ち手を200文字程度でまとめてください。`,
               },
             ],
-            "\n\nあなたは Claude として Gemini と討論しています。最後のまとめ役です。",
+            "\n\nあなたは Claude として ChatGPT と討論しています。最後のまとめ役です。",
           );
         }
       } catch (error) {
