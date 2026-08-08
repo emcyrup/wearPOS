@@ -102,6 +102,34 @@ export function isAuthDisabled(): boolean {
   return process.env.AUTH_DISABLED === "1";
 }
 
+// ---- LINE 新規登録フォーム ----
+// 友だち追加時に配信する登録フォーム (/signup/<token>) 用。
+// LINE ユーザー ID に署名を付け、本人に送った URL からしか登録できないようにする。
+
+export async function signSignupToken(lineUserId: string): Promise<string> {
+  const signature = await crypto.subtle.sign(
+    "HMAC",
+    await hmacKey(),
+    encoder.encode(`line-signup:${lineUserId}`),
+  );
+  return `${lineUserId}.${toBase64Url(new Uint8Array(signature))}`;
+}
+
+/** 登録フォームのトークンを検証し、正当なら LINE ユーザー ID を返す */
+export async function verifySignupToken(token: string): Promise<string | null> {
+  const [lineUserId, signature] = token.split(".");
+  if (!lineUserId || !signature) return null;
+  const signatureBytes = fromBase64Url(signature);
+  if (!signatureBytes) return null;
+  const valid = await crypto.subtle.verify(
+    "HMAC",
+    await hmacKey(),
+    signatureBytes as BufferSource,
+    encoder.encode(`line-signup:${lineUserId}`),
+  );
+  return valid ? lineUserId : null;
+}
+
 // ---- 会員証リンク ----
 // お客様の LINE に送る会員証ページ (/card/<token>) 用。ログイン不要でアクセスできるため、
 // 顧客IDに署名を付けて推測できないようにする。

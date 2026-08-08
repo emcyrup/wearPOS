@@ -466,11 +466,3 @@ model ReminderRule {
   updatedAt DateTime @updatedAt
 }
 
-/// LINE トークからの新規会員登録の確認待ち (お名前送信 → 「はい」で確定)
-model LineRegistration {
-  lineUserId String   @id
-  /// 送られてきたお名前 (確認後に姓・名へ分割)
-  name       String
-  expiresAt  DateTime
-  createdAt  DateTime @default(now())
-}

@@ -7,12 +7,11 @@ import {
   fetchLineProfile,
   isLineConfigured,
   linkSuccessMessage,
-  LINK_GUIDE_MESSAGE,
-  registerCustomerFromLine,
   replyLineText,
+  signupGuideMessage,
   verifyLineSignature,
 } from "@/lib/line";
-import { signMemberCardToken } from "@/lib/session";
+import { signMemberCardToken, signSignupToken } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
 
@@ -102,12 +101,23 @@ function appOrigin(request: Request): string {
 
 async function handleEvent(event: LineEvent, lineUserId: string, origin: string) {
   if (event.type === "follow") {
-    await prisma.lineAccount.updateMany({
+    const updated = await prisma.lineAccount.updateMany({
       where: { lineUserId },
       data: { isFollowing: true, unfollowedAt: null },
     });
     await logInbound(lineUserId, "EVENT", "follow");
-    if (event.replyToken) await replyLineText(event.replyToken, LINK_GUIDE_MESSAGE);
+    if (event.replyToken) {
+      if (updated.count > 0) {
+        // 既存会員の再追加 (ブロック解除など)
+        await replyLineText(
+          event.replyToken,
+          "おかえりなさい。引き続きお買い上げのお知らせやポイントのご案内をお届けします。",
+        );
+      } else {
+        // 新規: 登録フォームの URL を自動配信する
+        await replyLineText(event.replyToken, await buildSignupGuide(lineUserId, origin));
+      }
+    }
     return;
   }
 
@@ -146,10 +156,11 @@ async function handleEvent(event: LineEvent, lineUserId: string, origin: string)
     return;
   }
 
-  // 未連携ユーザー: お名前の送信による新規会員登録 (確認 → 「はい」で確定)
+  // 未連携ユーザーには登録フォームの URL を案内する
   if (!account) {
-    const reply = await handleRegistration(lineUserId, text, origin);
-    if (reply && event.replyToken) await replyLineText(event.replyToken, reply);
+    if (event.replyToken) {
+      await replyLineText(event.replyToken, await buildSignupGuide(lineUserId, origin));
+    }
     return;
   }
 
@@ -158,77 +169,10 @@ async function handleEvent(event: LineEvent, lineUserId: string, origin: string)
   if (reply && event.replyToken) await replyLineText(event.replyToken, reply);
 }
 
-/** 登録確認の有効期限 (分) */
-const REGISTRATION_TTL_MINUTES = 30;
-
-/** 名前として受け付けない入力 (機能キーワードや長すぎる文字列) */
-function looksLikeName(text: string): boolean {
-  if (text.length < 1 || text.length > 30) return false;
-  if (/https?:\/\/|\n/.test(text)) return false;
-  if (/ポイント|履歴|会員証|カード|バーコード|ヘルプ|help/i.test(text)) return false;
-  return true;
-}
-
-/**
- * 未連携ユーザーからのテキストを新規会員登録として処理する。
- * 1. お名前を送信 → 確認メッセージ (30分有効)
- * 2. 「はい」 → 会員番号を払い出して登録し、会員証リンクを案内
- * 3. 「いいえ」 → 取り消し
- */
-async function handleRegistration(
-  lineUserId: string,
-  text: string,
-  origin: string,
-): Promise<string> {
-  const pending = await prisma.lineRegistration.findUnique({ where: { lineUserId } });
-  const pendingAlive = pending && pending.expiresAt > new Date();
-
-  if (pendingAlive && /^(はい|ハイ|はい。|ok|okay|yes)$/i.test(text)) {
-    const profile = await fetchLineProfile(lineUserId);
-    const customer = await registerCustomerFromLine(lineUserId, pending.name, profile);
-    await prisma.lineRegistration.delete({ where: { lineUserId } }).catch(() => undefined);
-
-    const cardToken = await signMemberCardToken(customer.id);
-    return [
-      `${fullName(customer)} 様、会員登録が完了しました🎉`,
-      `会員番号: ${customer.memberCode}`,
-      "",
-      "デジタル会員証はこちらです。お会計の際にレジでご提示ください。",
-      `${origin}/card/${cardToken}`,
-      "",
-      "お買い上げ金額に応じてポイントが貯まります。",
-      "「ポイント」「履歴」「会員証」と送信するといつでも確認できます。",
-    ].join("\n");
-  }
-
-  if (pendingAlive && /^(いいえ|キャンセル|やめる|no)$/i.test(text)) {
-    await prisma.lineRegistration.delete({ where: { lineUserId } }).catch(() => undefined);
-    return "登録を取り消しました。改めて登録する場合は、お名前を送信してください。";
-  }
-
-  if (looksLikeName(text)) {
-    await prisma.lineRegistration.upsert({
-      where: { lineUserId },
-      create: {
-        lineUserId,
-        name: text,
-        expiresAt: new Date(Date.now() + REGISTRATION_TTL_MINUTES * 60_000),
-      },
-      update: {
-        name: text,
-        expiresAt: new Date(Date.now() + REGISTRATION_TTL_MINUTES * 60_000),
-      },
-    });
-    return [
-      `「${text}」様として新規会員登録します。`,
-      "よろしければ「はい」と返信してください。",
-      "",
-      "・お名前を修正する場合は、正しいお名前をもう一度送信してください",
-      "・すでに会員の方は、店頭スタッフが発行する6桁の連携コードを送信してください",
-    ].join("\n");
-  }
-
-  return LINK_GUIDE_MESSAGE;
+/** 登録フォームの URL 付き案内文を組み立てる */
+async function buildSignupGuide(lineUserId: string, origin: string): Promise<string> {
+  const token = await signSignupToken(lineUserId);
+  return signupGuideMessage(`${origin}/signup/${token}`);
 }
 
 async function buildReply(text: string, customerId: string, origin: string): Promise<string | null> {

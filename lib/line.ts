@@ -235,38 +235,48 @@ export function linkSuccessMessage(customerName: string, points: number): string
   ].join("\n");
 }
 
-export const LINK_GUIDE_MESSAGE = [
-  "友だち追加ありがとうございます。",
-  "",
-  "【はじめての方】",
-  "お名前 (例: 山田 花子) をこのトークに送信すると、その場で会員登録できます。",
-  "",
-  "【すでに会員の方】",
-  "店頭スタッフが発行する6桁の連携コードを送信すると、会員情報と連携されます。",
-  "",
-  "連携すると、お買い上げ履歴・ポイント残高・会員証の表示が使えるようになります。",
-].join("\n");
-
-// ---------------------------------------------------------------------------
-// LINE からの新規会員登録
-// ---------------------------------------------------------------------------
-
-/** 名前を姓・名に分ける (全角/半角スペース区切り。区切りが無ければ姓のみ) */
-export function splitCustomerName(raw: string): { lastName: string; firstName: string } {
-  const parts = raw.replaceAll("　", " ").trim().split(/\s+/);
-  return { lastName: parts[0] ?? "", firstName: parts.slice(1).join(" ") };
+/** 友だち追加時・未連携ユーザーへの案内。登録フォームの URL を添えて送る */
+export function signupGuideMessage(signupUrl: string): string {
+  return [
+    "友だち追加ありがとうございます。",
+    "",
+    "【はじめての方】",
+    "こちらのフォームからお客様情報をご登録ください。",
+    signupUrl,
+    "",
+    "【すでに会員の方】",
+    "店頭スタッフが発行する6桁の連携コードを送信すると、会員情報と連携されます。",
+    "",
+    "登録・連携すると、お買い上げ履歴・ポイント残高・会員証の表示が使えるようになります。",
+  ].join("\n");
 }
 
+// ---------------------------------------------------------------------------
+// LINE からの新規会員登録 (登録フォーム経由)
+// ---------------------------------------------------------------------------
+
+export type SignupInput = {
+  lastName: string;
+  firstName: string;
+  lastNameKana?: string;
+  firstNameKana?: string;
+  phone?: string;
+  email?: string;
+  /** YYYY-MM-DD */
+  birthday?: string;
+  gender?: "FEMALE" | "MALE" | "OTHER" | "UNKNOWN";
+};
+
 /**
- * LINE トークで確認済みの名前から新規顧客を作成し、LINE アカウントを紐付ける。
+ * 登録フォームの入力から新規顧客を作成し、LINE アカウントを紐付ける。
  * 会員番号は既存の最大値 + 1 で払い出す (衝突時はリトライ)。
  */
 export async function registerCustomerFromLine(
   lineUserId: string,
-  name: string,
+  input: SignupInput,
   profile?: LineProfile | null,
 ) {
-  const { lastName, firstName } = splitCustomerName(name);
+  const birthday = input.birthday ? new Date(`${input.birthday}T00:00:00`) : null;
 
   for (let attempt = 0; ; attempt++) {
     try {
@@ -281,7 +291,17 @@ export async function registerCustomerFromLine(
           attempt;
 
         const customer = await tx.customer.create({
-          data: { memberCode: `M${nextNumber}`, lastName, firstName },
+          data: {
+            memberCode: `M${nextNumber}`,
+            lastName: input.lastName,
+            firstName: input.firstName,
+            lastNameKana: input.lastNameKana || null,
+            firstNameKana: input.firstNameKana || null,
+            phone: input.phone || null,
+            email: input.email || null,
+            birthday: birthday && !Number.isNaN(birthday.getTime()) ? birthday : null,
+            gender: input.gender ?? null,
+          },
         });
         await tx.lineAccount.create({
           data: {

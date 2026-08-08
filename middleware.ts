@@ -83,6 +83,6 @@ export async function middleware(request: NextRequest) {
 export const config = {
   // 静的ファイル・POS 連携 API・LINE Webhook・ヘルスチェック・会員証ページは対象外
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|api/pos|api/line|api/health|api/reminders|card/|.*\\.(?:png|jpg|svg|ico|webmanifest)).*)",
+    "/((?!_next/static|_next/image|favicon.ico|api/pos|api/line|api/health|api/reminders|card/|signup/|.*\\.(?:png|jpg|svg|ico|webmanifest)).*)",
   ],
 };
