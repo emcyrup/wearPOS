@@ -1,4 +1,4 @@
-import { Badge, Card, PageHeader, Table } from "@/components/ui";
+import { Badge, Card, LinkButton, PageHeader, Table } from "@/components/ui";
 import { ReminderSettings } from "@/components/reminder-settings";
 import { RichMenuSetup } from "@/components/richmenu-setup";
 import { UserManager } from "@/components/user-manager";
@@ -50,7 +50,15 @@ export default async function SettingsPage() {
     <>
       <PageHeader title="設定 / 連携" description="マスタの確認と、POSレジ・LINE公式アカウントの連携設定" />
 
-      <Card title="リマインド設定 (LINE 自動配信)" className="mb-4">
+      <Card
+        title="リマインド設定 (LINE 自動配信)"
+        className="mb-4"
+        action={
+          isAdmin ? (
+            <LinkButton href="/settings/reminder-test">テスト配信</LinkButton>
+          ) : undefined
+        }
+      >
         <ReminderSettings
           rules={reminderRules.map(({ def, rule }) => ({
             key: def.key,

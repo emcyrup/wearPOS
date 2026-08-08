@@ -283,3 +283,19 @@ export async function runReminders(now = new Date()): Promise<ReminderRunResult[
 
   return results;
 }
+
+/**
+ * テスト配信・プレビュー用に、指定ルールの文面をその顧客向けに組み立てる。
+ * 実際の自動配信と同じロジックを使う。
+ */
+export async function buildReminderPreview(
+  key: ReminderRuleKey,
+  customerId: string,
+): Promise<string | null> {
+  if (key === "PURCHASE_FOLLOW") return buildPurchaseFollowMessage(customerId);
+  if (key === "REVISIT") {
+    return (await buildRecommendDraft(customerId)) ?? buildRevisitDraft(customerId);
+  }
+  if (key === "DORMANT") return buildRevisitDraft(customerId);
+  return buildBirthdayMessage(customerId);
+}
