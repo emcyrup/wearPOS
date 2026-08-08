@@ -180,6 +180,14 @@ LINE_PUSH_ENABLED=true         # false で送信を停止 (ログのみ記録)`}
               <dt className="text-ink-400">自動プッシュ通知</dt>
               <dd>{pushEnabled ? "有効" : "無効"}</dd>
             </div>
+            <div className="flex justify-between">
+              <dt className="text-ink-400">LIFF ID (直接遷移用)</dt>
+              <dd>{process.env.LIFF_ID ? "設定済み" : "未設定"}</dd>
+            </div>
+            <div className="flex justify-between">
+              <dt className="text-ink-400">LIFF チャネルID</dt>
+              <dd>{process.env.LIFF_CHANNEL_ID ? "設定済み" : "未設定"}</dd>
+            </div>
           </dl>
 
           {!lineReady && (
