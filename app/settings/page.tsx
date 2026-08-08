@@ -1,5 +1,6 @@
 import { Badge, Card, PageHeader, Table } from "@/components/ui";
 import { ReminderSettings } from "@/components/reminder-settings";
+import { RichMenuSetup } from "@/components/richmenu-setup";
 import { UserManager } from "@/components/user-manager";
 import { ensureReminderRules } from "@/lib/reminders";
 import { RANK_RULES, SEASON_PHASE_LABEL, SEASON_TERM_LABEL, seasonPhase } from "@/lib/apparel";
@@ -187,6 +188,8 @@ LINE_PUSH_ENABLED=true         # false で送信を停止 (ログのみ記録)`}
               画面の動作確認はこの状態でも行えます。
             </p>
           )}
+
+          {lineReady && isAdmin && <RichMenuSetup />}
         </Card>
       </div>
 

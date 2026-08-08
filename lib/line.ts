@@ -320,3 +320,89 @@ export async function registerCustomerFromLine(
     }
   }
 }
+
+// ---------------------------------------------------------------------------
+// リッチメニュー
+// ---------------------------------------------------------------------------
+
+const LINE_DATA_API = "https://api-data.line.me/v2/bot";
+
+/**
+ * 既定のリッチメニューを作成して全ユーザーに適用する。
+ * ボタンはタップでキーワード (会員登録 / 会員証 / ポイント) を送信し、
+ * Webhook が本人専用の URL や情報を返す (URL の誤送信を防ぐ)。
+ * 適用後、古いリッチメニューは削除する。
+ */
+export async function setupDefaultRichMenu(
+  image: Uint8Array,
+): Promise<{ ok: boolean; richMenuId?: string; error?: string }> {
+  const { accessToken } = lineConfig();
+  if (!accessToken) {
+    return { ok: false, error: "LINE_CHANNEL_ACCESS_TOKEN が未設定です" };
+  }
+  const auth = { Authorization: `Bearer ${accessToken}` };
+
+  try {
+    const createRes = await fetch(`${LINE_API}/richmenu`, {
+      method: "POST",
+      headers: { ...auth, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        size: { width: 2500, height: 843 },
+        selected: true,
+        name: `wearpos-menu-${Date.now()}`,
+        chatBarText: "メニュー",
+        areas: [
+          {
+            bounds: { x: 0, y: 0, width: 833, height: 843 },
+            action: { type: "message", text: "会員登録" },
+          },
+          {
+            bounds: { x: 833, y: 0, width: 834, height: 843 },
+            action: { type: "message", text: "会員証" },
+          },
+          {
+            bounds: { x: 1667, y: 0, width: 833, height: 843 },
+            action: { type: "message", text: "ポイント" },
+          },
+        ],
+      }),
+    });
+    if (!createRes.ok) {
+      const detail = (await createRes.text()).slice(0, 200);
+      return { ok: false, error: `リッチメニューの作成に失敗しました (${createRes.status}): ${detail}` };
+    }
+    const { richMenuId } = (await createRes.json()) as { richMenuId: string };
+
+    const imageRes = await fetch(`${LINE_DATA_API}/richmenu/${richMenuId}/content`, {
+      method: "POST",
+      headers: { ...auth, "Content-Type": "image/png" },
+      body: image as BodyInit,
+    });
+    if (!imageRes.ok) {
+      return { ok: false, error: `メニュー画像のアップロードに失敗しました (${imageRes.status})` };
+    }
+
+    const defaultRes = await fetch(`${LINE_API}/user/all/richmenu/${richMenuId}`, {
+      method: "POST",
+      headers: auth,
+    });
+    if (!defaultRes.ok) {
+      return { ok: false, error: `既定メニューの適用に失敗しました (${defaultRes.status})` };
+    }
+
+    // 使われなくなった古いメニューを掃除する
+    const listRes = await fetch(`${LINE_API}/richmenu/list`, { headers: auth });
+    if (listRes.ok) {
+      const { richmenus } = (await listRes.json()) as { richmenus?: { richMenuId: string }[] };
+      for (const menu of richmenus ?? []) {
+        if (menu.richMenuId !== richMenuId) {
+          await fetch(`${LINE_API}/richmenu/${menu.richMenuId}`, { method: "DELETE", headers: auth });
+        }
+      }
+    }
+
+    return { ok: true, richMenuId };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : String(error) };
+  }
+}

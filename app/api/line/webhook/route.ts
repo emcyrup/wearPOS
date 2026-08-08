@@ -182,6 +182,16 @@ async function buildReply(text: string, customerId: string, origin: string): Pro
   });
   if (!customer) return null;
 
+  // リッチメニューの「会員登録」を連携済みの人が押した場合
+  if (/会員登録|新規登録/.test(text)) {
+    const token = await signMemberCardToken(customer.id);
+    return [
+      `${fullName(customer)} 様はすでにご登録済みです (会員番号: ${customer.memberCode})。`,
+      "デジタル会員証はこちらからご確認いただけます。",
+      `${origin}/card/${token}`,
+    ].join("\n");
+  }
+
   if (/会員証|カード|バーコード/i.test(text)) {
     const token = await signMemberCardToken(customer.id);
     return [
