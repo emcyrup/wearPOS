@@ -5,7 +5,13 @@ import { headers } from "next/headers";
 import { requireAdmin } from "@/lib/auth";
 import { setupDefaultRichMenu } from "@/lib/line";
 
-export type RichMenuResult = { ok: boolean; richMenuId?: string; error?: string };
+export type RichMenuResult = {
+  ok: boolean;
+  richMenuId?: string;
+  /** liff: タップで直接画面遷移 / message: キーワード送信方式 */
+  mode?: "liff" | "message";
+  error?: string;
+};
 
 /**
  * リッチメニュー (会員登録 / 会員証 / ポイント) を作成して全ユーザーに適用する。

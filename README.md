@@ -164,6 +164,7 @@ npm run demo:build    # ビルド → 各画面を取り込み → docs/index.ht
 | `AUTH_SECRET` | ログインセッションの署名鍵。本番では必ずランダム値を設定（未設定時は `POS_API_KEY` から導出）|
 | `AUTH_DISABLED` | `1` でログインを無効化（静的デモ生成・ローカル確認用）|
 | `CRON_SECRET` | リマインド実行 API (`/api/reminders/run`) の認証。Vercel Cron が自動で付与（`POS_API_KEY` でも実行可）|
+| `LIFF_ID` / `LIFF_CHANNEL_ID` | リッチメニューをタップで直接画面遷移にする場合に設定（未設定ならキーワード送信方式）|
 | `APP_URL` | LINE で送る会員証リンクの基点 URL（未設定ならアクセス時のホスト名から自動判定）|
 
 LINE の認証情報が未設定でもアプリは動作します。その場合、送信はスキップされログだけが残るため、

@@ -335,12 +335,20 @@ const LINE_DATA_API = "https://api-data.line.me/v2/bot";
  */
 export async function setupDefaultRichMenu(
   image: Uint8Array,
-): Promise<{ ok: boolean; richMenuId?: string; error?: string }> {
+): Promise<{ ok: boolean; richMenuId?: string; mode?: "liff" | "message"; error?: string }> {
   const { accessToken } = lineConfig();
   if (!accessToken) {
     return { ok: false, error: "LINE_CHANNEL_ACCESS_TOKEN が未設定です" };
   }
   const auth = { Authorization: `Bearer ${accessToken}` };
+
+  // LIFF が設定されていればタップで直接画面を開く。無ければキーワード送信で代替
+  const { liffId } = liffConfig();
+  const useLiff = isLiffConfigured();
+  const actionFor = (dest: "signup" | "card" | "points", keyword: string) =>
+    useLiff
+      ? { type: "uri", uri: `https://liff.line.me/${liffId}?dest=${dest}` }
+      : { type: "message", text: keyword };
 
   try {
     const createRes = await fetch(`${LINE_API}/richmenu`, {
@@ -354,15 +362,15 @@ export async function setupDefaultRichMenu(
         areas: [
           {
             bounds: { x: 0, y: 0, width: 833, height: 843 },
-            action: { type: "message", text: "会員登録" },
+            action: actionFor("signup", "会員登録"),
           },
           {
             bounds: { x: 833, y: 0, width: 834, height: 843 },
-            action: { type: "message", text: "会員証" },
+            action: actionFor("card", "会員証"),
           },
           {
             bounds: { x: 1667, y: 0, width: 833, height: 843 },
-            action: { type: "message", text: "ポイント" },
+            action: actionFor("points", "ポイント"),
           },
         ],
       }),
@@ -401,8 +409,47 @@ export async function setupDefaultRichMenu(
       }
     }
 
-    return { ok: true, richMenuId };
+    return { ok: true, richMenuId, mode: useLiff ? "liff" : "message" };
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : String(error) };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// LIFF (リッチメニューからの直接遷移)
+// ---------------------------------------------------------------------------
+
+export function liffConfig() {
+  return {
+    liffId: process.env.LIFF_ID ?? "",
+    /** LIFF アプリが属するチャネルのチャネル ID (ID トークン検証に使用) */
+    channelId: process.env.LIFF_CHANNEL_ID ?? "",
+  };
+}
+
+export function isLiffConfigured(): boolean {
+  const { liffId, channelId } = liffConfig();
+  return Boolean(liffId && channelId);
+}
+
+/**
+ * LIFF の ID トークンを LINE の検証エンドポイントで確認し、
+ * 正当なら LINE ユーザー ID を返す。クライアント申告のユーザー ID は信用しない。
+ */
+export async function verifyLiffIdToken(idToken: string): Promise<string | null> {
+  const { channelId } = liffConfig();
+  if (!channelId || !idToken) return null;
+
+  try {
+    const res = await fetch("https://api.line.me/oauth2/v2.1/verify", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({ id_token: idToken, client_id: channelId }),
+    });
+    if (!res.ok) return null;
+    const payload = (await res.json()) as { sub?: string };
+    return payload.sub ?? null;
+  } catch {
+    return null;
   }
 }
