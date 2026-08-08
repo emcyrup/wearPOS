@@ -238,6 +238,65 @@ export function linkSuccessMessage(customerName: string, points: number): string
 export const LINK_GUIDE_MESSAGE = [
   "友だち追加ありがとうございます。",
   "",
-  "会員情報を連携すると、お買い上げ履歴やポイント残高をこちらで確認できます。",
-  "店頭スタッフが発行する6桁の連携コードを、このトークに送信してください。",
+  "【はじめての方】",
+  "お名前 (例: 山田 花子) をこのトークに送信すると、その場で会員登録できます。",
+  "",
+  "【すでに会員の方】",
+  "店頭スタッフが発行する6桁の連携コードを送信すると、会員情報と連携されます。",
+  "",
+  "連携すると、お買い上げ履歴・ポイント残高・会員証の表示が使えるようになります。",
 ].join("\n");
+
+// ---------------------------------------------------------------------------
+// LINE からの新規会員登録
+// ---------------------------------------------------------------------------
+
+/** 名前を姓・名に分ける (全角/半角スペース区切り。区切りが無ければ姓のみ) */
+export function splitCustomerName(raw: string): { lastName: string; firstName: string } {
+  const parts = raw.replaceAll("　", " ").trim().split(/\s+/);
+  return { lastName: parts[0] ?? "", firstName: parts.slice(1).join(" ") };
+}
+
+/**
+ * LINE トークで確認済みの名前から新規顧客を作成し、LINE アカウントを紐付ける。
+ * 会員番号は既存の最大値 + 1 で払い出す (衝突時はリトライ)。
+ */
+export async function registerCustomerFromLine(
+  lineUserId: string,
+  name: string,
+  profile?: LineProfile | null,
+) {
+  const { lastName, firstName } = splitCustomerName(name);
+
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await prisma.$transaction(async (tx) => {
+        const latest = await tx.customer.findFirst({
+          orderBy: { memberCode: "desc" },
+          select: { memberCode: true },
+        });
+        const nextNumber =
+          (latest ? Number.parseInt(latest.memberCode.replace(/\D/g, ""), 10) : 10000) +
+          1 +
+          attempt;
+
+        const customer = await tx.customer.create({
+          data: { memberCode: `M${nextNumber}`, lastName, firstName },
+        });
+        await tx.lineAccount.create({
+          data: {
+            customerId: customer.id,
+            lineUserId,
+            displayName: profile?.displayName,
+            pictureUrl: profile?.pictureUrl,
+            isFollowing: true,
+          },
+        });
+        return customer;
+      });
+    } catch (error) {
+      // 会員番号の同時払い出しで一意制約に当たったときだけやり直す
+      if (attempt >= 3) throw error;
+    }
+  }
+}
