@@ -32,6 +32,20 @@ type LineEvent = {
  *
  * 署名検証に失敗したリクエストは 401 で拒否する。
  */
+/**
+ * 設定確認用。ブラウザや curl でこの URL を開くと、
+ * URL の打ち間違いと環境変数の反映状態をその場で確認できる (秘密情報は返さない)。
+ */
+export async function GET() {
+  return NextResponse.json({
+    ok: true,
+    endpoint: "wearPOS LINE webhook",
+    channelSecretConfigured: Boolean(process.env.LINE_CHANNEL_SECRET),
+    accessTokenConfigured: Boolean(process.env.LINE_CHANNEL_ACCESS_TOKEN),
+    hint: "この URL を LINE Developers の Webhook URL に設定します。検証は POST で行われます",
+  });
+}
+
 export async function POST(request: Request) {
   if (!isLineConfigured()) {
     return NextResponse.json({ error: "LINE の認証情報が未設定です" }, { status: 503 });
@@ -42,7 +56,17 @@ export async function POST(request: Request) {
   const signature = request.headers.get("x-line-signature");
 
   if (!verifyLineSignature(rawBody, signature)) {
-    return NextResponse.json({ error: "署名が不正です" }, { status: 401 });
+    // 検証が 401 になったとき Vercel のログで原因を追えるようにする
+    console.error(
+      "LINE webhook 署名不一致: LINE_CHANNEL_SECRET がこのチャネルのシークレットと一致していません",
+    );
+    return NextResponse.json(
+      {
+        error:
+          "署名が一致しません。LINE_CHANNEL_SECRET に「チャネル基本設定」タブのチャネルシークレットが正しく設定されているか確認してください",
+      },
+      { status: 401 },
+    );
   }
 
   let events: LineEvent[] = [];
