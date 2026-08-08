@@ -23,13 +23,35 @@ function SubmitButton({ label }: { label: string }) {
 const inputClass =
   "w-full rounded-lg border border-ink-200 px-3 py-2 text-sm outline-none focus:border-ink-400";
 
-export function LoginForm() {
+export type LoginUserOption = {
+  username: string;
+  displayName: string;
+  role: string;
+};
+
+export function LoginForm({ users }: { users: LoginUserOption[] }) {
   const [state, formAction] = useActionState(login, INITIAL);
   return (
     <form action={formAction} className="space-y-3">
       <label className="block">
-        <span className="mb-1 block text-xs text-ink-400">ユーザー名</span>
-        <input name="username" autoComplete="username" autoFocus required className={inputClass} />
+        <span className="mb-1 block text-xs text-ink-400">ユーザー</span>
+        <select
+          name="username"
+          required
+          autoFocus
+          defaultValue=""
+          className={`${inputClass} bg-white`}
+        >
+          <option value="" disabled>
+            ユーザーを選択してください
+          </option>
+          {users.map((user) => (
+            <option key={user.username} value={user.username}>
+              {user.displayName}
+              {user.role === "ADMIN" ? " (管理者)" : ""} — {user.username}
+            </option>
+          ))}
+        </select>
       </label>
       <label className="block">
         <span className="mb-1 block text-xs text-ink-400">パスワード</span>

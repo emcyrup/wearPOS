@@ -1,10 +1,20 @@
 import { LoginForm, SetupForm } from "@/components/login-form";
 import { hasAnyUser } from "@/lib/auth";
+import { prisma } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
 
 export default async function LoginPage() {
   const initialized = await hasAnyUser();
+
+  // 店頭のタブレットでも選びやすいよう、ユーザー名は選択式にする
+  const users = initialized
+    ? await prisma.appUser.findMany({
+        where: { isActive: true },
+        select: { username: true, displayName: true, role: true },
+        orderBy: [{ role: "asc" }, { createdAt: "asc" }],
+      })
+    : [];
 
   return (
     <div className="flex min-h-[70vh] items-center justify-center">
@@ -20,7 +30,7 @@ export default async function LoginPage() {
           </p>
         </div>
         <div className="rounded-xl border border-ink-200 bg-white p-6">
-          {initialized ? <LoginForm /> : <SetupForm />}
+          {initialized ? <LoginForm users={users} /> : <SetupForm />}
         </div>
         {!initialized && (
           <p className="mt-3 text-center text-xs text-ink-400">
