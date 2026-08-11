@@ -1,7 +1,8 @@
 import Link from "next/link";
 
-import { Badge, Card, EmptyState, PageHeader, Table } from "@/components/ui";
+import { Badge, Card, EmptyState, LinkButton, PageHeader, Table } from "@/components/ui";
 import { markdownRate, seasonPhase, SEASON_PHASE_LABEL } from "@/lib/apparel";
+import { getSessionUser } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { formatPercent, formatYen } from "@/lib/format";
 
@@ -11,6 +12,7 @@ type Search = { q?: string; season?: string; category?: string; status?: string 
 
 export default async function ProductsPage({ searchParams }: { searchParams: Promise<Search> }) {
   const params = await searchParams;
+  const isAdmin = (await getSessionUser())?.role === "ADMIN";
   const q = params.q?.trim() ?? "";
 
   const [seasons, categories] = await Promise.all([
@@ -60,9 +62,16 @@ export default async function ProductsPage({ searchParams }: { searchParams: Pro
         title="商品 / SKU"
         description="品番ごとにカラー×サイズの SKU を管理します"
         action={
-          <Badge tone="neutral">
-            {products.length} 品番 / {products.reduce((s, p) => s + p.variants.length, 0)} SKU
-          </Badge>
+          <div className="flex items-center gap-2">
+            <Badge tone="neutral">
+              {products.length} 品番 / {products.reduce((s, p) => s + p.variants.length, 0)} SKU
+            </Badge>
+            {isAdmin && (
+              <LinkButton href="/products/new" variant="primary">
+                商品を登録
+              </LinkButton>
+            )}
+          </div>
         }
       />
 
@@ -125,12 +134,23 @@ export default async function ProductsPage({ searchParams }: { searchParams: Pro
 
       <Card>
         {rows.length ? (
-          <Table head={["品番", "商品名", "シーズン", "カラー×サイズ", "プロパー", "現在価格", "在庫"]}>
+          <Table
+            minWidth={880}
+            head={[
+              "品番",
+              "商品名",
+              "シーズン",
+              "カラー×サイズ",
+              { label: "プロパー", align: "right" },
+              { label: "現在価格", align: "right" },
+              { label: "在庫", align: "right" },
+            ]}
+          >
             {rows.map(({ product, onHand, colors, sizes }) => {
               const phase = seasonPhase(product.season);
               const discount = markdownRate(product.listPrice, product.currentPrice);
               return (
-                <tr key={product.id} className="border-b border-ink-100 last:border-0 hover:bg-ink-50">
+                <tr key={product.id}>
                   <td className="px-2 py-2.5">
                     <Link
                       href={`/products/${product.id}`}
@@ -159,14 +179,14 @@ export default async function ProductsPage({ searchParams }: { searchParams: Pro
                     {colors} 色 × {sizes} サイズ
                     <span className="ml-1 text-xs text-ink-400">({product.variants.length})</span>
                   </td>
-                  <td className="tabular px-2 py-2.5 text-ink-400">
+                  <td className="tabular px-2 py-2.5 text-right text-ink-400">
                     {discount > 0 ? (
                       <span className="line-through">{formatYen(product.listPrice)}</span>
                     ) : (
                       formatYen(product.listPrice)
                     )}
                   </td>
-                  <td className="tabular px-2 py-2.5">
+                  <td className="tabular px-2 py-2.5 text-right">
                     <span className={discount > 0 ? "font-semibold text-accent" : ""}>
                       {formatYen(product.currentPrice)}
                     </span>
@@ -174,7 +194,7 @@ export default async function ProductsPage({ searchParams }: { searchParams: Pro
                       <span className="ml-1 text-xs text-accent">-{formatPercent(discount, 0)}</span>
                     )}
                   </td>
-                  <td className="tabular px-2 py-2.5 font-medium">{onHand}</td>
+                  <td className="tabular px-2 py-2.5 text-right font-medium">{onHand}</td>
                 </tr>
               );
             })}

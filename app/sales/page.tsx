@@ -142,9 +142,21 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
 
       <Card>
         {sales.length ? (
-          <Table head={["伝票番号", "日時", "店舗", "顧客", "点数", "支払", "金額", "担当"]}>
+          <Table
+            minWidth={860}
+            head={[
+              "伝票番号",
+              "日時",
+              "店舗",
+              "顧客",
+              { label: "点数", align: "right" },
+              "支払",
+              { label: "金額", align: "right" },
+              "担当",
+            ]}
+          >
             {sales.map((sale) => (
-              <tr key={sale.id} className="border-b border-ink-100 last:border-0 hover:bg-ink-50">
+              <tr key={sale.id}>
                 <td className="px-2 py-2.5">
                   <Link
                     href={`/sales/${sale.id}`}
@@ -174,13 +186,13 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
                     <span className="text-xs text-ink-400">非会員</span>
                   )}
                 </td>
-                <td className="tabular px-2 py-2.5 text-ink-600">
+                <td className="tabular px-2 py-2.5 text-right text-ink-600">
                   {sale.lines.reduce((sum, line) => sum + line.quantity, 0)}
                 </td>
                 <td className="px-2 py-2.5 text-xs whitespace-nowrap text-ink-400">
                   {PAYMENT_METHOD_LABEL[sale.paymentMethod] ?? sale.paymentMethod}
                 </td>
-                <td className="tabular px-2 py-2.5 font-medium">{formatYen(sale.total)}</td>
+                <td className="tabular px-2 py-2.5 text-right font-medium">{formatYen(sale.total)}</td>
                 <td className="px-2 py-2.5 text-xs whitespace-nowrap text-ink-400">
                   {sale.staff?.name ?? "—"}
                 </td>

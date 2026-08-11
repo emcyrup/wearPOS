@@ -111,9 +111,20 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
 
       <Card title={`在庫一覧 (${total.toLocaleString("ja-JP")} 件)`}>
         {rows.length ? (
-          <Table head={["店舗", "SKU", "商品", "カラー / サイズ", "シーズン", "在庫", "発注点"]}>
+          <Table
+            minWidth={860}
+            head={[
+              "店舗",
+              "SKU",
+              "商品",
+              "カラー / サイズ",
+              "シーズン",
+              { label: "在庫", align: "right" },
+              { label: "発注点", align: "right" },
+            ]}
+          >
             {rows.map((item) => (
-              <tr key={item.id} className="border-b border-ink-100 last:border-0 hover:bg-ink-50">
+              <tr key={item.id}>
                 <td className="px-2 py-2 whitespace-nowrap text-ink-600">{item.storeName}</td>
                 <td className="tabular px-2 py-2 text-xs text-ink-400">{item.sku}</td>
                 <td className="px-2 py-2">
@@ -136,10 +147,12 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
                   </span>
                 </td>
                 <td className="tabular px-2 py-2 text-xs text-ink-400">{item.seasonCode}</td>
-                <td className="px-2 py-2">
+                <td className="px-2 py-2 text-right">
                   <StockCell quantity={item.quantity} safetyStock={item.safetyStock} />
                 </td>
-                <td className="tabular px-2 py-2 text-xs text-ink-400">{item.safetyStock}</td>
+                <td className="tabular px-2 py-2 text-right text-xs text-ink-400">
+                  {item.safetyStock}
+                </td>
               </tr>
             ))}
           </Table>
@@ -156,9 +169,20 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
 
       <Card title="直近の在庫変動" className="mt-4">
         {movements.length ? (
-          <Table head={["日時", "店舗", "区分", "SKU", "増減", "変動後", "担当"]}>
+          <Table
+            minWidth={760}
+            head={[
+              "日時",
+              "店舗",
+              "区分",
+              "SKU",
+              { label: "増減", align: "right" },
+              { label: "変動後", align: "right" },
+              "担当",
+            ]}
+          >
             {movements.map((movement) => (
-              <tr key={movement.id} className="border-b border-ink-100 last:border-0">
+              <tr key={movement.id}>
                 <td className="tabular px-2 py-2 whitespace-nowrap text-xs text-ink-400">
                   {formatDateTime(movement.createdAt)}
                 </td>
@@ -181,13 +205,13 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
                   <div className="tabular text-xs text-ink-400">{movement.sku}</div>
                 </td>
                 <td
-                  className={`tabular px-2 py-2 font-medium ${
+                  className={`tabular px-2 py-2 text-right font-medium ${
                     movement.quantity < 0 ? "text-rose-700" : "text-emerald-700"
                   }`}
                 >
                   {movement.quantity > 0 ? `+${movement.quantity}` : movement.quantity}
                 </td>
-                <td className="tabular px-2 py-2">{movement.balance}</td>
+                <td className="tabular px-2 py-2 text-right">{movement.balance}</td>
                 <td className="px-2 py-2 text-xs text-ink-400">{movement.staffName ?? "—"}</td>
               </tr>
             ))}

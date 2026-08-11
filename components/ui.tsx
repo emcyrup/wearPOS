@@ -105,17 +105,57 @@ export function EmptyState({ message, hint }: { message: string; hint?: string }
   );
 }
 
-export function Table({ head, children }: { head: ReactNode[]; children: ReactNode }) {
+/** 列見出し。文字列だけ渡すと左寄せ、右寄せにしたい数値列は {label, align:"right"} で指定する */
+export type TableColumn = ReactNode | { label: ReactNode; align?: "left" | "right" | "center" };
+
+const alignClass = { left: "text-left", right: "text-right", center: "text-center" } as const;
+
+/**
+ * 一覧の表。
+ * ヘッダーは薄い背景で固定表示し、行はゼブラ + ホバーで追いやすくする。
+ * 数値セル側の右寄せは各ページで `text-right` を付ける。
+ */
+export function Table({
+  head,
+  children,
+  minWidth = 520,
+}: {
+  head: TableColumn[];
+  children: ReactNode;
+  /** 横スクロールが始まる幅 (列が多い表は広げる) */
+  minWidth?: number;
+}) {
   return (
     <div className="-mx-5 overflow-x-auto px-5">
-      <table className="w-full min-w-[520px] border-collapse text-sm">
-        <thead>
-          <tr className="border-b border-ink-200 text-left">
-            {head.map((cell, i) => (
-              <th key={i} className="px-2 py-2 text-xs font-medium text-ink-400 whitespace-nowrap">
-                {cell}
-              </th>
-            ))}
+      <table
+        style={{ minWidth }}
+        className={clsx(
+          "w-full border-collapse text-sm",
+          // 行の区切り・ゼブラ・ホバーは行側に個別指定しなくても効くようにする
+          "[&_tbody_tr]:border-b [&_tbody_tr]:border-ink-100 [&_tbody_tr:last-child]:border-0",
+          "[&_tbody_tr:nth-child(even)]:bg-ink-50/40 [&_tbody_tr:hover]:bg-accent-soft/40",
+          "[&_tbody_tr]:transition-colors",
+        )}
+      >
+        <thead className="sticky top-0 z-10">
+          <tr className="bg-ink-50">
+            {head.map((cell, i) => {
+              const column =
+                cell && typeof cell === "object" && "label" in cell
+                  ? (cell as { label: ReactNode; align?: "left" | "right" | "center" })
+                  : { label: cell as ReactNode, align: "left" as const };
+              return (
+                <th
+                  key={i}
+                  className={clsx(
+                    "border-b border-ink-200 px-2 py-2.5 text-xs font-semibold whitespace-nowrap text-ink-500",
+                    alignClass[column.align ?? "left"],
+                  )}
+                >
+                  {column.label}
+                </th>
+              );
+            })}
           </tr>
         </thead>
         <tbody>{children}</tbody>

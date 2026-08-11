@@ -178,3 +178,30 @@ export const MOVEMENT_TYPE_LABEL: Record<string, string> = {
 
 /** 顧客の休眠判定に使う日数 */
 export const DORMANT_DAYS = 90;
+
+/** 商品登録で選べる標準カラー */
+export const STANDARD_COLORS = [
+  { code: "BLK", name: "ブラック", hex: "#1c1c1e" },
+  { code: "WHT", name: "ホワイト", hex: "#f4f2ee" },
+  { code: "NVY", name: "ネイビー", hex: "#2b3550" },
+  { code: "BEG", name: "ベージュ", hex: "#cfbea4" },
+  { code: "GRY", name: "グレー", hex: "#9a9a9f" },
+  { code: "KHK", name: "カーキ", hex: "#6b6b4b" },
+  { code: "PNK", name: "ピンク", hex: "#e2b5b8" },
+  { code: "BLU", name: "ブルー", hex: "#4a7ba7" },
+  { code: "BRN", name: "ブラウン", hex: "#6d5140" },
+  { code: "GRN", name: "グリーン", hex: "#4c7a5a" },
+  { code: "RED", name: "レッド", hex: "#b8434a" },
+  { code: "YEL", name: "イエロー", hex: "#d8b96a" },
+] as const;
+
+/** 商品登録で選べる標準サイズ */
+export const STANDARD_SIZES = [
+  { code: "XS", name: "XS" },
+  { code: "S", name: "S" },
+  { code: "M", name: "M" },
+  { code: "L", name: "L" },
+  { code: "XL", name: "XL" },
+  { code: "XXL", name: "XXL" },
+  { code: "F", name: "FREE" },
+] as const;

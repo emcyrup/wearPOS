@@ -155,13 +155,24 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
       <Card>
         {customers.length ? (
           <Table
-            head={["会員番号", "氏名", "ランク", "累計購入", "来店", "最終来店", "ポイント", "LINE", "好み"]}
+            minWidth={960}
+            head={[
+              "会員番号",
+              "氏名",
+              "ランク",
+              { label: "累計購入", align: "right" },
+              { label: "来店", align: "right" },
+              "最終来店",
+              { label: "ポイント", align: "right" },
+              "LINE",
+              "好み",
+            ]}
           >
             {customers.map((customer) => {
               const since = daysSince(customer.lastVisitAt);
               const dormant = since !== null && since >= DORMANT_DAYS;
               return (
-                <tr key={customer.id} className="border-b border-ink-100 last:border-0 hover:bg-ink-50">
+                <tr key={customer.id}>
                   <td className="tabular px-2 py-2.5 text-xs text-ink-400">{customer.memberCode}</td>
                   <td className="px-2 py-2.5">
                     <Link
@@ -188,8 +199,10 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
                       {rankLabel(customer.rank)}
                     </Badge>
                   </td>
-                  <td className="tabular px-2 py-2.5 font-medium">{formatYen(customer.totalSpent)}</td>
-                  <td className="tabular px-2 py-2.5 text-ink-600">{customer.visitCount}</td>
+                  <td className="tabular px-2 py-2.5 text-right font-medium">
+                    {formatYen(customer.totalSpent)}
+                  </td>
+                  <td className="tabular px-2 py-2.5 text-right text-ink-600">{customer.visitCount}</td>
                   <td className="px-2 py-2.5 whitespace-nowrap">
                     <span className={`tabular text-sm ${dormant ? "text-amber-700" : "text-ink-600"}`}>
                       {formatDate(customer.lastVisitAt)}
@@ -198,7 +211,7 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
                       <div className="text-xs text-ink-400">{since}日前</div>
                     )}
                   </td>
-                  <td className="tabular px-2 py-2.5">{formatNumber(customer.points)}</td>
+                  <td className="tabular px-2 py-2.5 text-right">{formatNumber(customer.points)}</td>
                   <td className="px-2 py-2.5">
                     {customer.lineAccount ? (
                       customer.lineAccount.isFollowing ? (
