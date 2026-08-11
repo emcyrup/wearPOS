@@ -61,6 +61,8 @@ export function Register({ stores, staff }: { stores: StoreOption[]; staff: Staf
   const [tendered, setTendered] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  /** 現金以外で決済完了を確認するダイアログ */
+  const [confirmingPayment, setConfirmingPayment] = useState(false);
   const [done, setDone] = useState<(CheckoutResult & { ok: true; change: number | null }) | null>(null);
   const codeRef = useRef<HTMLInputElement | null>(null);
 
@@ -164,6 +166,15 @@ export function Register({ stores, staff }: { stores: StoreOption[]; staff: Staf
 
   const maxPoints = Math.min(member?.points ?? 0, totals.total);
 
+  // ---- 会計前のチェック ----
+  const isCash = paymentMethod === "CASH";
+  const tenderedValue = Number(tendered);
+  const tenderedEntered = tendered.trim() !== "" && Number.isFinite(tenderedValue);
+  const shortage = tenderedEntered ? Math.max(0, totals.payable - tenderedValue) : totals.payable;
+  // 現金は預かり金の入力が必須。ポイントで全額充当された場合 (支払0円) は不要
+  const cashReady = !isCash || totals.payable === 0 || (tenderedEntered && shortage === 0);
+  const canCheckout = lines.length > 0 && !busy && cashReady;
+
   const submit = async () => {
     if (lines.length === 0 || busy) return;
     setBusy(true);
@@ -194,7 +205,21 @@ export function Register({ stores, staff }: { stores: StoreOption[]; staff: Staf
       setDone({ ...result, change });
     } finally {
       setBusy(false);
+      setConfirmingPayment(false);
     }
+  };
+
+  /**
+   * 会計ボタン。
+   * 現金はそのまま会計、それ以外は決済端末での処理が済んだかを確認してから会計する。
+   */
+  const requestCheckout = () => {
+    if (!canCheckout) return;
+    if (isCash) {
+      void submit();
+      return;
+    }
+    setConfirmingPayment(true);
   };
 
   const reset = () => {
@@ -535,35 +560,103 @@ export function Register({ stores, staff }: { stores: StoreOption[]; staff: Staf
             ))}
           </div>
 
-          {paymentMethod === "CASH" && (
-            <label className="mt-3 flex items-center justify-between gap-3">
-              <span className="text-xs text-ink-400">お預かり</span>
-              <input
-                type="number"
-                min={0}
-                value={tendered}
-                onChange={(event) => setTendered(event.target.value)}
-                placeholder={String(totals.payable)}
-                className="tabular w-32 rounded-lg border border-ink-200 px-2 py-1 text-right text-sm outline-none focus:border-ink-400"
-              />
-            </label>
-          )}
-          {paymentMethod === "CASH" && Number(tendered) >= totals.payable && totals.payable > 0 && (
-            <p className="tabular mt-1.5 text-right text-sm text-ink-600">
-              お釣り {yen.format(Number(tendered) - totals.payable)}
-            </p>
+          {isCash && totals.payable > 0 && (
+            <>
+              <label className="mt-3 flex items-center justify-between gap-3">
+                <span className="text-xs text-ink-400">
+                  お預かり <span className="text-rose-600">*</span>
+                </span>
+                <input
+                  type="number"
+                  min={0}
+                  value={tendered}
+                  onChange={(event) => setTendered(event.target.value)}
+                  placeholder={String(totals.payable)}
+                  aria-label="お預かり金額"
+                  className={`tabular w-32 rounded-lg border px-2 py-1 text-right text-sm outline-none ${
+                    tenderedEntered && shortage > 0
+                      ? "border-rose-400 focus:border-rose-500"
+                      : "border-ink-200 focus:border-ink-400"
+                  }`}
+                />
+              </label>
+              {!tenderedEntered ? (
+                <p className="mt-1.5 text-right text-xs text-ink-400">
+                  お預かり金額を入力すると会計できます
+                </p>
+              ) : shortage > 0 ? (
+                <p className="tabular mt-1.5 text-right text-sm text-rose-700">
+                  {yen.format(shortage)} 不足しています
+                </p>
+              ) : (
+                <p className="tabular mt-1.5 text-right text-sm text-ink-600">
+                  お釣り {yen.format(tenderedValue - totals.payable)}
+                </p>
+              )}
+            </>
           )}
 
           <button
             type="button"
-            onClick={() => void submit()}
-            disabled={lines.length === 0 || busy}
+            onClick={requestCheckout}
+            disabled={!canCheckout}
+            title={!cashReady ? "お預かり金額を入力してください" : undefined}
             className="mt-4 w-full rounded-lg bg-ink-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-ink-800 disabled:opacity-40"
           >
             {busy ? "処理中..." : `会計する (${yen.format(totals.payable)})`}
           </button>
         </div>
       </div>
+
+      {/* 現金以外: 決済端末での処理が完了したかを確認する */}
+      {confirmingPayment && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-ink-900/60 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-label="決済の確認"
+        >
+          <div className="w-full max-w-sm rounded-xl bg-white p-6 shadow-xl">
+            <h2 className="text-base font-semibold text-ink-900">決済は完了しましたか？</h2>
+            <p className="mt-2 text-sm leading-relaxed text-ink-600">
+              {`${PAYMENT_METHODS.find((method) => method.value === paymentMethod)?.label}でのお支払いが決済端末で完了したことを確認してから、会計を確定してください。`}
+            </p>
+            <dl className="mt-4 space-y-1.5 rounded-lg bg-ink-50 px-4 py-3 text-sm">
+              <div className="flex justify-between">
+                <dt className="text-ink-400">支払方法</dt>
+                <dd className="font-medium text-ink-800">
+                  {PAYMENT_METHODS.find((method) => method.value === paymentMethod)?.label}
+                </dd>
+              </div>
+              <div className="flex justify-between">
+                <dt className="text-ink-400">お支払い金額</dt>
+                <dd className="tabular text-base font-semibold text-ink-900">
+                  {yen.format(totals.payable)}
+                </dd>
+              </div>
+            </dl>
+            <div className="mt-5 flex gap-2">
+              <button
+                type="button"
+                onClick={() => setConfirmingPayment(false)}
+                disabled={busy}
+                className="flex-1 rounded-lg border border-ink-200 bg-white px-4 py-2.5 text-sm font-medium text-ink-600 hover:bg-ink-50 disabled:opacity-50"
+              >
+                戻る
+              </button>
+              <button
+                type="button"
+                onClick={() => void submit()}
+                disabled={busy}
+                autoFocus
+                className="flex-1 rounded-lg bg-ink-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-ink-800 disabled:opacity-50"
+              >
+                {busy ? "処理中..." : "決済完了・会計する"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
