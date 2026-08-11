@@ -116,3 +116,117 @@ export async function checkout(input: unknown): Promise<CheckoutResult> {
     return { ok: false, error: "会計の処理に失敗しました。時間をおいて再度お試しください。" };
   }
 }
+
+// ---------------------------------------------------------------------------
+// 検索 (バーコードが読み取れないとき用)
+// ---------------------------------------------------------------------------
+
+export type ProductSearchResult = {
+  sku: string;
+  productName: string;
+  styleCode: string;
+  colorName: string;
+  colorHex: string | null;
+  sizeName: string;
+  price: number;
+  listPrice: number;
+  taxRate: number;
+  /** 会計する店舗の在庫数 */
+  stock: number;
+};
+
+/**
+ * 商品名・品番・SKU で SKU を検索する。
+ * 会計する店舗の在庫を添えて返し、在庫がある SKU を優先して並べる。
+ */
+export async function searchProducts(
+  query: string,
+  storeCode: string,
+): Promise<ProductSearchResult[]> {
+  const q = query.trim();
+  if (q.length < 1) return [];
+
+  const store = await prisma.store.findUnique({ where: { code: storeCode } });
+
+  const variants = await prisma.productVariant.findMany({
+    where: {
+      isActive: true,
+      product: { status: "ACTIVE" },
+      OR: [
+        { sku: { contains: q, mode: "insensitive" } },
+        { barcode: { contains: q } },
+        { colorName: { contains: q } },
+        { product: { name: { contains: q } } },
+        { product: { styleCode: { contains: q, mode: "insensitive" } } },
+      ],
+    },
+    include: {
+      product: true,
+      inventory: store ? { where: { storeId: store.id } } : false,
+    },
+    orderBy: [{ product: { styleCode: "asc" } }, { colorCode: "asc" }, { sizeOrder: "asc" }],
+    take: 60,
+  });
+
+  return variants
+    .map((variant) => ({
+      sku: variant.sku,
+      productName: variant.product.name,
+      styleCode: variant.product.styleCode,
+      colorName: variant.colorName,
+      colorHex: variant.colorHex,
+      sizeName: variant.sizeName,
+      price: variant.priceOverride ?? variant.product.currentPrice,
+      listPrice: variant.product.listPrice,
+      taxRate: variant.product.taxRate,
+      stock: ("inventory" in variant && Array.isArray(variant.inventory)
+        ? variant.inventory[0]?.quantity
+        : 0) ?? 0,
+    }))
+    // 在庫がある SKU を先に見せる (店頭で渡せるものを優先)
+    .sort((a, b) => Number(b.stock > 0) - Number(a.stock > 0))
+    .slice(0, 30);
+}
+
+export type MemberSearchResult = {
+  memberCode: string;
+  name: string;
+  nameKana: string;
+  rank: string;
+  points: number;
+  phone: string | null;
+  storeName: string | null;
+};
+
+/** 氏名・カナ・電話番号・会員番号で会員を検索する */
+export async function searchMembers(query: string): Promise<MemberSearchResult[]> {
+  const q = query.trim();
+  if (q.length < 1) return [];
+
+  const customers = await prisma.customer.findMany({
+    where: {
+      isActive: true,
+      OR: [
+        { memberCode: { contains: q, mode: "insensitive" } },
+        { lastName: { contains: q } },
+        { firstName: { contains: q } },
+        { lastNameKana: { contains: q } },
+        { firstNameKana: { contains: q } },
+        { phone: { contains: q } },
+      ],
+    },
+    include: { store: true },
+    orderBy: { lastVisitAt: "desc" },
+    take: 20,
+  });
+
+  return customers.map((customer) => ({
+    memberCode: customer.memberCode,
+    name: `${customer.lastName} ${customer.firstName}`.trim(),
+    nameKana: `${customer.lastNameKana ?? ""} ${customer.firstNameKana ?? ""}`.trim(),
+    rank: customer.rank,
+    points: customer.points,
+    phone: customer.phone,
+    storeName: customer.store?.name ?? null,
+  }));
+}

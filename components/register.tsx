@@ -5,6 +5,7 @@ import { useCallback, useMemo, useRef, useState } from "react";
 
 import { checkout, lookupMember, type CheckoutResult, type MemberSummary } from "@/app/register/actions";
 import { ScanButton } from "@/components/barcode-scanner";
+import { MemberSearchModal, ProductSearchModal } from "@/components/register-search";
 
 type StoreOption = { code: string; name: string };
 type StaffOption = { code: string; name: string; storeCode: string | null };
@@ -63,6 +64,9 @@ export function Register({ stores, staff }: { stores: StoreOption[]; staff: Staf
   const [busy, setBusy] = useState(false);
   /** 現金以外で決済完了を確認するダイアログ */
   const [confirmingPayment, setConfirmingPayment] = useState(false);
+  /** バーコードが読めないとき用の検索モーダル */
+  const [searchingProduct, setSearchingProduct] = useState(false);
+  const [searchingMember, setSearchingMember] = useState(false);
   const [done, setDone] = useState<(CheckoutResult & { ok: true; change: number | null }) | null>(null);
   const codeRef = useRef<HTMLInputElement | null>(null);
 
@@ -333,6 +337,13 @@ export function Register({ stores, staff }: { stores: StoreOption[]; staff: Staf
               追加
             </button>
           </form>
+          <button
+            type="button"
+            onClick={() => setSearchingProduct(true)}
+            className="mt-2 text-xs text-accent hover:underline"
+          >
+            バーコードが読み取れない場合は商品名で検索
+          </button>
           {error && <p className="mt-2 text-sm text-rose-700">{error}</p>}
         </div>
 
@@ -483,6 +494,15 @@ export function Register({ stores, staff }: { stores: StoreOption[]; staff: Staf
               </button>
             </form>
           )}
+          {!member && (
+            <button
+              type="button"
+              onClick={() => setSearchingMember(true)}
+              className="mt-2 text-xs text-accent hover:underline"
+            >
+              会員証がない場合はお名前・電話番号で検索
+            </button>
+          )}
           {memberError && <p className="mt-2 text-xs text-rose-700">{memberError}</p>}
           {member && maxPoints > 0 && (
             <label className="mt-3 flex items-center justify-between gap-3 border-t border-ink-100 pt-3">
@@ -607,6 +627,29 @@ export function Register({ stores, staff }: { stores: StoreOption[]; staff: Staf
           </button>
         </div>
       </div>
+
+      {/* バーコードが読めないとき: 商品名などで検索してカートに追加 */}
+      {searchingProduct && (
+        <ProductSearchModal
+          storeCode={storeCode}
+          onSelect={(sku) => {
+            setSearchingProduct(false);
+            void addByCode(sku);
+          }}
+          onClose={() => setSearchingProduct(false)}
+        />
+      )}
+
+      {/* 会員証・会員番号が分からないとき: 氏名などで検索して紐付ける */}
+      {searchingMember && (
+        <MemberSearchModal
+          onSelect={(memberCode) => {
+            setSearchingMember(false);
+            void attachMember(memberCode);
+          }}
+          onClose={() => setSearchingMember(false)}
+        />
+      )}
 
       {/* 現金以外: 決済端末での処理が完了したかを確認する */}
       {confirmingPayment && (
