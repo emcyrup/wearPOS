@@ -27,8 +27,8 @@ const requestSchema = z.object({
 
 const CHATGPT_SYSTEM_PROMPT = `あなたは ChatGPT。アパレル小売に詳しい経営分析者として、Claude の考察を批判的に検証する討論者です。
 - 与えられた POS データの数値を根拠に、Claude が見落としている点・別の解釈・打ち手のリスクを指摘する
-- 同意できる点があれば短く認めた上で、必ず1つは異なる視点を出す
-- 200文字程度 (最大300文字)。見出しや箇条書きは使わず、短い文章で
+- 指摘は1点に絞る。同意する部分は「〜は同意」と一言で済ませる
+- **120文字以内**。前置き・挨拶は書かず、指摘から始める
 - 専門用語は噛み砕いた言葉に言い換える`;
 
 /**
@@ -37,7 +37,7 @@ const CHATGPT_SYSTEM_PROMPT = `あなたは ChatGPT。アパレル小売に詳�
  * POST /api/insights
  * Body: { from, to, messages? }
  * Response: NDJSON のストリーム。1行ごとに以下のイベント:
- *   {e:"start", s:"claude"|"chatgpt"} 発言の開始
+ *   {e:"start", s:"claude"|"chatgpt", final?} 発言の開始 (final は結論)
  *   {e:"t", t:"..."}                 発言本文の断片
  *   {e:"end"}                        発言の終了
  *   {e:"note", t:"..."}              補足 (フォールバック案内など)
@@ -86,8 +86,10 @@ export async function POST(request: Request) {
       const claudeTurn = async (
         conversation: { role: "user" | "assistant"; content: string }[],
         extraSystem = "",
+        /** 討論の締め (結論) かどうか。UI で主役として表示する */
+        isConclusion = false,
       ): Promise<string> => {
-        emit({ e: "start", s: "claude" });
+        emit({ e: "start", s: "claude", ...(isConclusion ? { final: true } : {}) });
         const stream = client.beta.messages.stream({
           model: "claude-opus-5",
           // 発言は200文字程度に絞っているため、出力上限も小さくてよい
@@ -132,7 +134,7 @@ export async function POST(request: Request) {
               : messages;
           await claudeTurn(
             conversation,
-            "\n\n続きの質問には、これまでの討論内容を踏まえて答えてください。",
+            "\n\n続きの質問には、これまでの討論内容を踏まえて150文字以内で簡潔に答えてください。",
           );
         } else {
           // ---- 討論モード ----
@@ -140,7 +142,7 @@ export async function POST(request: Request) {
 
           // 1. Claude の考察
           const opening =
-            "この期間の実績を分析してください。いちばん大事な気づきと、明日からできる打ち手を述べてください。";
+            "この期間の実績で、いちばん大事な気づきを1つだけ、120文字以内で述べてください。";
           const claudeView = await claudeTurn(
             [{ role: "user", content: opening }],
             chatGptAvailable
@@ -185,10 +187,11 @@ export async function POST(request: Request) {
               { role: "assistant", content: claudeView },
               {
                 role: "user",
-                content: `ChatGPT から次の指摘がありました。\n\n${chatGptView}\n\n同意できる点・同意できない点を整理した上で、最終結論と明日からの打ち手を200文字程度でまとめてください。`,
+                content: `ChatGPT から次の指摘がありました。\n\n${chatGptView}\n\n両者の意見を踏まえた結論を、次の形式ちょうどで書いてください。前置きや見出しの装飾は不要です。\n\n結論: (1文・60文字以内)\n打ち手: (誰が何をするか1文・50文字以内)\n打ち手: (2つ目があれば。無ければこの行は省略)`,
               },
             ],
             "\n\nあなたは Claude として ChatGPT と討論しています。最後のまとめ役です。",
+            true,
           );
         }
       } catch (error) {

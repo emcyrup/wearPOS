@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 type Speaker = "claude" | "chatgpt" | "user" | "note";
-type DebateMessage = { speaker: Speaker; content: string };
+type DebateMessage = { speaker: Speaker; content: string; final?: boolean };
 type ApiMessage = { role: "user" | "assistant"; content: string };
 
 const SPEAKER_META: Record<"claude" | "chatgpt", { label: string; chip: string }> = {
@@ -82,14 +82,18 @@ export function AiInsights({ from, to }: { from: string; to: string }) {
 
         const handleLine = (line: string) => {
           if (!line.trim()) return;
-          let event: { e: string; s?: string; t?: string };
+          let event: { e: string; s?: string; t?: string; final?: boolean };
           try {
             event = JSON.parse(line);
           } catch {
             return;
           }
           if (event.e === "start") {
-            current = { speaker: event.s === "chatgpt" ? "chatgpt" : "claude", content: "" };
+            current = {
+              speaker: event.s === "chatgpt" ? "chatgpt" : "claude",
+              content: "",
+              final: event.final === true,
+            };
             setStreaming({ ...current });
           } else if (event.e === "t" && current) {
             current.content += event.t ?? "";
@@ -165,6 +169,31 @@ export function AiInsights({ from, to }: { from: string; to: string }) {
 
   const started = messages.length > 0 || loading;
 
+  // 討論を「結論」と「経過」に分ける。結論を主役として大きく見せる
+  const conclusionIndex = messages.findLastIndex((m) => m.final);
+  const conclusion = conclusionIndex >= 0 ? messages[conclusionIndex] : null;
+  const debateTurns = messages.filter(
+    (m, i) => i !== conclusionIndex && (m.speaker === "claude" || m.speaker === "chatgpt"),
+  );
+  const otherMessages = messages.filter(
+    (m) => m.speaker === "user" || m.speaker === "note",
+  );
+
+  /** 「結論: 〜 / 打ち手: 〜」の行を拾って構造化する */
+  const parseConclusion = (text: string) => {
+    const lines = text.split("\n").map((line) => line.trim()).filter(Boolean);
+    const summary = lines
+      .filter((line) => line.startsWith("結論"))
+      .map((line) => line.replace(/^結論[:：]?\s*/, ""))
+      .join(" ");
+    const actions = lines
+      .filter((line) => line.startsWith("打ち手"))
+      .map((line) => line.replace(/^打ち手[:：]?\s*/, ""));
+    // 形式どおりでなければ本文をそのまま結論として扱う
+    if (!summary && actions.length === 0) return { summary: text.trim(), actions: [] };
+    return { summary, actions };
+  };
+
   const renderMessage = (message: DebateMessage, index: number) => {
     if (message.speaker === "user") {
       return (
@@ -224,8 +253,8 @@ export function AiInsights({ from, to }: { from: string; to: string }) {
       <div className="px-5 py-4">
         {!started && !error && (
           <p className="text-sm text-ink-400">
-            「討論を開始」を押すと、この期間の実績について Claude が考察し、ChatGPT
-            が別の視点から検証、最後に Claude が結論をまとめます。生成後は追加の質問もできます。
+            「討論を開始」を押すと、Claude と ChatGPT がこの期間の実績について議論し、
+            結論と打ち手だけを短くまとめます。経過はあとから開いて確認できます。
           </p>
         )}
 
@@ -233,24 +262,67 @@ export function AiInsights({ from, to }: { from: string; to: string }) {
           <p className="rounded-lg bg-amber-50 px-4 py-3 text-sm text-amber-800">{error}</p>
         )}
 
-        {(messages.length > 0 || streaming) && (
-          <div className="space-y-4">
-            {messages.map(renderMessage)}
-            {streaming && (
-              <div>
-                <span
-                  className={`mb-1 inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${
-                    SPEAKER_META[streaming.speaker === "chatgpt" ? "chatgpt" : "claude"].chip
-                  }`}
-                >
-                  {SPEAKER_META[streaming.speaker === "chatgpt" ? "chatgpt" : "claude"].label}
-                </span>
-                <div className="whitespace-pre-wrap text-sm leading-relaxed text-ink-800">
-                  {streaming.content}
-                  <span className="ml-0.5 inline-block h-4 w-1.5 animate-pulse bg-ink-400 align-text-bottom" />
-                </div>
-              </div>
-            )}
+        {/* 結論を主役に表示する */}
+        {conclusion && (() => {
+          const { summary, actions } = parseConclusion(conclusion.content);
+          return (
+            <div className="rounded-xl border border-ink-200 bg-ink-50/60 p-4">
+              <p className="text-[15px] leading-relaxed font-medium text-ink-900">{summary}</p>
+              {actions.length > 0 && (
+                <ul className="mt-3 space-y-1.5 border-t border-ink-200 pt-3">
+                  {actions.map((action, index) => (
+                    <li key={index} className="flex gap-2 text-sm text-ink-700">
+                      <span className="shrink-0 text-accent">→</span>
+                      <span>{action}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          );
+        })()}
+
+        {/* 討論の経過は折りたたむ (結論が出るまでは開いた状態で流す) */}
+        {debateTurns.length > 0 && (
+          <details className={conclusion ? "mt-3" : "mt-0"} open={!conclusion}>
+            <summary className="cursor-pointer list-none text-xs text-ink-400 hover:text-ink-600">
+              討論の経過を{conclusion ? "見る" : "表示中"} ({debateTurns.length}件)
+            </summary>
+            <div className="mt-3 space-y-4 border-l-2 border-ink-100 pl-3">
+              {debateTurns.map(renderMessage)}
+            </div>
+          </details>
+        )}
+
+        {/* 追加質問とその回答 */}
+        {(otherMessages.length > 0 || (conclusion && messages.some((m) => m.speaker === "user"))) && (
+          <div className="mt-4 space-y-4">
+            {messages
+              .filter(
+                (m, i) =>
+                  m.speaker === "user" ||
+                  m.speaker === "note" ||
+                  // 追加質問への回答 (討論より後の Claude 発言)
+                  (i > conclusionIndex && conclusionIndex >= 0 && m.speaker === "claude"),
+              )
+              .map(renderMessage)}
+          </div>
+        )}
+
+        {streaming && (
+          <div className="mt-4">
+            <span
+              className={`mb-1 inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${
+                SPEAKER_META[streaming.speaker === "chatgpt" ? "chatgpt" : "claude"].chip
+              }`}
+            >
+              {SPEAKER_META[streaming.speaker === "chatgpt" ? "chatgpt" : "claude"].label}
+              {streaming.final && <span className="ml-1 font-normal">· まとめ</span>}
+            </span>
+            <div className="whitespace-pre-wrap text-sm leading-relaxed text-ink-800">
+              {streaming.content}
+              <span className="ml-0.5 inline-block h-4 w-1.5 animate-pulse bg-ink-400 align-text-bottom" />
+            </div>
           </div>
         )}
 
