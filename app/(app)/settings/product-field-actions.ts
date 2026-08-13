@@ -36,6 +36,45 @@ export async function addProductField(input: unknown): Promise<ProductFieldActio
   return { status: "success", message: `項目「${parsed.data.label}」を追加しました` };
 }
 
+const updateFieldSchema = z.object({
+  id: z.string().min(1),
+  label: z.string().trim().min(1).max(30),
+  /** カスタム項目の選択肢。空配列なら自由入力 */
+  options: z.array(z.string().trim().min(1).max(50)).max(50),
+});
+
+/**
+ * 項目の編集。名称は組み込み・カスタムとも変更でき、
+ * 選択肢はカスタム項目のみ設定できる (あればフォームがドロップダウンになる)。
+ */
+export async function updateProductField(input: unknown): Promise<ProductFieldActionState> {
+  if (!(await requireAdmin())) {
+    return { status: "error", message: "管理者のみ実行できます" };
+  }
+  const parsed = updateFieldSchema.safeParse(input);
+  if (!parsed.success) {
+    return { status: "error", message: "入力内容を確認してください (項目名は1〜30文字)" };
+  }
+
+  const field = await prisma.productField.findUnique({ where: { id: parsed.data.id } });
+  if (!field) return { status: "error", message: "項目が見つかりません" };
+
+  const duplicate = await prisma.productField.findFirst({
+    where: { label: parsed.data.label, id: { not: field.id } },
+  });
+  if (duplicate) {
+    return { status: "error", message: `項目「${parsed.data.label}」は既にあります` };
+  }
+
+  const options = field.builtinKey ? [] : [...new Set(parsed.data.options)];
+  await prisma.productField.update({
+    where: { id: field.id },
+    data: { label: parsed.data.label, options },
+  });
+  revalidatePath("/settings");
+  return { status: "success", message: `項目「${parsed.data.label}」を更新しました` };
+}
+
 /** カスタム項目の削除。商品に入力済みの値も一緒に消える (組み込み項目は削除不可) */
 export async function deleteProductField(id: string): Promise<ProductFieldActionState> {
   if (!(await requireAdmin())) {

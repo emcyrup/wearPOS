@@ -46,6 +46,7 @@ export default async function NewProductPage() {
           id: field.id,
           builtinKey: field.builtinKey,
           label: field.label,
+          options: field.options,
         }))}
       />
     </>

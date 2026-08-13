@@ -289,6 +289,7 @@ LINE_PUSH_ENABLED=true         # false で送信を停止 (ログのみ記録)`}
               label: field.label,
               isBuiltin: Boolean(field.builtinKey),
               isVisible: field.isVisible,
+              options: field.options,
               valueCount: field._count.values,
             }))}
           />

@@ -10,7 +10,13 @@ import { buildSku, STANDARD_COLORS, STANDARD_SIZES } from "@/lib/apparel";
 type Option = { id: string; name: string; code?: string };
 
 /** 設定 (商品の基本情報 項目) で表示にした項目。builtinKey が null ならカスタム項目 */
-export type FieldOption = { id: string; builtinKey: string | null; label: string };
+export type FieldOption = {
+  id: string;
+  builtinKey: string | null;
+  label: string;
+  /** カスタム項目の選択肢 (空なら自由入力) */
+  options: string[];
+};
 
 const inputClass =
   "w-full rounded-lg border border-ink-200 px-3 py-2 text-sm outline-none focus:border-ink-400";
@@ -35,6 +41,9 @@ export function ProductForm({
 }) {
   // 設定で表示にした項目だけをフォームに出す (非表示の組み込み項目は既定値で登録される)
   const showField = (key: string) => fields.some((field) => field.builtinKey === key);
+  // 設定で名称変更した組み込み項目のラベルを反映する
+  const labelFor = (key: string, fallback: string) =>
+    fields.find((field) => field.builtinKey === key)?.label ?? fallback;
   const customFields = fields.filter((field) => field.builtinKey === null);
   const [styleCode, setStyleCode] = useState("");
   const [name, setName] = useState("");
@@ -202,7 +211,7 @@ export function ProductForm({
             </label>
             {showField("brand") && (
               <label className="block">
-                <span className={labelClass}>ブランド</span>
+                <span className={labelClass}>{labelFor("brand", "ブランド")}</span>
                 <select
                   value={brandId}
                   onChange={(event) => setBrandId(event.target.value)}
@@ -218,7 +227,7 @@ export function ProductForm({
             )}
             {showField("category") && (
               <label className="block">
-                <span className={labelClass}>カテゴリ</span>
+                <span className={labelClass}>{labelFor("category", "カテゴリ")}</span>
                 <select
                   value={categoryId}
                   onChange={(event) => setCategoryId(event.target.value)}
@@ -234,7 +243,7 @@ export function ProductForm({
             )}
             {showField("season") && (
               <label className="block">
-                <span className={labelClass}>シーズン</span>
+                <span className={labelClass}>{labelFor("season", "シーズン")}</span>
                 <select
                   value={seasonId}
                   onChange={(event) => setSeasonId(event.target.value)}
@@ -252,13 +261,31 @@ export function ProductForm({
             {customFields.map((field) => (
               <label key={field.id} className="block">
                 <span className={labelClass}>{field.label}</span>
-                <input
-                  value={customValues[field.id] ?? ""}
-                  onChange={(event) =>
-                    setCustomValues((prev) => ({ ...prev, [field.id]: event.target.value }))
-                  }
-                  className={inputClass}
-                />
+                {field.options.length > 0 ? (
+                  // 設定で選択肢を登録した項目はドロップダウンで選ぶ
+                  <select
+                    value={customValues[field.id] ?? ""}
+                    onChange={(event) =>
+                      setCustomValues((prev) => ({ ...prev, [field.id]: event.target.value }))
+                    }
+                    className={`${inputClass} bg-white`}
+                  >
+                    <option value="">未選択</option>
+                    {field.options.map((option) => (
+                      <option key={option} value={option}>
+                        {option}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <input
+                    value={customValues[field.id] ?? ""}
+                    onChange={(event) =>
+                      setCustomValues((prev) => ({ ...prev, [field.id]: event.target.value }))
+                    }
+                    className={inputClass}
+                  />
+                )}
               </label>
             ))}
           </div>
@@ -307,7 +334,7 @@ export function ProductForm({
           <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
             {showField("material") && (
               <label className="block">
-                <span className={labelClass}>素材・組成</span>
+                <span className={labelClass}>{labelFor("material", "素材・組成")}</span>
                 <input
                   value={material}
                   onChange={(event) => setMaterial(event.target.value)}
@@ -318,7 +345,7 @@ export function ProductForm({
             )}
             {showField("originCountry") && (
               <label className="block">
-                <span className={labelClass}>原産国</span>
+                <span className={labelClass}>{labelFor("originCountry", "原産国")}</span>
                 <input
                   value={originCountry}
                   onChange={(event) => setOriginCountry(event.target.value)}
@@ -329,7 +356,7 @@ export function ProductForm({
             )}
             {showField("careNote") && (
               <label className="block">
-                <span className={labelClass}>取扱い注意</span>
+                <span className={labelClass}>{labelFor("careNote", "取扱い注意")}</span>
                 <input
                   value={careNote}
                   onChange={(event) => setCareNote(event.target.value)}

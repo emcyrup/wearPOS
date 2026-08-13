@@ -5,6 +5,7 @@ import { ScanLookup } from "@/components/scan-lookup";
 import { Badge, Card, EmptyState, LinkButton, PageHeader, Table } from "@/components/ui";
 import { markdownRate, seasonPhase, SEASON_PHASE_LABEL } from "@/lib/apparel";
 import { getSessionUser } from "@/lib/auth";
+import { LinkRow } from "@/components/link-row";
 import { prisma } from "@/lib/db";
 import { formatPercent, formatYen } from "@/lib/format";
 
@@ -210,7 +211,7 @@ export default async function ProductsPage({ searchParams }: { searchParams: Pro
               const phase = seasonPhase(product.season);
               const discount = markdownRate(product.listPrice, product.currentPrice);
               return (
-                <tr key={product.id}>
+                <LinkRow key={product.id} href={`/products/${product.id}`}>
                   <td className="px-2 py-2.5">
                     <Link
                       href={`/products/${product.id}`}
@@ -255,7 +256,7 @@ export default async function ProductsPage({ searchParams }: { searchParams: Pro
                     )}
                   </td>
                   <td className="tabular px-2 py-2.5 text-right font-medium">{onHand}</td>
-                </tr>
+                </LinkRow>
               );
             })}
           </Table>

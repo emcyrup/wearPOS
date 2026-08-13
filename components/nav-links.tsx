@@ -13,15 +13,21 @@ export function NavLinks({ items }: { items: NavItem[] }) {
   const pathname = usePathname();
 
   /**
-   * レジを別タブで開く。すでにレジのタブが開いていれば、
-   * リロードせずそのタブをアクティブにする (会計中のカートを守る)。
+   * レジを別ウィンドウで開く。すでにレジのウィンドウが開いていれば、
+   * リロードせずそのウィンドウをアクティブにする (会計中のカートを守る)。
    */
   const openRegisterTab = (event: React.MouseEvent, href: string) => {
     event.preventDefault();
-    const win = window.open("", REGISTER_WINDOW_NAME);
+    // width/height を指定するとタブではなく独立したウィンドウとして開く。
+    // 同名ウィンドウが既にある場合、この指定は無視されそのまま再利用される
+    const win = window.open(
+      "",
+      REGISTER_WINDOW_NAME,
+      `popup=yes,width=1280,height=860,left=${Math.max(0, (window.screen.width - 1280) / 2)},top=40`,
+    );
     if (!win) return; // ポップアップブロック時は何もしない (target 付きリンクが下で効く)
     try {
-      // 既存のレジタブなら遷移させずフォーカスのみ。新規 (about:blank) ならレジを読み込む
+      // 既存のレジウィンドウなら遷移させずフォーカスのみ。新規 (about:blank) ならレジを読み込む
       if (!win.location.pathname.startsWith(href)) {
         win.location.href = href;
       }

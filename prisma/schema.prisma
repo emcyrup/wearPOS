@@ -136,6 +136,8 @@ model ProductField {
   /// 組み込み項目のキー (brand | category | season | material | originCountry | careNote)。カスタム項目は null
   builtinKey String?  @unique
   label      String
+  /// カスタム項目の選択肢。空なら自由入力、あればドロップダウンになる
+  options    String[] @default([])
   isVisible  Boolean  @default(true)
   sortOrder  Int      @default(0)
   createdAt  DateTime @default(now())

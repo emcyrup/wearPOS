@@ -48,6 +48,9 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
   // 設定 (商品の基本情報 項目) に従って表示項目を組み立てる
   const productFields = await ensureProductFields();
   const fieldVisible = builtinVisibility(productFields);
+  // 名称変更した組み込み項目のラベルを反映する
+  const fieldLabel = (key: string, fallback: string) =>
+    productFields.find((field) => field.builtinKey === key)?.label ?? fallback;
   const customFieldRows: [string, string][] = productFields
     .filter((field) => field.builtinKey === null && field.isVisible)
     .map((field) => [
@@ -281,17 +284,25 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
         <dl className="grid gap-x-8 gap-y-3 text-sm sm:grid-cols-2">
           {[
             ["品番", product.styleCode],
-            // 設定 (商品の基本情報 項目) の表示設定に従う
-            ...(fieldVisible.brand ? [["ブランド", product.brand.name]] : []),
-            ...(fieldVisible.category ? [["カテゴリ", product.category.name]] : []),
-            ...(fieldVisible.season
-              ? [["シーズン", `${product.season.code} (${product.season.name})`]]
+            // 設定 (商品の基本情報 項目) の表示設定・名称に従う
+            ...(fieldVisible.brand ? [[fieldLabel("brand", "ブランド"), product.brand.name]] : []),
+            ...(fieldVisible.category
+              ? [[fieldLabel("category", "カテゴリ"), product.category.name]]
               : []),
-            ...(fieldVisible.material ? [["素材", product.material ?? "—"]] : []),
-            ...(fieldVisible.originCountry ? [["原産国", product.originCountry ?? "—"]] : []),
+            ...(fieldVisible.season
+              ? [[fieldLabel("season", "シーズン"), `${product.season.code} (${product.season.name})`]]
+              : []),
+            ...(fieldVisible.material
+              ? [[fieldLabel("material", "素材"), product.material ?? "—"]]
+              : []),
+            ...(fieldVisible.originCountry
+              ? [[fieldLabel("originCountry", "原産国"), product.originCountry ?? "—"]]
+              : []),
             ["原価", formatYen(product.costPrice)],
             ["消費税率", `${Math.round(product.taxRate * 100)}%`],
-            ...(fieldVisible.careNote ? [["取扱い", product.careNote ?? "—"]] : []),
+            ...(fieldVisible.careNote
+              ? [[fieldLabel("careNote", "取扱い"), product.careNote ?? "—"]]
+              : []),
             // 設定で追加したカスタム項目の入力値
             ...customFieldRows,
             ["登録日", formatDate(product.createdAt)],

@@ -3,6 +3,7 @@ import Link from "next/link";
 import { LineCampaign } from "@/components/line-campaign";
 import { Badge, Card, EmptyState, LinkButton, PAGE_SIZE, PageHeader, Pagination, Table } from "@/components/ui";
 import { DORMANT_DAYS, MEMBER_RANKS, parseTags, rankLabel } from "@/lib/apparel";
+import { LinkRow } from "@/components/link-row";
 import { prisma } from "@/lib/db";
 import { daysSince, formatDate, formatNumber, formatYen, fullName, fullNameKana } from "@/lib/format";
 
@@ -179,7 +180,7 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
               const since = daysSince(customer.lastVisitAt);
               const dormant = since !== null && since >= DORMANT_DAYS;
               return (
-                <tr key={customer.id}>
+                <LinkRow key={customer.id} href={`/customers/${customer.id}`}>
                   <td className="tabular px-2 py-2.5 text-xs text-ink-400">{customer.memberCode}</td>
                   <td className="px-2 py-2.5">
                     <Link
@@ -239,7 +240,7 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
                       ))}
                     </div>
                   </td>
-                </tr>
+                </LinkRow>
               );
             })}
           </Table>
