@@ -72,7 +72,7 @@ export default async function ProductsPage({ searchParams }: { searchParams: Pro
         title="商品 / SKU"
         description="品番ごとにカラー×サイズの SKU を管理します"
         action={
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Badge tone="neutral">
               {products.length} 品番 / {products.reduce((s, p) => s + p.variants.length, 0)} SKU
             </Badge>

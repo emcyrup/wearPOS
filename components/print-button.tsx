@@ -8,7 +8,7 @@ export function ReceiptWindowButton({ saleId }: { saleId: string }) {
       onClick={() =>
         window.open(`/sales/${saleId}/receipt`, "wearpos-receipt", "popup=yes,width=480,height=780")
       }
-      className="rounded-lg bg-ink-900 px-3.5 py-1.5 text-sm font-medium text-white hover:bg-ink-800"
+      className="rounded-lg bg-ink-900 px-3.5 py-1.5 text-sm font-medium whitespace-nowrap text-white hover:bg-ink-800"
     >
       レシート印刷
     </button>

@@ -68,7 +68,7 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
         title="顧客 (CRM)"
         description="購買履歴・ポイント・LINE 連携をまとめて管理します"
         action={
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Badge tone="neutral">{total.toLocaleString("ja-JP")} 名</Badge>
             {/* 一斉配信は誤操作を避けるためボタンからモーダルで起動する */}
             <LineCampaignLauncher />

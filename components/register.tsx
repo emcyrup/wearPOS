@@ -419,11 +419,11 @@ export function Register({ stores, staff }: { stores: StoreOption[]; staff: Staf
     );
   }
 
-  // ---- レジ画面 ----
+  // ---- レジ画面 (タブレット 768px〜 からカートと会計の2カラム) ----
   return (
-    <div className="grid grid-cols-1 gap-4 lg:grid-cols-5">
+    <div className="grid grid-cols-1 gap-4 md:grid-cols-5">
       {/* 左: カート */}
-      <div className="min-w-0 space-y-4 lg:col-span-3">
+      <div className="min-w-0 space-y-4 md:col-span-3">
         <div className="rounded-xl border border-ink-200 bg-white p-4">
           <form
             className="flex gap-2"
@@ -583,7 +583,7 @@ export function Register({ stores, staff }: { stores: StoreOption[]; staff: Staf
       </div>
 
       {/* 右: 会員・支払 */}
-      <div className="min-w-0 space-y-4 lg:col-span-2">
+      <div className="min-w-0 space-y-4 md:col-span-2">
         <div className="rounded-xl border border-ink-200 bg-white p-4">
           <div className={`grid gap-3 ${MULTI_STORE ? "grid-cols-2" : "grid-cols-1"}`}>
             {/* 単店舗運用では店舗の選択を出さず、先頭の店舗で会計する */}

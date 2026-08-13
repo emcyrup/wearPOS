@@ -101,7 +101,8 @@ export default async function CustomerDetailPage({ params }: { params: Promise<{
           MULTI_STORE && customer.store ? ` · 担当 ${customer.store.name}` : ""
         }`}
         action={
-          <div className="flex items-center gap-2">
+          // スマートフォンではバッジとボタンを折り返す (縮んで縦書きにならないように)
+          <div className="flex flex-wrap items-center gap-2">
             <Badge
               tone={
                 customer.rank === "PLATINUM" ? "accent" : customer.rank === "GOLD" ? "warning" : "neutral"
@@ -120,7 +121,7 @@ export default async function CustomerDetailPage({ params }: { params: Promise<{
             <a
               href={`/card/${cardToken}`}
               target="_blank"
-              className="inline-flex items-center rounded-lg border border-ink-200 bg-white px-3 py-1.5 text-sm font-medium text-ink-600 hover:bg-ink-50"
+              className="inline-flex items-center rounded-lg border border-ink-200 bg-white px-3 py-1.5 text-sm font-medium whitespace-nowrap text-ink-600 hover:bg-ink-50"
             >
               会員証を表示
             </a>

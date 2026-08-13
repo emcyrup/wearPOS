@@ -40,7 +40,7 @@ export function SkuEditor({
             setError(null);
             setEditing(true);
           }}
-          className="rounded px-1 text-xs text-ink-400 hover:bg-ink-100 hover:text-ink-600"
+          className="rounded px-1.5 py-1 text-xs text-ink-400 hover:bg-ink-100 hover:text-ink-600"
         >
           ✎
         </button>

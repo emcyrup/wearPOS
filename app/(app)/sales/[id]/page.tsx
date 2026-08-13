@@ -59,7 +59,8 @@ export default async function SaleDetailPage({ params }: { params: Promise<{ id:
           sale.staff ? ` · ${sale.staff.name}` : ""
         }`}
         action={
-          <div className="flex items-center gap-2">
+          // スマートフォンではバッジとボタンを折り返す
+          <div className="flex flex-wrap items-center gap-2">
             <Badge tone={sale.type === "RETURN" ? "danger" : "success"}>
               {sale.type === "RETURN" ? "返品" : "販売"}
             </Badge>

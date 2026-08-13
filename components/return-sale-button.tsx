@@ -37,7 +37,7 @@ export function ReturnSaleButton({ saleId, receiptNo }: { saleId: string; receip
         type="button"
         onClick={handleClick}
         disabled={pending}
-        className="rounded-lg border border-rose-200 bg-white px-3.5 py-1.5 text-sm font-medium text-rose-700 hover:bg-rose-50 disabled:opacity-50"
+        className="rounded-lg border border-rose-200 bg-white px-3.5 py-1.5 text-sm font-medium whitespace-nowrap text-rose-700 hover:bg-rose-50 disabled:opacity-50"
       >
         {pending ? "返品処理中..." : "返品する"}
       </button>

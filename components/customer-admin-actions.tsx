@@ -40,7 +40,7 @@ export function CustomerDeleteButton({
         type="button"
         onClick={run}
         disabled={pending}
-        className="inline-flex items-center rounded-lg border border-rose-200 bg-white px-3 py-1.5 text-sm font-medium text-rose-700 hover:bg-rose-50 disabled:opacity-50"
+        className="inline-flex items-center rounded-lg border border-rose-200 bg-white px-3 py-1.5 text-sm font-medium whitespace-nowrap text-rose-700 hover:bg-rose-50 disabled:opacity-50"
       >
         {pending ? "処理中..." : hasSales ? "顧客を無効化" : "顧客を削除"}
       </button>

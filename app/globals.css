@@ -29,3 +29,24 @@ body {
 .tabular {
   font-variant-numeric: tabular-nums;
 }
+
+/*
+ * スマートフォン最適化。
+ * - iOS Safari は入力欄のフォントが 16px 未満だとフォーカス時に画面ごとズームするため、
+ *   小さい画面ではフォーム部品を 16px に揃えて勝手なズームを防ぐ
+ * - タップ操作でのハイライトは控えめにする
+ */
+@media (max-width: 640px) {
+  input,
+  select,
+  textarea {
+    font-size: 16px;
+  }
+}
+
+button,
+a,
+label,
+tr {
+  -webkit-tap-highlight-color: rgba(22, 22, 28, 0.06);
+}
