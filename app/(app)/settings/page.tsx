@@ -29,12 +29,18 @@ export default async function SettingsPage() {
 
   const [stores, seasons, staff, brands, categories, appUsers] = await Promise.all([
     prisma.store.findMany({ orderBy: { code: "asc" }, include: { _count: { select: { sales: true } } } }),
-    prisma.season.findMany({ orderBy: [{ year: "desc" }, { term: "asc" }] }),
+    prisma.season.findMany({
+      orderBy: [{ year: "desc" }, { term: "asc" }],
+      include: { _count: { select: { products: true } } },
+    }),
     prisma.staff.findMany({
       orderBy: { code: "asc" },
       include: { store: true, _count: { select: { sales: true, movements: true } } },
     }),
-    prisma.brand.findMany({ orderBy: { code: "asc" } }),
+    prisma.brand.findMany({
+      orderBy: { code: "asc" },
+      include: { _count: { select: { products: true } } },
+    }),
     prisma.category.findMany({
       orderBy: { code: "asc" },
       include: { _count: { select: { products: true } } },
@@ -285,20 +291,35 @@ LINE_PUSH_ENABLED=true         # false で送信を停止 (ログのみ記録)`}
         <Card title="商品の基本情報 項目" className="mt-4">
           <p className="mb-3 text-sm text-ink-600">
             商品の登録フォームと商品詳細に表示する項目をカスタマイズできます。
-            組み込み項目は表示のオンオフ、カスタム項目は任意の名前で追加・削除できます。
+            項目を選択すると、名称・表示/非表示・選択肢 (ブランド / カテゴリ / シーズンのマスタを含む)
+            の編集と、カスタム項目の削除をまとめて行えます。
           </p>
           <ProductFieldSettings
             fields={productFields.map((field) => ({
               id: field.id,
+              builtinKey: field.builtinKey,
               label: field.label,
-              isBuiltin: Boolean(field.builtinKey),
               isVisible: field.isVisible,
-              // ブランド/カテゴリ/シーズンは専用マスタが選択肢の役割のため対象外
-              optionsEditable:
-                !field.builtinKey ||
-                ["material", "originCountry", "careNote"].includes(field.builtinKey),
               options: field.options,
               valueCount: field._count.values,
+            }))}
+            brands={brands.map((brand) => ({
+              id: brand.id,
+              code: brand.code,
+              name: brand.name,
+              productCount: brand._count.products,
+            }))}
+            categories={categories.map((category) => ({
+              id: category.id,
+              code: category.code,
+              name: category.name,
+              productCount: category._count.products,
+            }))}
+            seasons={seasons.map((season) => ({
+              id: season.id,
+              code: season.code,
+              name: season.name,
+              productCount: season._count.products,
             }))}
           />
         </Card>

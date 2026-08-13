@@ -307,17 +307,24 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
                 {MULTI_STORE && (
                   <td className="px-2 py-2.5 whitespace-nowrap text-ink-600">{sale.store.name}</td>
                 )}
-                {/* 購入商品: 先頭の商品名 + ほかN点 (手入力商品は note の名前) */}
-                <td className="max-w-56 px-2 py-2.5">
+                {/* 購入商品: 省略せず全件表示 (同一商品はまとめて ×数量。手入力商品は note の名前) */}
+                <td className="max-w-64 px-2 py-2.5">
                   {sale.lines.length ? (
-                    <>
-                      <span className="block truncate text-sm text-ink-800">
-                        {sale.lines[0].variant?.product.name ?? sale.lines[0].note ?? "手入力商品"}
-                      </span>
-                      {sale.lines.length > 1 && (
-                        <span className="text-xs text-ink-400">ほか {sale.lines.length - 1} 点</span>
-                      )}
-                    </>
+                    (() => {
+                      const grouped = new Map<string, number>();
+                      for (const line of sale.lines) {
+                        const label = line.variant?.product.name ?? line.note ?? "手入力商品";
+                        grouped.set(label, (grouped.get(label) ?? 0) + line.quantity);
+                      }
+                      return [...grouped.entries()].map(([label, quantity]) => (
+                        <span key={label} className="block truncate text-sm text-ink-800">
+                          {label}
+                          {quantity > 1 && (
+                            <span className="tabular ml-1 text-xs text-ink-400">×{quantity}</span>
+                          )}
+                        </span>
+                      ));
+                    })()
                   ) : (
                     <span className="text-xs text-ink-400">—</span>
                   )}
