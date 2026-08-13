@@ -5,11 +5,11 @@ import { ReminderSettings } from "@/components/reminder-settings";
 import { RichMenuSetup } from "@/components/richmenu-setup";
 import { UserManager } from "@/components/user-manager";
 import { ensureReminderRules } from "@/lib/reminders";
-import { RANK_RULES, SEASON_PHASE_LABEL, SEASON_TERM_LABEL, seasonPhase } from "@/lib/apparel";
+import { RANK_RULES } from "@/lib/apparel";
 import { DEFAULT_STAFF_FEATURES, FEATURES, getSessionUser } from "@/lib/auth";
 import { MULTI_STORE } from "@/lib/config";
 import { prisma } from "@/lib/db";
-import { formatDate, formatPercent, formatYen } from "@/lib/format";
+import { formatPercent, formatYen } from "@/lib/format";
 import { isLineConfigured, lineConfig } from "@/lib/line";
 import { ensureProductFields } from "@/lib/product-fields";
 
@@ -121,7 +121,125 @@ export default async function SettingsPage() {
         </Card>
       )}
 
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className={`mt-4 grid gap-4 ${MULTI_STORE ? "lg:grid-cols-2" : ""}`}>
+        {/* 単店舗運用では店舗マスタの表示を省く */}
+        {MULTI_STORE && (
+          <Card title="店舗">
+            <Table head={["コード", "店舗名", "電話", "取引数"]}>
+              {stores.map((store) => (
+                <tr key={store.id} className="border-b border-ink-100 last:border-0">
+                  <td className="tabular px-2 py-2 text-xs text-ink-400">{store.code}</td>
+                  <td className="px-2 py-2 font-medium text-ink-800">{store.name}</td>
+                  <td className="tabular px-2 py-2 text-xs text-ink-400">{store.phone ?? "—"}</td>
+                  <td className="tabular px-2 py-2">{store._count.sales}</td>
+                </tr>
+              ))}
+            </Table>
+          </Card>
+        )}
+
+        <Card
+          title="スタッフ"
+          action={isAdmin ? <LinkButton href="/settings/staff-badges">名札バーコード</LinkButton> : undefined}
+        >
+          {isAdmin ? (
+            <StaffManager
+              staff={staff.map((person) => ({
+                id: person.id,
+                code: person.code,
+                name: person.name,
+                role: person.role,
+                storeName: person.store?.name ?? null,
+                isActive: person.isActive,
+                hasHistory: person._count.sales > 0 || person._count.movements > 0,
+              }))}
+              stores={stores.map((store) => ({ id: store.id, name: store.name }))}
+            />
+          ) : (
+            <Table head={["コード", "氏名", "所属", "権限"]}>
+              {staff.map((person) => (
+                <tr key={person.id} className="border-b border-ink-100 last:border-0">
+                  <td className="tabular px-2 py-2 text-xs text-ink-400">{person.code}</td>
+                  <td className="px-2 py-2 font-medium text-ink-800">{person.name}</td>
+                  <td className="px-2 py-2 text-ink-600">{person.store?.name ?? "—"}</td>
+                  <td className="px-2 py-2">
+                    <Badge tone={person.role === "MANAGER" ? "info" : "neutral"}>{person.role}</Badge>
+                  </td>
+                </tr>
+              ))}
+            </Table>
+          )}
+        </Card>
+      </div>
+
+      {isAdmin && (
+        <Card title="商品の基本情報 項目" className="mt-4">
+          <p className="mb-3 text-sm text-ink-600">
+            商品の登録フォームと商品詳細に表示する項目をカスタマイズできます。
+            項目を選択すると、名称・表示/非表示・選択肢 (ブランド / カテゴリ / シーズンのマスタを含む)
+            の編集と、カスタム項目の削除をまとめて行えます。
+          </p>
+          <ProductFieldSettings
+            fields={productFields.map((field) => ({
+              id: field.id,
+              builtinKey: field.builtinKey,
+              label: field.label,
+              isVisible: field.isVisible,
+              options: field.options,
+              valueCount: field._count.values,
+            }))}
+            brands={brands.map((brand) => ({
+              id: brand.id,
+              code: brand.code,
+              name: brand.name,
+              productCount: brand._count.products,
+            }))}
+            categories={categories.map((category) => ({
+              id: category.id,
+              code: category.code,
+              name: category.name,
+              productCount: category._count.products,
+            }))}
+            seasons={seasons.map((season) => ({
+              id: season.id,
+              code: season.code,
+              name: season.name,
+              productCount: season._count.products,
+            }))}
+          />
+        </Card>
+      )}
+
+      <div className="mt-4">
+      <Card title="会員ランクとポイント付与率">
+        <Table head={["ランク", "累計購入額", "付与率"]}>
+          {RANK_RULES.map((rule) => (
+            <tr key={rule.rank} className="border-b border-ink-100 last:border-0">
+              <td className="px-2 py-2">
+                <Badge tone={rule.rank === "PLATINUM" ? "accent" : "neutral"}>{rule.label}</Badge>
+              </td>
+              <td className="tabular px-2 py-2 text-ink-600">{formatYen(rule.minSpent)} 以上</td>
+              <td className="tabular px-2 py-2 font-medium">{formatPercent(rule.pointRate, 0)}</td>
+            </tr>
+          ))}
+        </Table>
+        <p className="mt-3 text-xs text-ink-400">
+          ポイントは、ポイント利用分を差し引いた正味の支払額に対して付与されます (二重取り防止)。
+        </p>
+      </Card>
+
+      </div>
+
+      {/* 連携まわりの技術的な記載は普段使わないため、折りたたみでページ下部に置く */}
+      <details className="mt-4 rounded-xl border border-ink-200 bg-white">
+        <summary className="cursor-pointer px-5 py-3.5 text-sm font-semibold text-ink-800 select-none hover:bg-ink-50">
+          🔌 POSレジ連携・LINE公式アカウント連携の設定
+          <span className="ml-2 text-xs font-normal text-ink-400">
+            API の使い方・環境変数・リッチメニューの適用
+          </span>
+        </summary>
+        <div className="border-t border-ink-100 p-4">
+          <div className="grid gap-4 lg:grid-cols-2">
         <Card
           title="POSレジ連携"
           action={
@@ -235,170 +353,8 @@ LINE_PUSH_ENABLED=true         # false で送信を停止 (ログのみ記録)`}
           {lineReady && isAdmin && <RichMenuSetup />}
         </Card>
       </div>
-
-      <div className={`mt-4 grid gap-4 ${MULTI_STORE ? "lg:grid-cols-2" : ""}`}>
-        {/* 単店舗運用では店舗マスタの表示を省く */}
-        {MULTI_STORE && (
-          <Card title="店舗">
-            <Table head={["コード", "店舗名", "電話", "取引数"]}>
-              {stores.map((store) => (
-                <tr key={store.id} className="border-b border-ink-100 last:border-0">
-                  <td className="tabular px-2 py-2 text-xs text-ink-400">{store.code}</td>
-                  <td className="px-2 py-2 font-medium text-ink-800">{store.name}</td>
-                  <td className="tabular px-2 py-2 text-xs text-ink-400">{store.phone ?? "—"}</td>
-                  <td className="tabular px-2 py-2">{store._count.sales}</td>
-                </tr>
-              ))}
-            </Table>
-          </Card>
-        )}
-
-        <Card
-          title="スタッフ"
-          action={isAdmin ? <LinkButton href="/settings/staff-badges">名札バーコード</LinkButton> : undefined}
-        >
-          {isAdmin ? (
-            <StaffManager
-              staff={staff.map((person) => ({
-                id: person.id,
-                code: person.code,
-                name: person.name,
-                role: person.role,
-                storeName: person.store?.name ?? null,
-                isActive: person.isActive,
-                hasHistory: person._count.sales > 0 || person._count.movements > 0,
-              }))}
-              stores={stores.map((store) => ({ id: store.id, name: store.name }))}
-            />
-          ) : (
-            <Table head={["コード", "氏名", "所属", "権限"]}>
-              {staff.map((person) => (
-                <tr key={person.id} className="border-b border-ink-100 last:border-0">
-                  <td className="tabular px-2 py-2 text-xs text-ink-400">{person.code}</td>
-                  <td className="px-2 py-2 font-medium text-ink-800">{person.name}</td>
-                  <td className="px-2 py-2 text-ink-600">{person.store?.name ?? "—"}</td>
-                  <td className="px-2 py-2">
-                    <Badge tone={person.role === "MANAGER" ? "info" : "neutral"}>{person.role}</Badge>
-                  </td>
-                </tr>
-              ))}
-            </Table>
-          )}
-        </Card>
-      </div>
-
-      {isAdmin && (
-        <Card title="商品の基本情報 項目" className="mt-4">
-          <p className="mb-3 text-sm text-ink-600">
-            商品の登録フォームと商品詳細に表示する項目をカスタマイズできます。
-            項目を選択すると、名称・表示/非表示・選択肢 (ブランド / カテゴリ / シーズンのマスタを含む)
-            の編集と、カスタム項目の削除をまとめて行えます。
-          </p>
-          <ProductFieldSettings
-            fields={productFields.map((field) => ({
-              id: field.id,
-              builtinKey: field.builtinKey,
-              label: field.label,
-              isVisible: field.isVisible,
-              options: field.options,
-              valueCount: field._count.values,
-            }))}
-            brands={brands.map((brand) => ({
-              id: brand.id,
-              code: brand.code,
-              name: brand.name,
-              productCount: brand._count.products,
-            }))}
-            categories={categories.map((category) => ({
-              id: category.id,
-              code: category.code,
-              name: category.name,
-              productCount: category._count.products,
-            }))}
-            seasons={seasons.map((season) => ({
-              id: season.id,
-              code: season.code,
-              name: season.name,
-              productCount: season._count.products,
-            }))}
-          />
-        </Card>
-      )}
-
-      <Card title="シーズン" className="mt-4">
-        <Table head={["コード", "名称", "期間", "セール開始", "状態"]}>
-          {seasons.map((season) => {
-            const phase = seasonPhase(season);
-            return (
-              <tr key={season.id} className="border-b border-ink-100 last:border-0">
-                <td className="tabular px-2 py-2 font-medium text-ink-800">{season.code}</td>
-                <td className="px-2 py-2 text-ink-600">
-                  {season.name}
-                  <span className="ml-2 text-xs text-ink-400">
-                    {SEASON_TERM_LABEL[season.term] ?? season.term}
-                  </span>
-                </td>
-                <td className="tabular px-2 py-2 text-xs text-ink-400">
-                  {formatDate(season.startsOn)} 〜 {formatDate(season.endsOn)}
-                </td>
-                <td className="tabular px-2 py-2 text-xs text-ink-400">
-                  {season.saleStartsOn ? formatDate(season.saleStartsOn) : "—"}
-                </td>
-                <td className="px-2 py-2">
-                  <Badge
-                    tone={phase === "PROPER" ? "success" : phase === "SALE" ? "warning" : "neutral"}
-                  >
-                    {SEASON_PHASE_LABEL[phase]}
-                  </Badge>
-                </td>
-              </tr>
-            );
-          })}
-        </Table>
-      </Card>
-
-      <div className="mt-4 grid gap-4 lg:grid-cols-2">
-        <Card title="会員ランクとポイント付与率">
-          <Table head={["ランク", "累計購入額", "付与率"]}>
-            {RANK_RULES.map((rule) => (
-              <tr key={rule.rank} className="border-b border-ink-100 last:border-0">
-                <td className="px-2 py-2">
-                  <Badge tone={rule.rank === "PLATINUM" ? "accent" : "neutral"}>{rule.label}</Badge>
-                </td>
-                <td className="tabular px-2 py-2 text-ink-600">{formatYen(rule.minSpent)} 以上</td>
-                <td className="tabular px-2 py-2 font-medium">{formatPercent(rule.pointRate, 0)}</td>
-              </tr>
-            ))}
-          </Table>
-          <p className="mt-3 text-xs text-ink-400">
-            ポイントは、ポイント利用分を差し引いた正味の支払額に対して付与されます (二重取り防止)。
-          </p>
-        </Card>
-
-        <Card title="ブランド / カテゴリ">
-          <p className="mb-2 text-xs font-medium text-ink-400">ブランド</p>
-          <div className="flex flex-wrap gap-1.5">
-            {brands.map((brand) => (
-              <Badge key={brand.id} tone="neutral">
-                {brand.name}
-              </Badge>
-            ))}
-          </div>
-          <p className="mt-4 mb-2 text-xs font-medium text-ink-400">カテゴリ</p>
-          <div className="flex flex-wrap gap-1.5">
-            {categories.map((category) => (
-              <Badge key={category.id} tone="neutral">
-                {category.name}
-              </Badge>
-            ))}
-          </div>
-          {isAdmin && (
-            <p className="mt-3 text-xs text-ink-400">
-              ブランド・カテゴリの追加 / 削除は 商品 / SKU →「ブランド / カテゴリの管理」から行えます。
-            </p>
-          )}
-        </Card>
-      </div>
+        </div>
+      </details>
     </>
   );
 }

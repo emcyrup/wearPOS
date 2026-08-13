@@ -58,6 +58,7 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
         lines: {
           select: {
             quantity: true,
+            lineTotal: true,
             note: true,
             variant: { select: { product: { select: { name: true } } } },
           },
@@ -307,21 +308,27 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
                 {MULTI_STORE && (
                   <td className="px-2 py-2.5 whitespace-nowrap text-ink-600">{sale.store.name}</td>
                 )}
-                {/* 購入商品: 省略せず全件表示 (同一商品はまとめて ×数量。手入力商品は note の名前) */}
-                <td className="max-w-64 px-2 py-2.5">
+                {/* 購入商品: 全件表示し、商品ごとの点数と金額 (税抜) を添える */}
+                <td className="min-w-52 px-2 py-2.5">
                   {sale.lines.length ? (
                     (() => {
-                      const grouped = new Map<string, number>();
+                      const grouped = new Map<string, { quantity: number; amount: number }>();
                       for (const line of sale.lines) {
                         const label = line.variant?.product.name ?? line.note ?? "手入力商品";
-                        grouped.set(label, (grouped.get(label) ?? 0) + line.quantity);
+                        const entry = grouped.get(label) ?? { quantity: 0, amount: 0 };
+                        entry.quantity += line.quantity;
+                        entry.amount += line.lineTotal;
+                        grouped.set(label, entry);
                       }
-                      return [...grouped.entries()].map(([label, quantity]) => (
-                        <span key={label} className="block truncate text-sm text-ink-800">
-                          {label}
-                          {quantity > 1 && (
-                            <span className="tabular ml-1 text-xs text-ink-400">×{quantity}</span>
-                          )}
+                      return [...grouped.entries()].map(([label, entry]) => (
+                        <span
+                          key={label}
+                          className="flex items-baseline justify-between gap-3 text-sm text-ink-800"
+                        >
+                          <span className="truncate">{label}</span>
+                          <span className="tabular shrink-0 text-xs text-ink-400">
+                            {entry.quantity}点 · {formatYen(entry.amount)}
+                          </span>
                         </span>
                       ));
                     })()
