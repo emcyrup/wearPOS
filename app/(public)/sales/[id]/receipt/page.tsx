@@ -1,8 +1,7 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { Barcode } from "@/components/barcode";
-import { PrintButton } from "@/components/print-button";
+import { CloseWindowButton, PrintButton } from "@/components/print-button";
 import { PAYMENT_METHOD_LABEL } from "@/lib/apparel";
 import { prisma } from "@/lib/db";
 import { formatDateTime, formatYen, fullName } from "@/lib/format";
@@ -34,10 +33,9 @@ export default async function ReceiptPage({ params }: { params: Promise<{ id: st
 
   return (
     <>
-      <div className="mb-6 flex items-center justify-between gap-3 print:hidden">
-        <Link href={`/sales/${sale.id}`} className="text-sm text-ink-400 hover:text-ink-600">
-          ← 伝票詳細
-        </Link>
+      {/* 別ウィンドウで開くため、アプリ側への戻りリンクは置かない */}
+      <div className="mb-6 flex items-center justify-end gap-2 print:hidden">
+        <CloseWindowButton />
         <PrintButton />
       </div>
 

@@ -12,6 +12,7 @@ import {
   SEASON_PHASE_LABEL,
 } from "@/lib/apparel";
 import { ProductInfoEditor } from "@/components/product-info-editor";
+import { SkuEditor } from "@/components/sku-editor";
 import { getSessionUser } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { formatDate, formatNumber, formatPercent, formatYen } from "@/lib/format";
@@ -315,7 +316,9 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
             const cell = cellByKey.get(`${variant.colorCode}:${variant.sizeCode}`);
             return (
               <tr key={variant.id} className="border-b border-ink-100 last:border-0">
-                <td className="tabular px-2 py-2 text-xs text-ink-600">{variant.sku}</td>
+                <td className="px-2 py-2">
+                  <SkuEditor variantId={variant.id} sku={variant.sku} canEdit={isAdmin} />
+                </td>
                 <td className="px-2 py-2">
                   <span className="flex items-center gap-1.5">
                     <span

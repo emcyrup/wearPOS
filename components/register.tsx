@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { checkout, lookupMember, type CheckoutResult, type MemberSummary } from "@/app/(public)/register/actions";
@@ -393,19 +392,20 @@ export function Register({ stores, staff }: { stores: StoreOption[]; staff: Staf
             )}
           </dl>
           <div className="mt-6 flex flex-col gap-2">
-            <a
-              href={`/sales/${done.saleId}/receipt`}
-              target="_blank"
+            {/* レシートはサイドメニューのない別ウィンドウで開く */}
+            <button
+              type="button"
+              onClick={() =>
+                window.open(
+                  `/sales/${done.saleId}/receipt`,
+                  "wearpos-receipt",
+                  "popup=yes,width=480,height=780",
+                )
+              }
               className="rounded-lg bg-ink-900 px-4 py-2 text-sm font-medium text-white hover:bg-ink-800"
             >
               レシートを印刷
-            </a>
-            <Link
-              href={`/sales/${done.saleId}`}
-              className="rounded-lg border border-ink-200 bg-white px-4 py-2 text-sm text-ink-600 hover:bg-ink-50"
-            >
-              伝票詳細を見る
-            </Link>
+            </button>
             <button
               type="button"
               onClick={reset}

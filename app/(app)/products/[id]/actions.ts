@@ -161,3 +161,46 @@ export async function updateProductInfo(input: unknown): Promise<UpdateProductRe
   revalidatePath("/products");
   return { ok: true };
 }
+
+// ---------------------------------------------------------------------------
+// SKU コードの変更
+// ---------------------------------------------------------------------------
+
+const updateSkuSchema = z.object({
+  variantId: z.string().min(1),
+  sku: z
+    .string()
+    .trim()
+    .min(1)
+    .max(60)
+    .regex(/^[A-Za-z0-9][A-Za-z0-9\-_]*$/),
+});
+
+/**
+ * SKU コードの変更。取引明細や在庫は variantId で紐づいているため、
+ * コードを変えても過去の履歴はそのまま保たれる。
+ */
+export async function updateVariantSku(input: unknown): Promise<UpdateProductResult> {
+  if (!(await requireAdmin())) {
+    return { ok: false, error: "管理者のみ変更できます" };
+  }
+  const parsed = updateSkuSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, error: "SKU は英数字・ハイフンで60文字以内で入力してください" };
+  }
+  const { variantId, sku } = parsed.data;
+
+  const variant = await prisma.productVariant.findUnique({ where: { id: variantId } });
+  if (!variant) return { ok: false, error: "SKU が見つかりません" };
+  if (variant.sku === sku) return { ok: true };
+
+  const duplicate = await prisma.productVariant.findUnique({ where: { sku } });
+  if (duplicate) return { ok: false, error: `SKU「${sku}」は既に使われています` };
+
+  await prisma.productVariant.update({ where: { id: variantId }, data: { sku } });
+
+  revalidatePath(`/products/${variant.productId}`);
+  revalidatePath("/products");
+  revalidatePath("/inventory");
+  return { ok: true };
+}

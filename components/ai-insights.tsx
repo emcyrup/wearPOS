@@ -179,12 +179,12 @@ export function AiInsights({ from, to }: { from: string; to: string }) {
     (m) => m.speaker === "user" || m.speaker === "note",
   );
 
-  /** 「結論: 〜 / 打ち手: 〜 / 提案: 〜」の行を拾って構造化する */
+  /** 「考察(結論): 〜 / 打ち手: 〜 / 提案: 〜」の行を拾って構造化する */
   const parseConclusion = (text: string) => {
     const lines = text.split("\n").map((line) => line.trim()).filter(Boolean);
     const summary = lines
-      .filter((line) => line.startsWith("結論"))
-      .map((line) => line.replace(/^結論[:：]?\s*/, ""))
+      .filter((line) => /^(考察|結論)/.test(line))
+      .map((line) => line.replace(/^(考察|結論)[:：]?\s*/, ""))
       .join(" ");
     const actions = lines
       .filter((line) => line.startsWith("打ち手"))
@@ -192,12 +192,17 @@ export function AiInsights({ from, to }: { from: string; to: string }) {
     const proposals = lines
       .filter((line) => line.startsWith("提案"))
       .map((line) => line.replace(/^提案[:：]?\s*/, ""));
-    // 形式どおりでなければ本文をそのまま結論として扱う
+    // 形式どおりでなければ本文をそのまま考察として扱う
     if (!summary && actions.length === 0 && proposals.length === 0) {
       return { summary: text.trim(), actions: [], proposals: [] };
     }
     return { summary, actions, proposals };
   };
+
+  /** セクション見出し (【考察】【提案】) */
+  const SectionLabel = ({ children }: { children: string }) => (
+    <p className="mb-1 text-xs font-semibold tracking-wide text-ink-400">{children}</p>
+  );
 
   const renderMessage = (message: DebateMessage, index: number) => {
     if (message.speaker === "user") {
@@ -218,6 +223,10 @@ export function AiInsights({ from, to }: { from: string; to: string }) {
       );
     }
     const meta = SPEAKER_META[message.speaker];
+    // 「考察: / 提案:」形式の回答は【考察】【提案】のセクションに分けて表示する
+    const { summary, actions, proposals } = parseConclusion(message.content);
+    const structured =
+      message.speaker === "claude" && summary !== message.content.trim() && summary !== "";
     return (
       <div key={index}>
         <span
@@ -225,9 +234,39 @@ export function AiInsights({ from, to }: { from: string; to: string }) {
         >
           {meta.label}
         </span>
-        <div className="whitespace-pre-wrap text-sm leading-relaxed text-ink-800">
-          {message.content}
-        </div>
+        {structured ? (
+          <div className="rounded-lg border border-ink-100 bg-ink-50/40 p-3">
+            <SectionLabel>【考察】</SectionLabel>
+            <p className="text-sm leading-relaxed text-ink-800">{summary}</p>
+            {actions.length > 0 && (
+              <ul className="mt-2 space-y-1.5">
+                {actions.map((action, i) => (
+                  <li key={i} className="flex gap-2 text-sm text-ink-700">
+                    <span className="shrink-0 text-accent">→</span>
+                    <span>{action}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+            {proposals.length > 0 && (
+              <div className="mt-3 border-t border-ink-100 pt-3">
+                <SectionLabel>【提案】</SectionLabel>
+                <ul className="space-y-1.5">
+                  {proposals.map((proposal, i) => (
+                    <li key={i} className="flex gap-2 text-sm text-ink-700">
+                      <span className="shrink-0">💡</span>
+                      <span>{proposal}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="whitespace-pre-wrap text-sm leading-relaxed text-ink-800">
+            {message.content}
+          </div>
+        )}
       </div>
     );
   };
@@ -267,14 +306,15 @@ export function AiInsights({ from, to }: { from: string; to: string }) {
           <p className="rounded-lg bg-amber-50 px-4 py-3 text-sm text-amber-800">{error}</p>
         )}
 
-        {/* 結論を主役に表示する */}
+        {/* 結論を【考察】と【提案】に分けて主役として表示する */}
         {conclusion && (() => {
           const { summary, actions, proposals } = parseConclusion(conclusion.content);
           return (
             <div className="rounded-xl border border-ink-200 bg-ink-50/60 p-4">
+              <SectionLabel>【考察】</SectionLabel>
               <p className="text-[15px] leading-relaxed font-medium text-ink-900">{summary}</p>
               {actions.length > 0 && (
-                <ul className="mt-3 space-y-1.5 border-t border-ink-200 pt-3">
+                <ul className="mt-2 space-y-1.5">
                   {actions.map((action, index) => (
                     <li key={index} className="flex gap-2 text-sm text-ink-700">
                       <span className="shrink-0 text-accent">→</span>
@@ -285,17 +325,17 @@ export function AiInsights({ from, to }: { from: string; to: string }) {
               )}
               {/* すぐの打ち手より一歩先の提案 */}
               {proposals.length > 0 && (
-                <ul className="mt-3 space-y-1.5 border-t border-ink-200 pt-3">
-                  {proposals.map((proposal, index) => (
-                    <li key={index} className="flex gap-2 text-sm text-ink-700">
-                      <span className="shrink-0">💡</span>
-                      <span>
-                        <span className="mr-1 text-xs font-semibold text-ink-400">提案</span>
-                        {proposal}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
+                <div className="mt-3 border-t border-ink-200 pt-3">
+                  <SectionLabel>【提案】</SectionLabel>
+                  <ul className="space-y-1.5">
+                    {proposals.map((proposal, index) => (
+                      <li key={index} className="flex gap-2 text-sm text-ink-700">
+                        <span className="shrink-0">💡</span>
+                        <span>{proposal}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
               )}
             </div>
           );

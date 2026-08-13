@@ -1,7 +1,9 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
-import { Badge, Card, LinkButton, PageHeader, Table } from "@/components/ui";
+import { Badge, Card, PageHeader, Table } from "@/components/ui";
+import { ReceiptWindowButton } from "@/components/print-button";
+import { ReturnSaleButton } from "@/components/return-sale-button";
 import { markdownRate, PAYMENT_METHOD_LABEL, rankLabel } from "@/lib/apparel";
 import { MULTI_STORE } from "@/lib/config";
 import { prisma } from "@/lib/db";
@@ -29,6 +31,20 @@ export default async function SaleDetailPage({ params }: { params: Promise<{ id:
 
   const itemCount = sale.lines.reduce((sum, line) => sum + line.quantity, 0);
 
+  // 返品状態: この伝票に対する返品伝票 (externalId=RETURN-<id>) があるか
+  const returnRecord =
+    sale.type === "SALE"
+      ? await prisma.sale.findUnique({
+          where: { externalId: `RETURN-${sale.id}` },
+          select: { id: true, receiptNo: true, soldAt: true },
+        })
+      : null;
+  // 返品伝票の場合は元伝票へのリンクを出す
+  const originalSaleId =
+    sale.type === "RETURN" && sale.externalId?.startsWith("RETURN-")
+      ? sale.externalId.slice("RETURN-".length)
+      : null;
+
   return (
     <>
       <div className="mb-2">
@@ -47,11 +63,33 @@ export default async function SaleDetailPage({ params }: { params: Promise<{ id:
             <Badge tone={sale.type === "RETURN" ? "danger" : "success"}>
               {sale.type === "RETURN" ? "返品" : "販売"}
             </Badge>
+            {returnRecord && <Badge tone="danger">返品済み</Badge>}
             <Badge tone="neutral">{sale.source}</Badge>
-            <LinkButton href={`/sales/${sale.id}/receipt`}>レシート印刷</LinkButton>
+            {sale.type === "SALE" && !returnRecord && (
+              <ReturnSaleButton saleId={sale.id} receiptNo={sale.receiptNo} />
+            )}
+            <ReceiptWindowButton saleId={sale.id} />
           </div>
         }
       />
+
+      {/* 返品済み / 返品伝票の案内 */}
+      {returnRecord && (
+        <p className="mb-4 rounded-lg bg-rose-50 px-4 py-2.5 text-sm text-rose-800">
+          この取引は {formatDateTime(returnRecord.soldAt)} に返品されました。
+          <Link href={`/sales/${returnRecord.id}`} className="ml-1 font-medium underline">
+            返品伝票 {returnRecord.receiptNo} を見る
+          </Link>
+        </p>
+      )}
+      {originalSaleId && (
+        <p className="mb-4 rounded-lg bg-ink-50 px-4 py-2.5 text-sm text-ink-600">
+          この伝票は返品伝票です。
+          <Link href={`/sales/${originalSaleId}`} className="ml-1 font-medium underline">
+            元の伝票を見る
+          </Link>
+        </p>
+      )}
 
       <div className="grid gap-4 lg:grid-cols-3">
         <Card title="明細" className="lg:col-span-2">
