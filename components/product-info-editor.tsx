@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 
 import { updateProductInfo } from "@/app/(app)/products/[id]/actions";
+import { Card } from "@/components/ui";
 
 type Option = { id: string; name: string; code?: string };
 
@@ -80,6 +81,7 @@ export function ProductInfoEditor({
   seasons,
   fields,
   canEdit,
+  className,
 }: {
   product: EditableProduct;
   brands: Option[];
@@ -87,6 +89,7 @@ export function ProductInfoEditor({
   seasons: Option[];
   fields: EditorField[];
   canEdit: boolean;
+  className?: string;
 }) {
   const [editing, setEditing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -145,6 +148,26 @@ export function ProductInfoEditor({
     return season ? (season.code ? `${season.code} (${season.name})` : season.name) : "—";
   };
 
+  // カード右上のアクション: 表示中は「編集する」、編集中はキャンセル
+  const headerAction = !canEdit ? undefined : editing ? (
+    <button
+      type="button"
+      onClick={() => setEditing(false)}
+      disabled={pending}
+      className="rounded-lg border border-ink-200 bg-white px-3 py-1.5 text-sm whitespace-nowrap text-ink-600 hover:bg-ink-50 disabled:opacity-50"
+    >
+      キャンセル
+    </button>
+  ) : (
+    <button
+      type="button"
+      onClick={() => setEditing(true)}
+      className="rounded-lg border border-ink-200 bg-white px-3 py-1.5 text-sm font-medium whitespace-nowrap text-ink-600 hover:bg-ink-50"
+    >
+      ✏️ 編集する
+    </button>
+  );
+
   // ---- 表示モード ----
   if (!editing) {
     const rows: [string, string][] = [
@@ -174,7 +197,7 @@ export function ProductInfoEditor({
       ["登録日", product.createdAt],
     ];
     return (
-      <div>
+      <Card title="商品情報" action={headerAction} className={className}>
         <dl className="grid gap-x-8 gap-y-3 text-sm sm:grid-cols-2">
           {rows.map(([label, value]) => (
             <div key={label} className="flex justify-between gap-4 border-b border-ink-100 pb-2">
@@ -183,22 +206,13 @@ export function ProductInfoEditor({
             </div>
           ))}
         </dl>
-        {canEdit && (
-          <button
-            type="button"
-            onClick={() => setEditing(true)}
-            className="mt-4 rounded-lg border border-ink-200 bg-white px-3 py-1.5 text-sm font-medium text-ink-600 hover:bg-ink-50"
-          >
-            ✏️ 編集する
-          </button>
-        )}
-      </div>
+      </Card>
     );
   }
 
   // ---- 編集モード ----
   return (
-    <div>
+    <Card title="商品情報" action={headerAction} className={className}>
       <div className="grid gap-3 sm:grid-cols-2">
         <label className="block">
           <span className="mb-1 block text-xs text-ink-500">品番 (変更不可)</span>
@@ -337,6 +351,6 @@ export function ProductInfoEditor({
           キャンセル
         </button>
       </div>
-    </div>
+    </Card>
   );
 }

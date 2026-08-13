@@ -179,7 +179,7 @@ function FreeOptionsEditor({
           }
         }}
         placeholder="選択肢を入力して Enter"
-        className={`${inputClass} w-44`}
+        className={`${inputClass} min-w-0 flex-1 sm:w-44 sm:flex-none`}
       />
       <button
         type="button"
@@ -228,17 +228,18 @@ function FieldEditor({
   return (
     <div className="rounded-lg border border-ink-100 bg-ink-50/50 p-4">
       <div className="flex flex-wrap items-end justify-between gap-3">
-        <label className="flex flex-col gap-1">
+        {/* スマホでは項目名入力を全幅にして段差をなくす */}
+        <label className="flex w-full flex-col gap-1 sm:w-auto">
           <span className="text-xs text-ink-400">項目名</span>
           <input
             value={label}
             onChange={(event) => setLabel(event.target.value)}
             aria-label="項目名"
-            className={`${inputClass} w-48 bg-white`}
+            className={`${inputClass} w-full bg-white sm:w-48`}
           />
         </label>
-        <div className="flex items-center gap-2">
-          <label className="flex items-center gap-1.5 text-sm text-ink-600">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+          <label className="flex items-center gap-1.5 text-sm whitespace-nowrap text-ink-600">
             <input
               type="checkbox"
               checked={field.isVisible}
@@ -350,8 +351,8 @@ export function ProductFieldSettings({
   return (
     <div>
       <div className="grid gap-4 lg:grid-cols-[230px_1fr]">
-        {/* 項目一覧 (選択 + ↑↓ で表示順の変更) */}
-        <ul className="flex flex-row flex-wrap gap-1.5 lg:flex-col lg:gap-1">
+        {/* 項目一覧 (選択 + ↑↓ で表示順の変更)。スマホでは均等な2列グリッドで揃える */}
+        <ul className="grid grid-cols-2 gap-1.5 sm:grid-cols-3 lg:flex lg:flex-col lg:gap-1">
           {fields.map((field, index) => (
             <li key={field.id} className="flex items-center gap-1">
               <button
@@ -433,13 +434,13 @@ export function ProductFieldSettings({
           });
         }}
       >
-        <label className="flex flex-col gap-1">
+        <label className="flex min-w-0 flex-1 flex-col gap-1 sm:flex-none">
           <span className="text-xs text-ink-400">項目を追加 (任意の名前)</span>
           <input
             value={newLabel}
             onChange={(event) => setNewLabel(event.target.value)}
             placeholder="例: フィット / 柄 / 洗濯表示"
-            className={`${inputClass} w-52`}
+            className={`${inputClass} w-full sm:w-52`}
           />
         </label>
         <button

@@ -309,6 +309,9 @@ prisma/
   migrations/             マイグレーション
   seed.ts                 デモデータ生成
 DEPLOY.md                 Vercel + Neon へのデプロイ手順
+WEARPOS_GUIDE.md          機能・運用ガイド (Notion 転記用の詳細ドキュメント)
+WEARPOS_MANUAL.md         店舗スタッフ向けのかんたん操作マニュアル
+LINE_SETUP.md             LINE 公式アカウント連携のセットアップ記録
 scripts/
   build-demo.mjs          GitHub Pages 用の静的デモを生成
 docs/                     生成された静的デモ (GitHub Pages の公開元)

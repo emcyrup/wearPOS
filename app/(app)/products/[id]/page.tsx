@@ -260,9 +260,9 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
         </Card>
       </div>
 
-      <Card title="商品情報" className="mt-4">
-        {/* 設定の項目定義に従って表示し、管理者は編集できる */}
-        <ProductInfoEditor
+      {/* 設定の項目定義に従って表示し、管理者はカード右上の「編集する」から編集できる */}
+      <ProductInfoEditor
+        className="mt-4"
           product={{
             id: product.id,
             styleCode: product.styleCode,
@@ -296,8 +296,7 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
             options: field.options,
           }))}
           canEdit={isAdmin}
-        />
-      </Card>
+      />
 
       <Card
         title="SKU 一覧"
