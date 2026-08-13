@@ -1,0 +1,343 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>wearPOS かんたん操作マニュアル</title>
+<style>
+  :root {
+    --ink: #16161c;
+    --ink-60: #4b4b57;
+    --ink-40: #8a8a99;
+    --line: #d6d6dc;
+    --line-soft: #ebebee;
+    --paper: #ffffff;
+    --soft: #f6f6f7;
+    --accent: #b4544a;
+    --accent-soft: #f6ece9;
+    --green: #0e7a52;
+    --green-soft: #e7f4ee;
+    --amber-soft: #fdf3e0;
+    --amber: #8a5a00;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body {
+    font-family: "IPAPGothic", "IPAGothic", sans-serif;
+    color: var(--ink);
+    font-size: 10.5pt;
+    line-height: 1.75;
+  }
+  /* ---- 表紙 ---- */
+  .cover {
+    page-break-after: always;
+    height: 257mm; /* A4 minus margins */
+    display: flex;
+    flex-direction: column;
+  }
+  .cover-band {
+    background: var(--ink);
+    color: #fff;
+    border-radius: 6mm;
+    padding: 18mm 14mm;
+    margin-top: 30mm;
+  }
+  .cover-logo { font-size: 15pt; letter-spacing: .5px; font-weight: bold; }
+  .cover-logo .accent { color: #e8a49b; }
+  .cover-title { font-size: 26pt; font-weight: bold; margin-top: 10mm; line-height: 1.35; }
+  .cover-sub { font-size: 11pt; margin-top: 6mm; color: #d6d6dc; }
+  .cover-meta { margin-top: 10mm; color: var(--ink-40); font-size: 9.5pt; }
+  .cover-toc {
+    margin-top: 12mm;
+    border: 1px solid var(--line);
+    border-radius: 4mm;
+    padding: 8mm 10mm;
+  }
+  .cover-toc h2 { font-size: 11pt; color: var(--ink-60); margin-bottom: 3mm; }
+  .cover-toc ol { list-style: none; column-count: 2; column-gap: 12mm; }
+  .cover-toc li {
+    font-size: 10.5pt;
+    padding: 1.6mm 0;
+    border-bottom: 1px dashed var(--line-soft);
+    break-inside: avoid;
+  }
+  .cover-toc .no {
+    display: inline-block; width: 7mm; font-weight: bold; color: var(--accent);
+  }
+
+  /* ---- セクション ---- */
+  section.chapter { page-break-before: always; }
+  section.chapter.first { page-break-before: auto; }
+  .chap-head {
+    display: flex; align-items: center; gap: 4mm;
+    border-bottom: 2.5px solid var(--ink);
+    padding-bottom: 2.5mm; margin-bottom: 5mm;
+  }
+  .chap-no {
+    background: var(--ink); color: #fff;
+    border-radius: 2.5mm;
+    width: 11mm; height: 11mm;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 14pt; font-weight: bold;
+    flex: none;
+  }
+  .chap-head h1 { font-size: 16pt; }
+  .chap-lead { color: var(--ink-60); margin-bottom: 4mm; }
+
+  /* 手順ステップ */
+  ol.steps { list-style: none; counter-reset: step; margin: 4mm 0; }
+  ol.steps > li {
+    counter-increment: step;
+    position: relative;
+    padding: 3mm 4mm 3mm 15mm;
+    border: 1px solid var(--line-soft);
+    border-radius: 3mm;
+    margin-bottom: 2.5mm;
+    background: var(--paper);
+    page-break-inside: avoid;
+  }
+  ol.steps > li::before {
+    content: counter(step);
+    position: absolute; left: 4mm; top: 3.4mm;
+    width: 7.5mm; height: 7.5mm;
+    background: var(--accent-soft); color: var(--accent);
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-weight: bold; font-size: 11pt;
+  }
+  ol.steps .t { font-weight: bold; }
+  ol.steps .d { color: var(--ink-60); font-size: 9.8pt; margin-top: .5mm; }
+
+  /* ボタン風表記・チップ */
+  .btn {
+    display: inline-block;
+    border: 1.5px solid var(--ink);
+    border-radius: 2mm;
+    padding: 0 2.2mm;
+    font-weight: bold;
+    font-size: 9.5pt;
+    white-space: nowrap;
+    background: var(--soft);
+  }
+  .btn.dark { background: var(--ink); color: #fff; border-color: var(--ink); }
+  .kw { font-weight: bold; color: var(--accent); }
+
+  /* 補足ボックス */
+  .note, .ok, .warn {
+    border-radius: 3mm;
+    padding: 3mm 4mm 3mm 12mm;
+    margin: 3mm 0;
+    position: relative;
+    font-size: 9.8pt;
+    page-break-inside: avoid;
+  }
+  .note::before, .ok::before, .warn::before {
+    position: absolute; left: 3.5mm; top: 2.8mm; font-weight: bold;
+  }
+  .note { background: var(--soft); color: var(--ink-60); }
+  .note::before { content: "※"; color: var(--ink-40); }
+  .ok { background: var(--green-soft); color: var(--green); }
+  .ok::before { content: "✓"; }
+  .warn { background: var(--amber-soft); color: var(--amber); }
+  .warn::before { content: "!"; }
+
+  /* 表 */
+  table { width: 100%; border-collapse: collapse; margin: 3mm 0; page-break-inside: avoid; }
+  th, td { border: 1px solid var(--line); padding: 2.2mm 3mm; text-align: left; vertical-align: top; }
+  th { background: var(--soft); font-size: 9.5pt; color: var(--ink-60); }
+  td { font-size: 9.8pt; }
+  td .btn { font-size: 9pt; }
+
+  h2.block {
+    font-size: 11.5pt;
+    margin: 5mm 0 2mm;
+    padding-left: 3mm;
+    border-left: 3.5px solid var(--accent);
+  }
+  ul.plain { list-style: none; }
+  ul.plain li {
+    padding: 1.2mm 0 1.2mm 6mm;
+    position: relative;
+  }
+  ul.plain li::before {
+    content: "・"; position: absolute; left: 1mm; color: var(--accent); font-weight: bold;
+  }
+  .cols2 { display: grid; grid-template-columns: 1fr 1fr; gap: 4mm; }
+  .avoid-break { page-break-inside: avoid; }
+</style>
+</head>
+<body>
+
+<!-- ================= 表紙 ================= -->
+<div class="cover">
+  <div class="cover-band">
+    <div class="cover-logo">wear<span class="accent">POS</span></div>
+    <div class="cover-title">かんたん操作マニュアル</div>
+    <div class="cover-sub">店舗スタッフ・アルバイト向け ── 店頭でよく使う操作だけをまとめました</div>
+  </div>
+  <div class="cover-meta">最終更新: 2026年8月13日 ／ スマートフォン・タブレット・パソコンのどれでも同じように使えます</div>
+  <div class="cover-toc">
+    <h2>もくじ</h2>
+    <ol>
+      <li><span class="no">1</span>ログインする</li>
+      <li><span class="no">2</span>会計する（レジ）</li>
+      <li><span class="no">3</span>返品する（会計の取り消し）</li>
+      <li><span class="no">4</span>商品を登録する（管理者）</li>
+      <li><span class="no">5</span>在庫の作業</li>
+      <li><span class="no">6</span>お客様の登録・LINE</li>
+      <li><span class="no">7</span>売上を見る・AIに相談する</li>
+      <li><span class="no">8</span>困ったときは</li>
+    </ol>
+  </div>
+</div>
+
+<!-- ================= 1 ================= -->
+<section class="chapter first">
+  <div class="chap-head"><div class="chap-no">1</div><h1>ログインする</h1></div>
+  <ol class="steps">
+    <li><span class="t">wearPOS の URL をブラウザで開く</span></li>
+    <li><span class="t">自分の名前を選ぶ</span><div class="d">ユーザー名は一覧から選ぶだけです</div></li>
+    <li><span class="t">パスワードを入力して <span class="btn dark">ログイン</span></span></li>
+  </ol>
+  <div class="note">レジ画面だけはログインなしで使えます（店頭のレジ端末用）。</div>
+  <h2 class="block">権限について</h2>
+  <ul class="plain">
+    <li><b>管理者</b>: すべての操作（商品登録・価格変更・顧客削除・設定など）</li>
+    <li><b>スタッフ</b>: 許可された画面のみ（レジ・商品・在庫など。権限は管理者が設定します）</li>
+    <li>パスワードを忘れたら管理者に連絡してください（リセットできます）</li>
+  </ul>
+</section>
+
+<!-- ================= 2 ================= -->
+<section class="chapter">
+  <div class="chap-head"><div class="chap-no">2</div><h1>会計する（レジ）</h1></div>
+  <p class="chap-lead">サイドメニューの <span class="btn">レジ ↗</span> を押すと、レジ専用ウィンドウが開きます。</p>
+  <ol class="steps">
+    <li>
+      <span class="t">担当スタッフを選ぶ <span class="kw">（必須）</span></span>
+      <div class="d">自分の名札バーコードを <span class="btn">📷 読み取る</span> でスキャンしてもOK。選ばないと会計ボタンが押せません。</div>
+    </li>
+    <li>
+      <span class="t">商品を追加する</span>
+      <div class="d">値札のバーコードをスキャン（カメラ or ハンドスキャナ）。読み取れないときは <span class="btn">🔍 商品名で検索</span>、値札がない商品（ノベルティ等）は <span class="btn">✏️ 未登録商品を手入力</span> で商品名と価格を入力します。</div>
+    </li>
+    <li>
+      <span class="t">会員をつける（任意）</span>
+      <div class="d">お客様の LINE 会員証バーコードをスキャン、または会員番号を入力して <span class="btn">照会</span>。分からないときは <span class="btn">🔍 お名前・電話番号で検索</span>。</div>
+    </li>
+    <li>
+      <span class="t">値引きする（任意）</span>
+      <div class="d">1商品だけ → その行の「この明細を値引き」／会計全体 → 「伝票値引き」。¥ と % は両方入れると合算されます。</div>
+    </li>
+    <li>
+      <span class="t">支払方法を選ぶ</span>
+      <div class="d">現金 → お預かり金額を入力（お釣りは自動計算）。クレジット等 → 決済端末での処理が終わったことを確認して確定します。</div>
+    </li>
+    <li><span class="t"><span class="btn dark">会計する</span> を押す</span></li>
+    <li>
+      <span class="t"><span class="btn">レシートを印刷</span> → 印刷して閉じる</span>
+      <div class="d">レシートは別ウィンドウで開きます。印刷が終わったら「閉じる」で戻ります。</div>
+    </li>
+    <li><span class="t"><span class="btn">次の会計へ</span> で次のお客様へ</span></li>
+  </ol>
+  <div class="ok">会計すると、在庫の減算・ポイント付与・お客様への LINE 通知まで自動で行われます。</div>
+</section>
+
+<!-- ================= 3 ================= -->
+<section class="chapter">
+  <div class="chap-head"><div class="chap-no">3</div><h1>返品する（会計の取り消し）</h1></div>
+  <p class="chap-lead">レジの打ち間違い・お客様都合の返品はこちら。むずかしい操作はありません。</p>
+  <ol class="steps">
+    <li>
+      <span class="t"><b>取引履歴</b> から対象の伝票を探して開く</span>
+      <div class="d">伝票番号や会員名で絞り込みできます。行をクリックすると詳細が開きます。</div>
+    </li>
+    <li>
+      <span class="t">右上の <span class="btn">返品する</span> を押して、確認画面で OK</span>
+    </li>
+  </ol>
+  <h2 class="block">自動で元に戻るもの</h2>
+  <ul class="plain">
+    <li>商品の在庫（戻し入れ）</li>
+    <li>お客様が使ったポイント（返還）・付いたポイント（取消）</li>
+    <li>累計購入額・会員ランク・来店回数</li>
+  </ul>
+  <div class="ok">返品済みの伝票には「返品済み」と表示され、二重に返品することはできません。</div>
+  <div class="warn">一部の商品だけの返品は現在準備中です。当面は全体を返品してから、残す商品をもう一度会計してください。</div>
+</section>
+
+<!-- ================= 4 ================= -->
+<section class="chapter">
+  <div class="chap-head"><div class="chap-no">4</div><h1>商品を登録する（管理者）</h1></div>
+  <ol class="steps">
+    <li><span class="t"><b>商品 / SKU</b> → <span class="btn dark">商品を登録</span></span></li>
+    <li><span class="t">品番・商品名・価格などを入力</span></li>
+    <li>
+      <span class="t">カラーとサイズを選ぶ</span>
+      <div class="d">選んだ組み合わせぶんの SKU（在庫の管理単位）が自動で作られます。</div>
+    </li>
+    <li>
+      <span class="t">JAN コードは自動採番</span>
+      <div class="d">採番年月は数字6桁で入力します（例: 202608）。</div>
+    </li>
+    <li><span class="t">登録後、<span class="btn">値札ラベルを印刷</span> でバーコード付きの値札を印刷</span></li>
+  </ol>
+  <h2 class="block">あとから直すとき</h2>
+  <ul class="plain">
+    <li>商品の情報 → 商品詳細の <b>商品情報カード右上</b> の <span class="btn">✏️ 編集する</span>（販売価格の変更は履歴に残ります）</li>
+    <li>SKU コード → SKU 一覧の ✎ から変更（管理者のみ）</li>
+  </ul>
+</section>
+
+<!-- ================= 5 ================= -->
+<section class="chapter">
+  <div class="chap-head"><div class="chap-no">5</div><h1>在庫の作業</h1></div>
+  <p class="chap-lead"><b>在庫</b> 画面で行います。一覧のラジオボタンで商品を選ぶと、その SKU がフォームに自動で入ります。</p>
+  <table>
+    <tr><th style="width:28%">やりたいこと</th><th>操作</th></tr>
+    <tr><td><b>入荷</b></td><td>区分「入荷」＋ SKU（スキャン可）＋ 数量 → <span class="btn dark">登録する</span></td></tr>
+    <tr><td><b>数が合わないとき</b></td><td>区分「在庫調整」で差分を入力（マイナスも入力できます）</td></tr>
+    <tr><td><b>棚卸</b></td><td>区分「棚卸」で実際に数えた数を入力（その数に上書きされます）</td></tr>
+  </table>
+  <div class="ok">すべての増減は「直近の在庫変動」に履歴として残ります。あとから誰がいつ変えたか確認できます。</div>
+</section>
+
+<!-- ================= 6 ================= -->
+<section class="chapter">
+  <div class="chap-head"><div class="chap-no">6</div><h1>お客様の登録・LINE</h1></div>
+  <table>
+    <tr><th style="width:34%">やりたいこと</th><th>操作</th></tr>
+    <tr><td>店頭で新規登録</td><td><b>顧客 (CRM)</b> → <span class="btn dark">顧客を登録</span>（会員番号は自動発行）</td></tr>
+    <tr><td>LINE で自己登録</td><td>お客様が公式 LINE を友だち追加 → リッチメニューの「会員登録」から</td></tr>
+    <tr><td>LINE 会員証</td><td>お客様がリッチメニューの「会員証」でバーコード表示 → レジでスキャン</td></tr>
+    <tr><td>一斉配信</td><td>顧客一覧 → <span class="btn">LINE 一斉配信</span></td></tr>
+  </table>
+  <div class="note">お客様は LINE のトークに「通知オフ」「通知オン」「連携解除」と送ると、自分で設定を変えられます。</div>
+</section>
+
+<!-- ================= 7 ================= -->
+<section class="chapter">
+  <div class="chap-head"><div class="chap-no">7</div><h1>売上を見る・AI に相談する</h1></div>
+  <ul class="plain">
+    <li><b>ダッシュボード</b>: 期間を選んで売上・客数・客単価・売れ筋などを確認できます</li>
+    <li><b>AI考察</b>: <span class="btn dark">討論を開始</span> を押すと、2つの AI が実績を分析して<br>
+      <b>【考察】</b>（結論と打ち手）と <b>【提案】</b>（次に試すこと）を出します</li>
+    <li>そのまま追加の質問もできます（例:「客単価を上げるには何から手を付けるべき？」）</li>
+  </ul>
+</section>
+
+<!-- ================= 8 ================= -->
+<section class="chapter">
+  <div class="chap-head"><div class="chap-no">8</div><h1>困ったときは</h1></div>
+  <table>
+    <tr><th style="width:36%">症状</th><th>対処</th></tr>
+    <tr><td>バーコードが読めない</td><td>レジの <span class="btn">🔍 商品名で検索</span> から追加。値札が無いものは <span class="btn">✏️ 未登録商品を手入力</span></td></tr>
+    <tr><td>会計を間違えた</td><td>取引履歴から伝票を開いて <span class="btn">返品する</span> → 正しい内容でもう一度会計</td></tr>
+    <tr><td>会員が見つからない</td><td>レジの「お名前・電話番号で検索」。それでも無ければ新規登録</td></tr>
+    <tr><td>会計ボタンが押せない</td><td>担当スタッフが未選択、または現金のお預かり金額が不足していないか確認</td></tr>
+    <tr><td>ポイント残高がおかしい</td><td>顧客詳細のポイント履歴で増減を確認（返品分は自動で調整されています）</td></tr>
+    <tr><td>パスワードを忘れた</td><td>管理者に連絡（設定 → ユーザーと権限 からリセットできます）</td></tr>
+  </table>
+  <div class="note">このマニュアルに載っていない操作や詳しい説明は、「wearPOS 機能・運用ガイド」をご覧ください。</div>
+</section>
+
+</body>
+</html>
