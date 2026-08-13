@@ -20,10 +20,15 @@ type Tendency = {
 
 /** 購買履歴から、よく買うサイズ・カラーを集計する */
 async function purchaseTendency(customerId: string): Promise<Tendency> {
-  const lines = await prisma.saleLine.findMany({
+  // 手入力商品 (variant なし) は好み推定の対象外
+  const allLines = await prisma.saleLine.findMany({
     where: { sale: { customerId, type: "SALE" } },
     include: { variant: true },
   });
+  const lines = allLines.filter(
+    (line): line is (typeof allLines)[number] & { variant: NonNullable<(typeof allLines)[number]["variant"]>; variantId: string } =>
+      line.variant !== null,
+  );
 
   const tally = (key: (line: (typeof lines)[number]) => string) => {
     const counts = new Map<string, number>();
@@ -177,6 +182,8 @@ export async function campaignRecipients(target: CampaignTarget) {
   return prisma.customer.findMany({
     where: {
       isActive: true,
+      // 「通知オフ」の顧客には一斉配信も送らない
+      reminderOptOut: false,
       lineAccount: { isFollowing: true },
       ...(target === "dormant"
         ? { OR: [{ lastVisitAt: { lt: dormantBefore } }, { lastVisitAt: null }] }

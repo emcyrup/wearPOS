@@ -1,16 +1,6 @@
-import { PageHeader } from "@/components/ui";
-import { ScanLookup } from "@/components/scan-lookup";
+import { redirect } from "next/navigation";
 
-export const dynamic = "force-dynamic";
-
-export default function ScanPage() {
-  return (
-    <>
-      <PageHeader
-        title="バーコードスキャン"
-        description="値札の JAN コードや SKU を読み取って、商品情報と店舗別在庫を確認します"
-      />
-      <ScanLookup />
-    </>
-  );
+/** スキャンは商品機能配下 (/products/scan) へ移動した。ブックマーク互換のため転送する */
+export default function ScanRedirectPage() {
+  redirect("/products/scan");
 }

@@ -95,7 +95,10 @@ async function buildPurchaseFollowMessage(customerId: string): Promise<string | 
   if (!customer) return null;
 
   const lastSale = customer.sales[0];
-  const items = lastSale?.lines.slice(0, 2).map((line) => line.variant.product.name) ?? [];
+  const items =
+    lastSale?.lines
+      .slice(0, 2)
+      .map((line) => line.variant?.product.name ?? line.note ?? "商品") ?? [];
   const itemText =
     items.length > 0 ? `お求めいただいた「${items.join("」「")}」` : "お求めいただいたアイテム";
 

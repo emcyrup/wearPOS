@@ -8,6 +8,7 @@ import {
   PointAdjustForm,
   ProfileForm,
 } from "@/components/customer-forms";
+import { CustomerDeleteButton, LineUnlinkButton } from "@/components/customer-admin-actions";
 import { Badge, Card, EmptyState, PageHeader, Table } from "@/components/ui";
 import { DORMANT_DAYS, parseTags, PAYMENT_METHOD_LABEL, pointRateForRank, rankLabel, RANK_RULES } from "@/lib/apparel";
 import { prisma } from "@/lib/db";
@@ -66,8 +67,9 @@ export default async function CustomerDetailPage({ params }: { params: Promise<{
       .sort((a, b) => b.quantity - a.quantity);
   };
 
-  const favoriteSizes = tally((line) => line.variant.sizeName).slice(0, 4);
-  const favoriteColors = tally((line) => line.variant.colorName).slice(0, 5);
+  // 手入力商品 (variant なし) はサイズ・カラーの好み推定から除外する
+  const favoriteSizes = tally((line) => line.variant?.sizeName ?? "").filter((t) => t.name).slice(0, 4);
+  const favoriteColors = tally((line) => line.variant?.colorName ?? "").filter((t) => t.name).slice(0, 5);
 
   const totalItems = purchasedLines.reduce((sum, line) => sum + line.quantity, 0);
   const averageOrder = customer.visitCount ? Math.round(customer.totalSpent / customer.visitCount) : 0;
@@ -121,6 +123,11 @@ export default async function CustomerDetailPage({ params }: { params: Promise<{
             >
               会員証を表示
             </a>
+            <CustomerDeleteButton
+              customerId={customer.id}
+              name={fullName(customer)}
+              hasSales={customer.sales.length > 0}
+            />
           </div>
         }
       />
@@ -275,6 +282,12 @@ export default async function CustomerDetailPage({ params }: { params: Promise<{
                 />
               </div>
               <div className="border-t border-ink-100 pt-3">
+                <LineUnlinkButton customerId={customer.id} />
+                <p className="mt-1.5 text-xs text-ink-400">
+                  お客様側からも、トークに「連携解除」と送信すると解除できます (「通知オフ」「通知オン」でお知らせ配信の切り替えもできます)
+                </p>
+              </div>
+              <div className="border-t border-ink-100 pt-3">
                 <p className="mb-2 text-xs font-medium text-ink-400">このお客様へのリマインド設定</p>
                 <CustomerReminderSettings
                   customerId={customer.id}
@@ -381,17 +394,26 @@ export default async function CustomerDetailPage({ params }: { params: Promise<{
                       <span className="flex items-center gap-1.5">
                         <span
                           className="inline-block h-2.5 w-2.5 shrink-0 rounded-full border border-ink-200"
-                          style={{ backgroundColor: line.variant.colorHex ?? "transparent" }}
+                          style={{ backgroundColor: line.variant?.colorHex ?? "transparent" }}
                         />
-                        <Link
-                          href={`/products/${line.variant.productId}`}
-                          className="text-ink-800 hover:text-accent"
-                        >
-                          {line.variant.product.name}
-                        </Link>
-                        <span className="text-xs text-ink-400">
-                          {line.variant.colorName} / {line.variant.sizeName}
-                        </span>
+                        {line.variant ? (
+                          <>
+                            <Link
+                              href={`/products/${line.variant.productId}`}
+                              className="text-ink-800 hover:text-accent"
+                            >
+                              {line.variant.product.name}
+                            </Link>
+                            <span className="text-xs text-ink-400">
+                              {line.variant.colorName} / {line.variant.sizeName}
+                            </span>
+                          </>
+                        ) : (
+                          <>
+                            <span className="text-ink-800">{line.note ?? "手入力商品"}</span>
+                            <span className="text-xs text-ink-400">手入力</span>
+                          </>
+                        )}
                       </span>
                       <span className="tabular shrink-0 text-ink-600">
                         {line.quantity}点 · {formatYen(line.lineTotal)}

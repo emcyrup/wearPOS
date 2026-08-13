@@ -9,17 +9,24 @@ import { purchaseThanksMessage, pushLineText } from "@/lib/line";
 /**
  * 外部 POS レジから送られてくる取引ペイロード。
  * SKU は sku コードか barcode(JAN) のどちらかで指定できる。
+ * 未登録商品は name (商品名) を指定した手入力明細として扱い、在庫は動かさない。
  */
 export const posSaleLineSchema = z
   .object({
     sku: z.string().min(1).optional(),
     barcode: z.string().min(1).optional(),
+    /** 未登録商品 (手入力) の表示名 */
+    name: z.string().trim().min(1).max(100).optional(),
     quantity: z.number().int().refine((n) => n !== 0, "quantity must not be 0"),
     unitPrice: z.number().int().nonnegative(),
+    /** 明細値引き(税抜)。明細合計を上限とする */
     discount: z.number().int().nonnegative().default(0),
   })
-  .refine((line) => line.sku || line.barcode, {
-    message: "sku か barcode のいずれかが必要です",
+  .refine((line) => line.sku || line.barcode || line.name, {
+    message: "sku / barcode / name のいずれかが必要です",
+  })
+  .refine((line) => line.discount <= line.unitPrice * Math.abs(line.quantity), {
+    message: "明細値引きが明細金額を超えています",
   });
 
 export const posSaleSchema = z.object({
@@ -112,8 +119,10 @@ export async function ingestPosSale(input: PosSaleInput): Promise<IngestResult> 
   );
 
   const resolved = input.lines.map((line) => {
-    const variant = (line.sku && bySku.get(line.sku)) || (line.barcode && byBarcode.get(line.barcode));
-    if (!variant) {
+    const variant =
+      (line.sku && bySku.get(line.sku)) || (line.barcode && byBarcode.get(line.barcode)) || null;
+    // sku / barcode 指定なのに見つからない場合のみエラー。name のみは手入力明細
+    if (!variant && (line.sku || line.barcode)) {
       throw new SaleIngestError(`商品が見つかりません: ${line.sku ?? line.barcode}`, 404);
     }
     const lineTotal = line.unitPrice * line.quantity - line.discount;
@@ -127,8 +136,10 @@ export async function ingestPosSale(input: PosSaleInput): Promise<IngestResult> 
   const weightedTaxRate =
     subtotal === 0
       ? 0.1
-      : resolved.reduce((sum, item) => sum + item.variant.product.taxRate * item.lineTotal, 0) /
-        subtotal;
+      : resolved.reduce(
+          (sum, item) => sum + (item.variant?.product.taxRate ?? 0.1) * item.lineTotal,
+          0,
+        ) / subtotal;
   const tax = Math.round(taxableBase * weightedTaxRate);
   const total = taxableBase + tax;
 
@@ -160,19 +171,22 @@ export async function ingestPosSale(input: PosSaleInput): Promise<IngestResult> 
         note: input.note,
         lines: {
           create: resolved.map(({ line, variant, lineTotal }) => ({
-            variantId: variant.id,
+            variantId: variant?.id ?? null,
             quantity: line.quantity,
             unitPrice: line.unitPrice,
             discount: line.discount,
             lineTotal,
-            listPriceAtSale: variant.product.listPrice,
+            // 手入力商品は定価情報がないため販売単価をそのまま記録する
+            listPriceAtSale: variant ? variant.product.listPrice : line.unitPrice,
+            note: variant ? null : (line.name ?? "手入力商品"),
           })),
         },
       },
     });
 
-    // 在庫を動かす。販売は減算、返品は加算
+    // 在庫を動かす。販売は減算、返品は加算 (手入力商品は在庫を持たないので対象外)
     for (const { line, variant } of resolved) {
+      if (!variant) continue;
       await applyStockMovement(tx, {
         storeId: store.id,
         variantId: variant.id,

@@ -1,4 +1,5 @@
 import { Badge, Card, LinkButton, PageHeader, Table } from "@/components/ui";
+import { CategoryManager, StaffManager } from "@/components/master-managers";
 import { ReminderSettings } from "@/components/reminder-settings";
 import { RichMenuSetup } from "@/components/richmenu-setup";
 import { UserManager } from "@/components/user-manager";
@@ -26,9 +27,15 @@ export default async function SettingsPage() {
   const [stores, seasons, staff, brands, categories, appUsers] = await Promise.all([
     prisma.store.findMany({ orderBy: { code: "asc" }, include: { _count: { select: { sales: true } } } }),
     prisma.season.findMany({ orderBy: [{ year: "desc" }, { term: "asc" }] }),
-    prisma.staff.findMany({ orderBy: { code: "asc" }, include: { store: true } }),
+    prisma.staff.findMany({
+      orderBy: { code: "asc" },
+      include: { store: true, _count: { select: { sales: true, movements: true } } },
+    }),
     prisma.brand.findMany({ orderBy: { code: "asc" } }),
-    prisma.category.findMany({ orderBy: { code: "asc" } }),
+    prisma.category.findMany({
+      orderBy: { code: "asc" },
+      include: { _count: { select: { products: true } } },
+    }),
     isAdmin ? prisma.appUser.findMany({ orderBy: { createdAt: "asc" } }) : Promise.resolve([]),
   ]);
 
@@ -223,19 +230,37 @@ LINE_PUSH_ENABLED=true         # false で送信を停止 (ログのみ記録)`}
           </Table>
         </Card>
 
-        <Card title="スタッフ">
-          <Table head={["コード", "氏名", "所属", "権限"]}>
-            {staff.map((person) => (
-              <tr key={person.id} className="border-b border-ink-100 last:border-0">
-                <td className="tabular px-2 py-2 text-xs text-ink-400">{person.code}</td>
-                <td className="px-2 py-2 font-medium text-ink-800">{person.name}</td>
-                <td className="px-2 py-2 text-ink-600">{person.store?.name ?? "—"}</td>
-                <td className="px-2 py-2">
-                  <Badge tone={person.role === "MANAGER" ? "info" : "neutral"}>{person.role}</Badge>
-                </td>
-              </tr>
-            ))}
-          </Table>
+        <Card
+          title="スタッフ"
+          action={isAdmin ? <LinkButton href="/settings/staff-badges">名札バーコード</LinkButton> : undefined}
+        >
+          {isAdmin ? (
+            <StaffManager
+              staff={staff.map((person) => ({
+                id: person.id,
+                code: person.code,
+                name: person.name,
+                role: person.role,
+                storeName: person.store?.name ?? null,
+                isActive: person.isActive,
+                hasHistory: person._count.sales > 0 || person._count.movements > 0,
+              }))}
+              stores={stores.map((store) => ({ id: store.id, name: store.name }))}
+            />
+          ) : (
+            <Table head={["コード", "氏名", "所属", "権限"]}>
+              {staff.map((person) => (
+                <tr key={person.id} className="border-b border-ink-100 last:border-0">
+                  <td className="tabular px-2 py-2 text-xs text-ink-400">{person.code}</td>
+                  <td className="px-2 py-2 font-medium text-ink-800">{person.name}</td>
+                  <td className="px-2 py-2 text-ink-600">{person.store?.name ?? "—"}</td>
+                  <td className="px-2 py-2">
+                    <Badge tone={person.role === "MANAGER" ? "info" : "neutral"}>{person.role}</Badge>
+                  </td>
+                </tr>
+              ))}
+            </Table>
+          )}
         </Card>
       </div>
 
@@ -298,14 +323,27 @@ LINE_PUSH_ENABLED=true         # false で送信を停止 (ログのみ記録)`}
               </Badge>
             ))}
           </div>
-          <p className="mt-4 mb-2 text-xs font-medium text-ink-400">カテゴリ</p>
-          <div className="flex flex-wrap gap-1.5">
-            {categories.map((category) => (
-              <Badge key={category.id} tone="neutral">
-                {category.name}
-              </Badge>
-            ))}
-          </div>
+          <p className="mt-4 mb-2 text-xs font-medium text-ink-400">
+            カテゴリ{isAdmin && <span className="ml-1 text-ink-300">(数字は使用商品数)</span>}
+          </p>
+          {isAdmin ? (
+            <CategoryManager
+              categories={categories.map((category) => ({
+                id: category.id,
+                code: category.code,
+                name: category.name,
+                productCount: category._count.products,
+              }))}
+            />
+          ) : (
+            <div className="flex flex-wrap gap-1.5">
+              {categories.map((category) => (
+                <Badge key={category.id} tone="neutral">
+                  {category.name}
+                </Badge>
+              ))}
+            </div>
+          )}
         </Card>
       </div>
     </>

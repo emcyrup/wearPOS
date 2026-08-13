@@ -46,11 +46,22 @@ const checkoutSchema = z.object({
   pointsUsed: z.number().int().nonnegative(),
   lines: z
     .array(
-      z.object({
-        sku: z.string().min(1),
-        quantity: z.number().int().positive().max(999),
-        unitPrice: z.number().int().nonnegative(),
-      }),
+      z
+        .object({
+          sku: z.string().min(1).optional(),
+          /** 未登録商品 (手入力) の表示名。sku がない明細で必須 */
+          name: z.string().trim().min(1).max(100).optional(),
+          quantity: z.number().int().positive().max(999),
+          unitPrice: z.number().int().nonnegative(),
+          /** 明細値引き (税抜・明細合計に対する額) */
+          discount: z.number().int().nonnegative().default(0),
+        })
+        .refine((line) => line.sku || line.name, {
+          message: "sku か name のいずれかが必要です",
+        })
+        .refine((line) => line.discount <= line.unitPrice * line.quantity, {
+          message: "明細値引きが明細金額を超えています",
+        }),
     )
     .min(1)
     .max(100),
@@ -91,7 +102,7 @@ export async function checkout(input: unknown): Promise<CheckoutResult> {
       receiptNo: `R${ymd}-${uuid.slice(0, 6).toUpperCase()}`,
       soldAt: now.toISOString(),
       type: "SALE",
-      lines: parsed.data.lines.map((line) => ({ ...line, discount: 0 })),
+      lines: parsed.data.lines,
     });
 
     await sendPurchaseLineNotification(result);

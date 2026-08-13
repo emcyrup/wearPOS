@@ -60,30 +60,47 @@ export default async function SaleDetailPage({ params }: { params: Promise<{ id:
               return (
                 <tr key={line.id} className="border-b border-ink-100 last:border-0">
                   <td className="px-2 py-2.5">
-                    <Link
-                      href={`/products/${line.variant.productId}`}
-                      className="font-medium text-ink-800 hover:text-accent"
-                    >
-                      {line.variant.product.name}
-                    </Link>
-                    <div className="text-xs text-ink-400">
-                      {line.variant.product.styleCode} · {line.variant.product.season.code}
-                      {discountRate > 0 && (
-                        <span className="ml-1 text-accent">
-                          値下げ販売 -{formatPercent(discountRate, 0)}
+                    {line.variant ? (
+                      <>
+                        <Link
+                          href={`/products/${line.variant.productId}`}
+                          className="font-medium text-ink-800 hover:text-accent"
+                        >
+                          {line.variant.product.name}
+                        </Link>
+                        <div className="text-xs text-ink-400">
+                          {line.variant.product.styleCode} · {line.variant.product.season.code}
+                          {discountRate > 0 && (
+                            <span className="ml-1 text-accent">
+                              値下げ販売 -{formatPercent(discountRate, 0)}
+                            </span>
+                          )}
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <span className="font-medium text-ink-800">
+                          {line.note ?? "手入力商品"}
                         </span>
-                      )}
-                    </div>
+                        <div className="text-xs text-ink-400">手入力 (未登録商品)</div>
+                      </>
+                    )}
                   </td>
-                  <td className="tabular px-2 py-2.5 text-xs text-ink-400">{line.variant.sku}</td>
+                  <td className="tabular px-2 py-2.5 text-xs text-ink-400">
+                    {line.variant?.sku ?? "—"}
+                  </td>
                   <td className="px-2 py-2.5 whitespace-nowrap">
-                    <span className="flex items-center gap-1.5 text-sm text-ink-600">
-                      <span
-                        className="inline-block h-3 w-3 rounded-full border border-ink-200"
-                        style={{ backgroundColor: line.variant.colorHex ?? "transparent" }}
-                      />
-                      {line.variant.colorName} / {line.variant.sizeName}
-                    </span>
+                    {line.variant ? (
+                      <span className="flex items-center gap-1.5 text-sm text-ink-600">
+                        <span
+                          className="inline-block h-3 w-3 rounded-full border border-ink-200"
+                          style={{ backgroundColor: line.variant.colorHex ?? "transparent" }}
+                        />
+                        {line.variant.colorName} / {line.variant.sizeName}
+                      </span>
+                    ) : (
+                      <span className="text-sm text-ink-400">—</span>
+                    )}
                   </td>
                   <td className="tabular px-2 py-2.5">{formatYen(line.unitPrice)}</td>
                   <td className="tabular px-2 py-2.5">{line.quantity}</td>

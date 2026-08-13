@@ -11,7 +11,11 @@ type StoreOption = { code: string; name: string };
 type StaffOption = { code: string; name: string; storeCode: string | null };
 
 type CartLine = {
-  sku: string;
+  /** 行の識別子。通常商品は SKU、手入力商品は free-N */
+  key: string;
+  sku?: string;
+  /** 手入力 (未登録) 商品かどうか */
+  isFree: boolean;
   productName: string;
   colorName: string;
   sizeName: string;
@@ -20,7 +24,13 @@ type CartLine = {
   listPrice: number;
   taxRate: number;
   quantity: number;
+  /** 明細値引き (税抜・明細合計に対する額) */
+  discount: number;
+  /** % 値引きモードのときの割合。¥ 指定なら null */
+  discountPct: number | null;
 };
+
+type DiscountMode = "yen" | "pct";
 
 const PAYMENT_METHODS = [
   { value: "CASH", label: "現金" },
@@ -42,21 +52,48 @@ const yen = new Intl.NumberFormat("ja-JP", {
   maximumFractionDigits: 0,
 });
 
+/** 明細金額 (値引き前・税抜) */
+function lineAmount(line: CartLine): number {
+  return line.unitPrice * line.quantity;
+}
+
+/** % 値引きの額を計算する (端数は四捨五入) */
+function pctDiscount(amount: number, pct: number): number {
+  return Math.round((amount * pct) / 100);
+}
+
+/** 数量変更に合わせて明細値引きを再計算する (%: 割合維持 / ¥: 明細金額でキャップ) */
+function withQuantity(line: CartLine, quantity: number): CartLine {
+  const next = { ...line, quantity };
+  const amount = lineAmount(next);
+  next.discount =
+    next.discountPct !== null
+      ? Math.min(amount, pctDiscount(amount, next.discountPct))
+      : Math.min(amount, next.discount);
+  return next;
+}
+
 /**
  * 店頭レジ。
  * バーコード / SKU で商品をカートに追加し、会員・支払方法を選んで会計する。
  * 会計は POS 連携 API と同じロジック (在庫減算・ポイント・LINE通知) を通る。
+ * ログインなしでも使えるため、担当者はスタッフバーコードの読み取りでも選べる。
  */
 export function Register({ stores, staff }: { stores: StoreOption[]; staff: StaffOption[] }) {
   const [storeCode, setStoreCode] = useState(stores[0]?.code ?? "");
   const [staffCode, setStaffCode] = useState("");
+  const [staffError, setStaffError] = useState<string | null>(null);
   const [lines, setLines] = useState<CartLine[]>([]);
   const [codeInput, setCodeInput] = useState("");
   const [adding, setAdding] = useState(false);
   const [member, setMember] = useState<MemberSummary | null>(null);
   const [memberInput, setMemberInput] = useState("");
   const [memberError, setMemberError] = useState<string | null>(null);
-  const [discount, setDiscount] = useState(0);
+  /** 伝票値引き。mode=pct のときは value を割合(%)として扱う */
+  const [discountMode, setDiscountMode] = useState<DiscountMode>("yen");
+  const [discountValue, setDiscountValue] = useState(0);
+  /** 明細値引きの入力欄を開いている行 */
+  const [discountOpen, setDiscountOpen] = useState<Record<string, boolean>>({});
   const [pointsUsed, setPointsUsed] = useState(0);
   const [paymentMethod, setPaymentMethod] = useState<(typeof PAYMENT_METHODS)[number]["value"]>("CASH");
   const [tendered, setTendered] = useState("");
@@ -67,6 +104,11 @@ export function Register({ stores, staff }: { stores: StoreOption[]; staff: Staf
   /** バーコードが読めないとき用の検索モーダル */
   const [searchingProduct, setSearchingProduct] = useState(false);
   const [searchingMember, setSearchingMember] = useState(false);
+  /** 未登録商品の手入力フォーム */
+  const [freeItemOpen, setFreeItemOpen] = useState(false);
+  const [freeName, setFreeName] = useState("");
+  const [freePrice, setFreePrice] = useState("");
+  const freeSeq = useRef(0);
   const [done, setDone] = useState<(CheckoutResult & { ok: true; change: number | null }) | null>(null);
   const codeRef = useRef<HTMLInputElement | null>(null);
 
@@ -74,18 +116,27 @@ export function Register({ stores, staff }: { stores: StoreOption[]; staff: Staf
 
   // 合計の計算はサーバー (ingestPosSale) と同じ式で見積もる
   const totals = useMemo(() => {
-    const subtotal = lines.reduce((sum, line) => sum + line.unitPrice * line.quantity, 0);
-    const taxableBase = Math.max(0, subtotal - discount);
+    const subtotal = lines.reduce((sum, line) => sum + lineAmount(line) - line.discount, 0);
+    const voucherDiscount = Math.max(
+      0,
+      Math.min(
+        subtotal,
+        discountMode === "pct" ? pctDiscount(subtotal, discountValue) : discountValue,
+      ),
+    );
+    const taxableBase = Math.max(0, subtotal - voucherDiscount);
     const weightedTaxRate =
       subtotal === 0
         ? 0.1
-        : lines.reduce((sum, line) => sum + line.taxRate * line.unitPrice * line.quantity, 0) /
-          subtotal;
+        : lines.reduce(
+            (sum, line) => sum + line.taxRate * (lineAmount(line) - line.discount),
+            0,
+          ) / subtotal;
     const tax = Math.round(taxableBase * weightedTaxRate);
     const total = taxableBase + tax;
     const payable = Math.max(0, total - pointsUsed);
-    return { subtotal, tax, total, payable };
-  }, [lines, discount, pointsUsed]);
+    return { subtotal, voucherDiscount, tax, total, payable };
+  }, [lines, discountMode, discountValue, pointsUsed]);
 
   const addByCode = useCallback(
     async (raw: string) => {
@@ -112,13 +163,15 @@ export function Register({ stores, staff }: { stores: StoreOption[]; staff: Staf
           const index = prev.findIndex((line) => line.sku === item.sku);
           if (index >= 0) {
             return prev.map((line, i) =>
-              i === index ? { ...line, quantity: line.quantity + 1 } : line,
+              i === index ? withQuantity(line, line.quantity + 1) : line,
             );
           }
           return [
             ...prev,
             {
+              key: item.sku,
               sku: item.sku,
+              isFree: false,
               productName: item.productName,
               colorName: item.colorName,
               sizeName: item.sizeName,
@@ -126,6 +179,8 @@ export function Register({ stores, staff }: { stores: StoreOption[]; staff: Staf
               listPrice: item.listPrice,
               taxRate: item.taxRate,
               quantity: 1,
+              discount: 0,
+              discountPct: null,
             },
           ];
         });
@@ -140,14 +195,68 @@ export function Register({ stores, staff }: { stores: StoreOption[]; staff: Staf
     [adding],
   );
 
-  const changeQuantity = (sku: string, delta: number) => {
+  const changeQuantity = (key: string, delta: number) => {
     setLines((prev) =>
       prev
-        .map((line) =>
-          line.sku === sku ? { ...line, quantity: line.quantity + delta } : line,
-        )
+        .map((line) => (line.key === key ? withQuantity(line, line.quantity + delta) : line))
         .filter((line) => line.quantity > 0),
     );
+  };
+
+  /** 明細値引きの変更。mode=pct なら value は割合、yen なら金額 */
+  const setLineDiscount = (key: string, mode: DiscountMode, value: number) => {
+    setLines((prev) =>
+      prev.map((line) => {
+        if (line.key !== key) return line;
+        const amount = lineAmount(line);
+        if (mode === "pct") {
+          const pct = Math.max(0, Math.min(100, value));
+          return { ...line, discountPct: pct, discount: Math.min(amount, pctDiscount(amount, pct)) };
+        }
+        return { ...line, discountPct: null, discount: Math.max(0, Math.min(amount, value)) };
+      }),
+    );
+  };
+
+  const addFreeItem = () => {
+    const name = freeName.trim();
+    const price = Number(freePrice);
+    if (!name || !Number.isFinite(price) || price < 0) return;
+    freeSeq.current += 1;
+    setLines((prev) => [
+      ...prev,
+      {
+        key: `free-${freeSeq.current}`,
+        isFree: true,
+        productName: name,
+        colorName: "",
+        sizeName: "",
+        unitPrice: Math.round(price),
+        listPrice: Math.round(price),
+        taxRate: 0.1,
+        quantity: 1,
+        discount: 0,
+        discountPct: null,
+      },
+    ]);
+    setFreeName("");
+    setFreePrice("");
+    setFreeItemOpen(false);
+  };
+
+  /** スタッフバーコード (スタッフコードの Code128) を読み取って担当者をセットする */
+  const attachStaffByCode = (raw: string) => {
+    const code = raw.trim();
+    if (!code) return;
+    const hit = staff.find((s) => s.code.toLowerCase() === code.toLowerCase());
+    if (!hit) {
+      setStaffError(`スタッフコード「${code}」が見つかりません`);
+      return;
+    }
+    setStaffError(null);
+    // 他店舗所属のスタッフなら店舗も合わせて切り替える
+    if (hit.storeCode && hit.storeCode !== storeCode) setStoreCode(hit.storeCode);
+    setStaffCode(hit.code);
   };
 
   const attachMember = async (code?: string) => {
@@ -189,12 +298,14 @@ export function Register({ stores, staff }: { stores: StoreOption[]; staff: Staf
         staffCode: staffCode || undefined,
         memberCode: member?.memberCode,
         paymentMethod,
-        discount,
+        discount: totals.voucherDiscount,
         pointsUsed,
         lines: lines.map((line) => ({
-          sku: line.sku,
+          sku: line.isFree ? undefined : line.sku,
+          name: line.isFree ? line.productName : undefined,
           quantity: line.quantity,
           unitPrice: line.unitPrice,
+          discount: line.discount,
         })),
       });
       if (!result.ok) {
@@ -229,7 +340,9 @@ export function Register({ stores, staff }: { stores: StoreOption[]; staff: Staf
   const reset = () => {
     setLines([]);
     setMember(null);
-    setDiscount(0);
+    setDiscountMode("yen");
+    setDiscountValue(0);
+    setDiscountOpen({});
     setPointsUsed(0);
     setTendered("");
     setPaymentMethod("CASH");
@@ -337,13 +450,22 @@ export function Register({ stores, staff }: { stores: StoreOption[]; staff: Staf
               追加
             </button>
           </form>
-          <button
-            type="button"
-            onClick={() => setSearchingProduct(true)}
-            className="mt-2 text-xs text-accent hover:underline"
-          >
-            バーコードが読み取れない場合は商品名で検索
-          </button>
+          <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1">
+            <button
+              type="button"
+              onClick={() => setSearchingProduct(true)}
+              className="text-xs text-accent hover:underline"
+            >
+              バーコードが読み取れない場合は商品名で検索
+            </button>
+            <button
+              type="button"
+              onClick={() => setFreeItemOpen(true)}
+              className="text-xs text-accent hover:underline"
+            >
+              未登録商品を手入力で追加
+            </button>
+          </div>
           {error && <p className="mt-2 text-sm text-rose-700">{error}</p>}
         </div>
 
@@ -361,43 +483,118 @@ export function Register({ stores, staff }: { stores: StoreOption[]; staff: Staf
           ) : (
             <ul>
               {lines.map((line) => (
-                <li
-                  key={line.sku}
-                  className="flex items-center gap-3 border-b border-ink-100 px-4 py-3 last:border-0"
-                >
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-medium text-ink-800">{line.productName}</p>
-                    <p className="truncate text-xs text-ink-400">
-                      {line.colorName} / {line.sizeName} · {line.sku}
-                    </p>
+                <li key={line.key} className="border-b border-ink-100 px-4 py-3 last:border-0">
+                  <div className="flex items-center gap-3">
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-medium text-ink-800">{line.productName}</p>
+                      <p className="truncate text-xs text-ink-400">
+                        {line.isFree
+                          ? "手入力 (未登録商品)"
+                          : `${line.colorName} / ${line.sizeName} · ${line.sku}`}
+                      </p>
+                    </div>
+                    <div className="flex shrink-0 items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => changeQuantity(line.key, -1)}
+                        aria-label="1点減らす"
+                        className="h-7 w-7 rounded-lg border border-ink-200 text-sm text-ink-600 hover:bg-ink-50"
+                      >
+                        −
+                      </button>
+                      <span className="tabular w-6 text-center text-sm font-medium">{line.quantity}</span>
+                      <button
+                        type="button"
+                        onClick={() => changeQuantity(line.key, 1)}
+                        aria-label="1点増やす"
+                        className="h-7 w-7 rounded-lg border border-ink-200 text-sm text-ink-600 hover:bg-ink-50"
+                      >
+                        ＋
+                      </button>
+                    </div>
+                    <div className="w-20 shrink-0 text-right sm:w-24">
+                      <p className="tabular text-sm font-medium">
+                        {yen.format(lineAmount(line) - line.discount)}
+                      </p>
+                      {line.discount > 0 ? (
+                        <p className="tabular text-[11px] text-rose-700">
+                          値引き -{yen.format(line.discount)}
+                        </p>
+                      ) : (
+                        line.unitPrice < line.listPrice && (
+                          <p className="tabular text-[11px] text-rose-700">セール価格</p>
+                        )
+                      )}
+                    </div>
                   </div>
-                  <div className="flex shrink-0 items-center gap-1.5">
-                    <button
-                      type="button"
-                      onClick={() => changeQuantity(line.sku, -1)}
-                      aria-label="1点減らす"
-                      className="h-7 w-7 rounded-lg border border-ink-200 text-sm text-ink-600 hover:bg-ink-50"
-                    >
-                      −
-                    </button>
-                    <span className="tabular w-6 text-center text-sm font-medium">{line.quantity}</span>
-                    <button
-                      type="button"
-                      onClick={() => changeQuantity(line.sku, 1)}
-                      aria-label="1点増やす"
-                      className="h-7 w-7 rounded-lg border border-ink-200 text-sm text-ink-600 hover:bg-ink-50"
-                    >
-                      ＋
-                    </button>
-                  </div>
-                  <div className="w-20 shrink-0 text-right sm:w-24">
-                    <p className="tabular text-sm font-medium">
-                      {yen.format(line.unitPrice * line.quantity)}
-                    </p>
-                    {line.unitPrice < line.listPrice && (
-                      <p className="tabular text-[11px] text-rose-700">セール価格</p>
-                    )}
-                  </div>
+                  {discountOpen[line.key] || line.discount > 0 ? (
+                    <div className="mt-2 flex items-center justify-end gap-1.5">
+                      <span className="text-xs text-ink-400">明細値引き</span>
+                      <input
+                        type="number"
+                        min={0}
+                        max={line.discountPct !== null ? 100 : lineAmount(line)}
+                        value={
+                          (line.discountPct !== null ? line.discountPct : line.discount) || ""
+                        }
+                        onChange={(event) =>
+                          setLineDiscount(
+                            line.key,
+                            line.discountPct !== null ? "pct" : "yen",
+                            Number(event.target.value) || 0,
+                          )
+                        }
+                        placeholder="0"
+                        aria-label={`${line.productName} の明細値引き`}
+                        className="tabular w-20 rounded-lg border border-ink-200 px-2 py-1 text-right text-sm outline-none focus:border-ink-400"
+                      />
+                      <div className="flex overflow-hidden rounded-lg border border-ink-200">
+                        {(
+                          [
+                            ["yen", "¥"],
+                            ["pct", "%"],
+                          ] as const
+                        ).map(([mode, label]) => (
+                          <button
+                            key={mode}
+                            type="button"
+                            onClick={() =>
+                              setLineDiscount(
+                                line.key,
+                                mode,
+                                // モード切替時は入力し直す前提で 0 にリセットしない
+                                mode === "pct"
+                                  ? (line.discountPct ??
+                                      (lineAmount(line) > 0
+                                        ? Math.round((line.discount / lineAmount(line)) * 100)
+                                        : 0))
+                                  : line.discount,
+                              )
+                            }
+                            className={`px-2 py-1 text-xs font-medium ${
+                              (mode === "pct") === (line.discountPct !== null)
+                                ? "bg-ink-900 text-white"
+                                : "bg-white text-ink-600 hover:bg-ink-50"
+                            }`}
+                          >
+                            {label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="mt-1 text-right">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setDiscountOpen((prev) => ({ ...prev, [line.key]: true }))
+                        }
+                        className="text-[11px] text-ink-400 hover:text-accent hover:underline"
+                      >
+                        この明細を値引き
+                      </button>
+                    </div>
+                  )}
                 </li>
               ))}
             </ul>
@@ -426,22 +623,31 @@ export function Register({ stores, staff }: { stores: StoreOption[]; staff: Staf
                 ))}
               </select>
             </label>
-            <label className="flex flex-col gap-1">
+            <div className="flex flex-col gap-1">
               <span className="text-xs text-ink-400">担当スタッフ</span>
-              <select
-                value={staffCode}
-                onChange={(event) => setStaffCode(event.target.value)}
-                className="rounded-lg border border-ink-200 bg-white px-2 py-1.5 text-sm outline-none focus:border-ink-400"
-              >
-                <option value="">未指定</option>
-                {storeStaff.map((s) => (
-                  <option key={s.code} value={s.code}>
-                    {s.name}
-                  </option>
-                ))}
-              </select>
-            </label>
+              <div className="flex gap-1.5">
+                <select
+                  value={staffCode}
+                  onChange={(event) => {
+                    setStaffCode(event.target.value);
+                    setStaffError(null);
+                  }}
+                  aria-label="担当スタッフ"
+                  className="w-full min-w-0 rounded-lg border border-ink-200 bg-white px-2 py-1.5 text-sm outline-none focus:border-ink-400"
+                >
+                  <option value="">未指定</option>
+                  {storeStaff.map((s) => (
+                    <option key={s.code} value={s.code}>
+                      {s.name}
+                    </option>
+                  ))}
+                </select>
+                {/* スタッフバーコード (名札) を読み取って担当者を選べる */}
+                <ScanButton onDetect={attachStaffByCode} />
+              </div>
+            </div>
           </div>
+          {staffError && <p className="mt-2 text-xs text-rose-700">{staffError}</p>}
         </div>
 
         <div className="rounded-xl border border-ink-200 bg-white p-4">
@@ -529,24 +735,51 @@ export function Register({ stores, staff }: { stores: StoreOption[]; staff: Staf
               <dt className="text-ink-400">小計 (税抜)</dt>
               <dd className="tabular">{yen.format(totals.subtotal)}</dd>
             </div>
-            <div className="flex items-center justify-between">
-              <dt className="text-ink-400">値引き (税抜)</dt>
-              <dd>
+            <div className="flex items-center justify-between gap-2">
+              <dt className="text-ink-400">伝票値引き (税抜)</dt>
+              <dd className="flex items-center gap-1.5">
                 <input
                   type="number"
                   min={0}
-                  max={totals.subtotal}
-                  value={discount || ""}
-                  onChange={(event) =>
-                    setDiscount(
-                      Math.max(0, Math.min(totals.subtotal, Number(event.target.value) || 0)),
-                    )
-                  }
+                  max={discountMode === "pct" ? 100 : totals.subtotal}
+                  value={discountValue || ""}
+                  onChange={(event) => setDiscountValue(Math.max(0, Number(event.target.value) || 0))}
                   placeholder="0"
-                  className="tabular w-24 rounded-lg border border-ink-200 px-2 py-1 text-right text-sm outline-none focus:border-ink-400"
+                  aria-label="伝票値引き"
+                  className="tabular w-20 rounded-lg border border-ink-200 px-2 py-1 text-right text-sm outline-none focus:border-ink-400"
                 />
+                <div className="flex overflow-hidden rounded-lg border border-ink-200">
+                  {(
+                    [
+                      ["yen", "¥"],
+                      ["pct", "%"],
+                    ] as const
+                  ).map(([mode, label]) => (
+                    <button
+                      key={mode}
+                      type="button"
+                      onClick={() => {
+                        setDiscountMode(mode);
+                        setDiscountValue(0);
+                      }}
+                      className={`px-2 py-1 text-xs font-medium ${
+                        discountMode === mode
+                          ? "bg-ink-900 text-white"
+                          : "bg-white text-ink-600 hover:bg-ink-50"
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
               </dd>
             </div>
+            {totals.voucherDiscount > 0 && (
+              <div className="flex justify-between text-xs">
+                <dt className="text-ink-400">値引き額</dt>
+                <dd className="tabular text-rose-700">-{yen.format(totals.voucherDiscount)}</dd>
+              </div>
+            )}
             <div className="flex justify-between">
               <dt className="text-ink-400">消費税</dt>
               <dd className="tabular">{yen.format(totals.tax)}</dd>
@@ -649,6 +882,68 @@ export function Register({ stores, staff }: { stores: StoreOption[]; staff: Staf
           }}
           onClose={() => setSearchingMember(false)}
         />
+      )}
+
+      {/* 未登録商品: 商品名と価格を手打ちしてカートに追加 (在庫は動かさない) */}
+      {freeItemOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-ink-900/60 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-label="未登録商品の手入力"
+        >
+          <div className="w-full max-w-sm rounded-xl bg-white p-6 shadow-xl">
+            <h2 className="text-base font-semibold text-ink-900">未登録商品を追加</h2>
+            <p className="mt-1 text-xs leading-relaxed text-ink-400">
+              バーコードが読み取れず商品登録もされていないものを、名前と価格で直接カートに追加します。在庫数は変動しません。
+            </p>
+            <form
+              className="mt-4 space-y-3"
+              onSubmit={(event) => {
+                event.preventDefault();
+                addFreeItem();
+              }}
+            >
+              <label className="flex flex-col gap-1">
+                <span className="text-xs text-ink-400">商品名</span>
+                <input
+                  value={freeName}
+                  onChange={(event) => setFreeName(event.target.value)}
+                  placeholder="例: ノベルティトートバッグ"
+                  autoFocus
+                  className="rounded-lg border border-ink-200 px-3 py-2 text-sm outline-none focus:border-ink-400"
+                />
+              </label>
+              <label className="flex flex-col gap-1">
+                <span className="text-xs text-ink-400">価格 (税抜)</span>
+                <input
+                  type="number"
+                  min={0}
+                  value={freePrice}
+                  onChange={(event) => setFreePrice(event.target.value)}
+                  placeholder="例: 1500"
+                  className="tabular rounded-lg border border-ink-200 px-3 py-2 text-right text-sm outline-none focus:border-ink-400"
+                />
+              </label>
+              <div className="flex gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setFreeItemOpen(false)}
+                  className="flex-1 rounded-lg border border-ink-200 bg-white px-4 py-2 text-sm text-ink-600 hover:bg-ink-50"
+                >
+                  キャンセル
+                </button>
+                <button
+                  type="submit"
+                  disabled={!freeName.trim() || !(Number(freePrice) >= 0) || freePrice.trim() === ""}
+                  className="flex-1 rounded-lg bg-ink-900 px-4 py-2 text-sm font-semibold text-white hover:bg-ink-800 disabled:opacity-40"
+                >
+                  カートに追加
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
       )}
 
       {/* 現金以外: 決済端末での処理が完了したかを確認する */}

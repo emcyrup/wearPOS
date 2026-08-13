@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 
 import { formatYen } from "@/lib/format";
 import { prisma } from "@/lib/db";
+import { allocateMemberCode } from "@/lib/member-code";
 
 const LINE_API = "https://api.line.me/v2/bot";
 
@@ -281,18 +282,9 @@ export async function registerCustomerFromLine(
   for (let attempt = 0; ; attempt++) {
     try {
       return await prisma.$transaction(async (tx) => {
-        const latest = await tx.customer.findFirst({
-          orderBy: { memberCode: "desc" },
-          select: { memberCode: true },
-        });
-        const nextNumber =
-          (latest ? Number.parseInt(latest.memberCode.replace(/\D/g, ""), 10) : 10000) +
-          1 +
-          attempt;
-
         const customer = await tx.customer.create({
           data: {
-            memberCode: `M${nextNumber}`,
+            memberCode: await allocateMemberCode(tx, attempt),
             lastName: input.lastName,
             firstName: input.firstName,
             lastNameKana: input.lastNameKana || null,

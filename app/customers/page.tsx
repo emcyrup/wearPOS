@@ -1,7 +1,7 @@
 import Link from "next/link";
 
 import { LineCampaign } from "@/components/line-campaign";
-import { Badge, Card, EmptyState, PAGE_SIZE, PageHeader, Pagination, Table } from "@/components/ui";
+import { Badge, Card, EmptyState, LinkButton, PAGE_SIZE, PageHeader, Pagination, Table } from "@/components/ui";
 import { DORMANT_DAYS, MEMBER_RANKS, parseTags, rankLabel } from "@/lib/apparel";
 import { prisma } from "@/lib/db";
 import { daysSince, formatDate, formatNumber, formatYen, fullName, fullNameKana } from "@/lib/format";
@@ -65,7 +65,14 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
       <PageHeader
         title="顧客 (CRM)"
         description="購買履歴・ポイント・LINE 連携をまとめて管理します"
-        action={<Badge tone="neutral">{total.toLocaleString("ja-JP")} 名</Badge>}
+        action={
+          <div className="flex items-center gap-2">
+            <Badge tone="neutral">{total.toLocaleString("ja-JP")} 名</Badge>
+            <LinkButton href="/customers/new" variant="primary">
+              顧客を登録
+            </LinkButton>
+          </div>
+        }
       />
 
       <Card title="LINE 一斉配信" className="mb-4">

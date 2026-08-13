@@ -57,10 +57,12 @@ export default async function ReceiptPage({ params }: { params: Promise<{ id: st
         <div className="mt-2 border-t border-dashed border-ink-300 pt-2">
           {sale.lines.map((line) => (
             <div key={line.id} className="mb-1.5">
-              <p className="truncate">{line.variant.product.name}</p>
+              {/* 手入力商品 (variant なし) は明細 note の商品名を印字する */}
+              <p className="truncate">{line.variant?.product.name ?? line.note ?? "手入力商品"}</p>
               <div className="tabular flex justify-between text-[11px] text-ink-600">
                 <span>
-                  {line.variant.colorName}/{line.variant.sizeName} ×{line.quantity}
+                  {line.variant ? `${line.variant.colorName}/${line.variant.sizeName} ` : ""}×
+                  {line.quantity}
                 </span>
                 <span>{formatYen(line.lineTotal)}</span>
               </div>

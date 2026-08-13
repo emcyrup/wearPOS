@@ -9,6 +9,16 @@ export const dynamic = "force-dynamic";
 
 type Search = { store?: string; q?: string; type?: string; from?: string; to?: string; page?: string };
 
+/** 支払方法の表示順と、内訳グラフの色 */
+const PAYMENT_METHOD_ORDER = ["CASH", "CREDIT", "E_MONEY", "QR", "OTHER"] as const;
+const PAYMENT_COLORS: Record<string, string> = {
+  CASH: "#059669",
+  CREDIT: "#0284c7",
+  E_MONEY: "#7c3aed",
+  QR: "#d97706",
+  OTHER: "#64748b",
+};
+
 export default async function SalesPage({ searchParams }: { searchParams: Promise<Search> }) {
   const params = await searchParams;
   const q = params.q?.trim() ?? "";
@@ -37,7 +47,7 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
 
   const page = Math.max(1, Number(params.page) || 1);
 
-  const [sales, aggregate] = await Promise.all([
+  const [sales, aggregate, byPayment] = await Promise.all([
     prisma.sale.findMany({
       where,
       include: {
@@ -51,13 +61,48 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
       take: PAGE_SIZE,
     }),
     prisma.sale.aggregate({ where, _sum: { total: true }, _count: { _all: true } }),
+    prisma.sale.groupBy({
+      by: ["paymentMethod", "type"],
+      where,
+      _sum: { total: true },
+      _count: { _all: true },
+    }),
   ]);
+
+  // 支払方法別の集計。返品は売上から差し引いた正味額で見せる
+  const paymentStats = PAYMENT_METHOD_ORDER.map((method) => {
+    const rows = byPayment.filter((row) => row.paymentMethod === method);
+    const saleTotal = rows
+      .filter((row) => row.type !== "RETURN")
+      .reduce((sum, row) => sum + (row._sum.total ?? 0), 0);
+    const returnTotal = rows
+      .filter((row) => row.type === "RETURN")
+      .reduce((sum, row) => sum + (row._sum.total ?? 0), 0);
+    return {
+      method,
+      label: PAYMENT_METHOD_LABEL[method] ?? method,
+      color: PAYMENT_COLORS[method] ?? "#64748b",
+      net: saleTotal - returnTotal,
+      count: rows.reduce((sum, row) => sum + row._count._all, 0),
+      returnCount: rows
+        .filter((row) => row.type === "RETURN")
+        .reduce((sum, row) => sum + row._count._all, 0),
+    };
+  }).filter((stat) => stat.count > 0);
+
+  const netTotal = paymentStats.reduce((sum, stat) => sum + stat.net, 0);
+  const shareBase = paymentStats.reduce((sum, stat) => sum + Math.max(0, stat.net), 0);
+  const saleCount = byPayment
+    .filter((row) => row.type !== "RETURN")
+    .reduce((sum, row) => sum + row._count._all, 0);
+  const returnCount = aggregate._count._all - saleCount;
+  const averageOrder = saleCount > 0 ? Math.round(netTotal / saleCount) : 0;
 
   return (
     <>
       <PageHeader
         title="取引履歴"
-        description="POSレジ連携APIで取り込まれた取引の一覧です"
+        description="店頭レジと POS 連携 API の取引を、支払方法別の内訳と一覧で確認できます"
         action={
           <div className="flex gap-2">
             <Badge tone="neutral">{formatNumber(aggregate._count._all)} 件</Badge>
@@ -138,6 +183,82 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
             クリア
           </Link>
         </form>
+      </Card>
+
+      {/* 絞り込み条件に連動する売上サマリー (支払方法別の内訳) */}
+      <div className="mb-4 grid gap-3 sm:grid-cols-3">
+        <div className="rounded-xl border border-ink-200 bg-white px-5 py-4">
+          <p className="text-xs font-medium text-ink-400">売上合計 (返品差引・税込)</p>
+          <p className="tabular mt-1.5 text-2xl font-semibold tracking-tight">
+            {formatYen(netTotal)}
+          </p>
+        </div>
+        <div className="rounded-xl border border-ink-200 bg-white px-5 py-4">
+          <p className="text-xs font-medium text-ink-400">取引件数</p>
+          <p className="tabular mt-1.5 text-2xl font-semibold tracking-tight">
+            {formatNumber(saleCount)} 件
+          </p>
+          {returnCount > 0 && (
+            <p className="mt-1 text-xs text-ink-400">ほか返品 {formatNumber(returnCount)} 件</p>
+          )}
+        </div>
+        <div className="rounded-xl border border-ink-200 bg-white px-5 py-4">
+          <p className="text-xs font-medium text-ink-400">平均客単価</p>
+          <p className="tabular mt-1.5 text-2xl font-semibold tracking-tight">
+            {formatYen(averageOrder)}
+          </p>
+        </div>
+      </div>
+
+      <Card title="支払方法別の内訳" className="mb-4">
+        {paymentStats.length ? (
+          <>
+            {/* 構成比バー */}
+            {shareBase > 0 && (
+              <div className="flex h-3 overflow-hidden rounded-full bg-ink-100">
+                {paymentStats
+                  .filter((stat) => stat.net > 0)
+                  .map((stat) => (
+                    <div
+                      key={stat.method}
+                      title={`${stat.label} ${formatYen(stat.net)}`}
+                      style={{
+                        width: `${(stat.net / shareBase) * 100}%`,
+                        backgroundColor: stat.color,
+                      }}
+                    />
+                  ))}
+              </div>
+            )}
+            <div className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-5 sm:grid-cols-3">
+              {paymentStats.map((stat) => (
+                <div key={stat.method} className="rounded-lg border border-ink-100 px-3 py-2.5">
+                  <p className="flex items-center gap-1.5 text-xs font-medium text-ink-500">
+                    <span
+                      className="inline-block h-2.5 w-2.5 rounded-full"
+                      style={{ backgroundColor: stat.color }}
+                    />
+                    {stat.label}
+                  </p>
+                  <p className="tabular mt-1 text-lg font-semibold tracking-tight">
+                    {formatYen(stat.net)}
+                  </p>
+                  <p className="tabular mt-0.5 text-[11px] text-ink-400">
+                    {formatNumber(stat.count)} 件
+                    {shareBase > 0 && stat.net > 0 && (
+                      <> · {Math.round((stat.net / shareBase) * 100)}%</>
+                    )}
+                    {stat.returnCount > 0 && <> · 返品 {stat.returnCount}</>}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </>
+        ) : (
+          <p className="py-4 text-center text-sm text-ink-400">
+            条件に一致する取引がないため内訳を表示できません
+          </p>
+        )}
       </Card>
 
       <Card>

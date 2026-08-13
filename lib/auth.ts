@@ -20,7 +20,6 @@ export const FEATURES = [
   { key: "inventory", label: "在庫", path: "/inventory" },
   { key: "customers", label: "顧客 (CRM)", path: "/customers" },
   { key: "sales", label: "取引履歴", path: "/sales" },
-  { key: "scan", label: "スキャン", path: "/scan" },
   { key: "settings", label: "設定 / 連携", path: "/settings" },
 ] as const;
 
@@ -29,7 +28,17 @@ export type FeatureKey = (typeof FEATURES)[number]["key"];
 export const FEATURE_KEYS = FEATURES.map((f) => f.key);
 
 /** 新規スタッフに付ける既定の機能 (レジ・在庫まわりのみ) */
-export const DEFAULT_STAFF_FEATURES: FeatureKey[] = ["register", "scan", "inventory"];
+export const DEFAULT_STAFF_FEATURES: FeatureKey[] = ["register", "products", "inventory"];
+
+/**
+ * 保存済みの機能キーを現行の一覧へそろえる。
+ * 旧「scan」はスキャンが商品機能配下へ移ったため products として扱う。
+ */
+export function normalizeFeatures(features: string[]): string[] {
+  return [
+    ...new Set(features.map((f) => (f === "scan" ? "products" : f))),
+  ].filter((f) => (FEATURE_KEYS as string[]).includes(f));
+}
 
 export function canUseFeature(
   user: Pick<SessionPayload, "role" | "features">,
@@ -81,7 +90,7 @@ export async function establishSession(user: {
     username: user.username,
     name: user.displayName,
     role: user.role === "ADMIN" ? "ADMIN" : "STAFF",
-    features: user.features,
+    features: normalizeFeatures(user.features),
   });
   const store = await cookies();
   store.set(SESSION_COOKIE, token, {

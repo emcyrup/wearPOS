@@ -217,11 +217,44 @@ async function buildReply(text: string, customerId: string, origin: string): Pro
     ].join("\n");
   }
 
+  // お客様側での通知 (リマインド・キャンペーン配信) のオンオフ
+  if (/通知オフ|通知off|配信停止|配信オフ/i.test(text)) {
+    await prisma.customer.update({
+      where: { id: customer.id },
+      data: { reminderOptOut: true },
+    });
+    return [
+      "再来店のご案内などのお知らせ配信を停止しました。",
+      "お買い上げ時のお知らせは引き続きお届けします。",
+      "再開したいときは「通知オン」と送信してください。",
+    ].join("\n");
+  }
+
+  if (/通知オン|通知on|配信再開|配信オン/i.test(text)) {
+    await prisma.customer.update({
+      where: { id: customer.id },
+      data: { reminderOptOut: false },
+    });
+    return "お知らせ配信を再開しました。今後もお得な情報をお届けします。";
+  }
+
+  // お客様側からの連携解除
+  if (/連携解除|連携かいじょ|退会/.test(text)) {
+    await prisma.lineAccount.delete({ where: { customerId: customer.id } });
+    return [
+      `${fullName(customer)} 様の LINE 連携を解除しました。`,
+      "会員情報とポイントはお店に残っています。",
+      "再度連携するときは、店頭スタッフに連携コードの発行をご依頼ください。",
+    ].join("\n");
+  }
+
   return [
     "以下のキーワードにお答えできます。",
     "・「会員証」… レジで提示できる会員証バーコード",
     "・「ポイント」… 現在のポイント残高",
     "・「履歴」… 直近のお買い上げ内容",
+    "・「通知オフ」/「通知オン」… お知らせ配信の停止 / 再開",
+    "・「連携解除」… LINE 連携の解除",
     "",
     "その他のお問い合わせは店頭スタッフまでお願いいたします。",
   ].join("\n");

@@ -11,12 +11,10 @@ import { isAuthDisabled, SESSION_COOKIE, verifySession } from "@/lib/session";
 
 /** パスの先頭 → 機能キー */
 const PATH_FEATURES: [prefix: string, feature: string][] = [
-  ["/register", "register"],
   ["/products", "products"],
   ["/inventory", "inventory"],
   ["/customers", "customers"],
   ["/sales", "sales"],
-  ["/scan", "scan"],
   ["/settings", "settings"],
   ["/api/insights", "dashboard"],
 ];
@@ -28,7 +26,6 @@ const FEATURE_PATHS: Record<string, string> = {
   inventory: "/inventory",
   customers: "/customers",
   sales: "/sales",
-  scan: "/scan",
   settings: "/settings",
 };
 
@@ -81,8 +78,9 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  // 静的ファイル・POS 連携 API・LINE Webhook・ヘルスチェック・会員証ページは対象外
+  // 静的ファイル・POS 連携 API・LINE Webhook・ヘルスチェック・会員証ページ・
+  // レジ (店頭端末でログインなしに使うため公開。レシート印刷も含む) は対象外
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|api/pos|api/line|api/health|api/reminders|api/liff|card/|signup/|points/|liff|.*\\.(?:png|jpg|svg|ico|webmanifest)).*)",
+    "/((?!_next/static|_next/image|favicon.ico|api/pos|api/line|api/health|api/reminders|api/liff|api/barcode-lookup|register|sales/[^/]+/receipt|card/|signup/|points/|liff|.*\\.(?:png|jpg|svg|ico|webmanifest)).*)",
   ],
 };
