@@ -10,6 +10,7 @@ import {
 import {
   addProductField,
   deleteProductField,
+  moveProductField,
   setProductFieldVisibility,
   updateProductField,
   type ProductFieldActionState,
@@ -349,26 +350,52 @@ export function ProductFieldSettings({
   return (
     <div>
       <div className="grid gap-4 lg:grid-cols-[230px_1fr]">
-        {/* 項目一覧 (選択) */}
+        {/* 項目一覧 (選択 + ↑↓ で表示順の変更) */}
         <ul className="flex flex-row flex-wrap gap-1.5 lg:flex-col lg:gap-1">
-          {fields.map((field) => (
-            <li key={field.id}>
+          {fields.map((field, index) => (
+            <li key={field.id} className="flex items-center gap-1">
               <button
                 type="button"
                 onClick={() => setSelectedId(field.id)}
-                className={`flex w-full items-center justify-between gap-2 rounded-lg border px-3 py-1.5 text-left text-sm transition-colors ${
+                className={`flex min-w-0 flex-1 items-center justify-between gap-2 rounded-lg border px-3 py-1.5 text-left text-sm transition-colors ${
                   selected?.id === field.id
                     ? "border-ink-900 bg-ink-900 text-white"
                     : "border-ink-200 bg-white text-ink-600 hover:bg-ink-50"
                 }`}
               >
-                <span className={field.isVisible ? "" : "line-through opacity-60"}>
+                <span className={`truncate ${field.isVisible ? "" : "line-through opacity-60"}`}>
                   {field.label}
                 </span>
                 {!field.builtinKey && (
                   <Badge tone={selected?.id === field.id ? "neutral" : "info"}>カスタム</Badge>
                 )}
               </button>
+              <span className="flex shrink-0 flex-col">
+                <button
+                  type="button"
+                  onClick={() =>
+                    startTransition(async () => setFeedback(await moveProductField(field.id, "up")))
+                  }
+                  disabled={pending || index === 0}
+                  aria-label={`${field.label} を上へ`}
+                  className="h-4 w-5 text-[10px] leading-none text-ink-400 hover:text-ink-900 disabled:opacity-20"
+                >
+                  ▲
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    startTransition(async () =>
+                      setFeedback(await moveProductField(field.id, "down")),
+                    )
+                  }
+                  disabled={pending || index === fields.length - 1}
+                  aria-label={`${field.label} を下へ`}
+                  className="h-4 w-5 text-[10px] leading-none text-ink-400 hover:text-ink-900 disabled:opacity-20"
+                >
+                  ▼
+                </button>
+              </span>
             </li>
           ))}
         </ul>

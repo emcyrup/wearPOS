@@ -284,7 +284,9 @@ export function Register({ stores, staff }: { stores: StoreOption[]; staff: Staf
   const shortage = tenderedEntered ? Math.max(0, totals.payable - tenderedValue) : totals.payable;
   // 現金は預かり金の入力が必須。ポイントで全額充当された場合 (支払0円) は不要
   const cashReady = !isCash || totals.payable === 0 || (tenderedEntered && shortage === 0);
-  const canCheckout = lines.length > 0 && !busy && cashReady;
+  // 担当者が未選択のままでは会計できない (誰の売上か分からなくなるのを防ぐ)
+  const staffReady = staffCode !== "";
+  const canCheckout = lines.length > 0 && !busy && cashReady && staffReady;
 
   const submit = async () => {
     if (lines.length === 0 || busy) return;
@@ -605,7 +607,9 @@ export function Register({ stores, staff }: { stores: StoreOption[]; staff: Staf
               </label>
             )}
             <div className="flex flex-col gap-1">
-              <span className="text-xs text-ink-400">担当スタッフ</span>
+              <span className="text-xs text-ink-400">
+                担当スタッフ <span className="text-rose-600">*</span>
+              </span>
               <div className="flex gap-1.5">
                 <select
                   value={staffCode}
@@ -829,11 +833,22 @@ export function Register({ stores, staff }: { stores: StoreOption[]; staff: Staf
             type="button"
             onClick={requestCheckout}
             disabled={!canCheckout}
-            title={!cashReady ? "お預かり金額を入力してください" : undefined}
+            title={
+              !staffReady
+                ? "担当スタッフを選択してください"
+                : !cashReady
+                  ? "お預かり金額を入力してください"
+                  : undefined
+            }
             className="mt-4 w-full rounded-lg bg-ink-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-ink-800 disabled:opacity-40"
           >
             {busy ? "処理中..." : `会計する (${yen.format(totals.payable)})`}
           </button>
+          {!staffReady && lines.length > 0 && (
+            <p className="mt-1.5 text-center text-xs text-rose-700">
+              会計するには担当スタッフを選択してください
+            </p>
+          )}
         </div>
       </div>
 

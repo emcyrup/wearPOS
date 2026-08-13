@@ -109,6 +109,39 @@ export async function deleteProductField(id: string): Promise<ProductFieldAction
   };
 }
 
+/** 項目の表示順を1つ上 / 下へ動かす。順序は商品登録フォームと商品詳細に反映される */
+export async function moveProductField(
+  id: string,
+  direction: "up" | "down",
+): Promise<ProductFieldActionState> {
+  if (!(await requireAdmin())) {
+    return { status: "error", message: "管理者のみ実行できます" };
+  }
+
+  const fields = await prisma.productField.findMany({
+    orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
+  });
+  const index = fields.findIndex((field) => field.id === id);
+  if (index < 0) return { status: "error", message: "項目が見つかりません" };
+
+  const target = direction === "up" ? index - 1 : index + 1;
+  if (target < 0 || target >= fields.length) {
+    return { status: "idle", message: "" };
+  }
+
+  // 入れ替えた配列の順で sortOrder を振り直す (重複した sortOrder も同時に正規化される)
+  const reordered = [...fields];
+  [reordered[index], reordered[target]] = [reordered[target], reordered[index]];
+  await prisma.$transaction(
+    reordered.map((field, order) =>
+      prisma.productField.update({ where: { id: field.id }, data: { sortOrder: order } }),
+    ),
+  );
+
+  revalidatePath("/settings");
+  return { status: "success", message: `「${fields[index].label}」の表示順を変更しました` };
+}
+
 /** 項目の表示 / 非表示を切り替える */
 export async function setProductFieldVisibility(
   id: string,

@@ -34,15 +34,9 @@ export async function ensureProductFields(): Promise<ProductField[]> {
     }
   }
 
-  const fields = await prisma.productField.findMany({
+  // 並びはユーザーが設定した sortOrder に従う (設定画面の ↑↓ で変更できる)
+  return prisma.productField.findMany({
     orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
-  });
-  // 組み込みを定義順で先に、カスタムを後に
-  const builtinOrder = new Map(BUILTIN_PRODUCT_FIELDS.map((def, index) => [def.key, index]));
-  return fields.sort((a, b) => {
-    const ai = a.builtinKey ? (builtinOrder.get(a.builtinKey as BuiltinFieldKey) ?? 99) : 100 + a.sortOrder;
-    const bi = b.builtinKey ? (builtinOrder.get(b.builtinKey as BuiltinFieldKey) ?? 99) : 100 + b.sortOrder;
-    return ai - bi || a.createdAt.getTime() - b.createdAt.getTime();
   });
 }
 

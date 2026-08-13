@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-import { LineCampaign } from "@/components/line-campaign";
+import { LineCampaignLauncher } from "@/components/line-campaign-launcher";
 import { Badge, Card, EmptyState, LinkButton, PAGE_SIZE, PageHeader, Pagination, Table } from "@/components/ui";
 import { DORMANT_DAYS, MEMBER_RANKS, parseTags, rankLabel } from "@/lib/apparel";
 import { LinkRow } from "@/components/link-row";
@@ -70,16 +70,14 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
         action={
           <div className="flex items-center gap-2">
             <Badge tone="neutral">{total.toLocaleString("ja-JP")} 名</Badge>
+            {/* 一斉配信は誤操作を避けるためボタンからモーダルで起動する */}
+            <LineCampaignLauncher />
             <LinkButton href="/customers/new" variant="primary">
               顧客を登録
             </LinkButton>
           </div>
         }
       />
-
-      <Card title="LINE 一斉配信" className="mb-4">
-        <LineCampaign />
-      </Card>
 
       <Card className="mb-4">
         <form className="flex flex-wrap items-end gap-3" method="get">

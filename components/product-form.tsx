@@ -78,13 +78,8 @@ export function ProductForm({
   stores: Option[];
   fields: FieldOption[];
 }) {
-  // 設定で表示にした項目だけをフォームに出す (非表示の組み込み項目は既定値で登録される)
-  const showField = (key: string) => fields.some((field) => field.builtinKey === key);
-  // 設定で名称変更した組み込み項目のラベルを反映する
-  const labelFor = (key: string, fallback: string) =>
-    fields.find((field) => field.builtinKey === key)?.label ?? fallback;
-  const builtinOptions = (key: string) =>
-    fields.find((field) => field.builtinKey === key)?.options ?? [];
+  // フォームには設定 (商品の基本情報 項目) で表示にした項目が、設定した並び順で出る。
+  // 非表示の組み込み項目は既定値で登録される
   const customFields = fields.filter((field) => field.builtinKey === null);
   const [styleCode, setStyleCode] = useState("");
   const [name, setName] = useState("");
@@ -283,67 +278,115 @@ export function ProductForm({
           </div>
 
           <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
-            {showField("brand") && (
-              <label className="block">
-                <span className={labelClass}>{labelFor("brand", "ブランド")}</span>
-                <select
-                  value={brandId}
-                  onChange={(event) => setBrandId(event.target.value)}
-                  className={`${inputClass} bg-white`}
-                >
-                  {brands.map((brand) => (
-                    <option key={brand.id} value={brand.id}>
-                      {brand.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            )}
-            {showField("category") && (
-              <label className="block">
-                <span className={labelClass}>{labelFor("category", "カテゴリ")}</span>
-                <select
-                  value={categoryId}
-                  onChange={(event) => setCategoryId(event.target.value)}
-                  className={`${inputClass} bg-white`}
-                >
-                  {categories.map((category) => (
-                    <option key={category.id} value={category.id}>
-                      {category.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            )}
-            {showField("season") && (
-              <label className="block">
-                <span className={labelClass}>{labelFor("season", "シーズン")}</span>
-                <select
-                  value={seasonId}
-                  onChange={(event) => setSeasonId(event.target.value)}
-                  className={`${inputClass} bg-white`}
-                >
-                  {seasons.map((season) => (
-                    <option key={season.id} value={season.id}>
-                      {season.code ? `${season.code} · ${season.name}` : season.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            )}
-            {/* 設定で追加したカスタム項目 (自由入力) */}
-            {customFields.map((field) => (
-              <label key={field.id} className="block">
-                <span className={labelClass}>{field.label}</span>
-                <TextOrSelect
-                  value={customValues[field.id] ?? ""}
-                  onChange={(next) =>
-                    setCustomValues((prev) => ({ ...prev, [field.id]: next }))
-                  }
-                  options={field.options}
-                />
-              </label>
-            ))}
+            {/* 設定 (商品の基本情報 項目) の表示・並び順どおりにレンダリングする */}
+            {fields.map((field) => {
+              if (field.builtinKey === "brand") {
+                return (
+                  <label key={field.id} className="block">
+                    <span className={labelClass}>{field.label}</span>
+                    <select
+                      value={brandId}
+                      onChange={(event) => setBrandId(event.target.value)}
+                      className={`${inputClass} bg-white`}
+                    >
+                      {brands.map((brand) => (
+                        <option key={brand.id} value={brand.id}>
+                          {brand.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                );
+              }
+              if (field.builtinKey === "category") {
+                return (
+                  <label key={field.id} className="block">
+                    <span className={labelClass}>{field.label}</span>
+                    <select
+                      value={categoryId}
+                      onChange={(event) => setCategoryId(event.target.value)}
+                      className={`${inputClass} bg-white`}
+                    >
+                      {categories.map((category) => (
+                        <option key={category.id} value={category.id}>
+                          {category.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                );
+              }
+              if (field.builtinKey === "season") {
+                return (
+                  <label key={field.id} className="block">
+                    <span className={labelClass}>{field.label}</span>
+                    <select
+                      value={seasonId}
+                      onChange={(event) => setSeasonId(event.target.value)}
+                      className={`${inputClass} bg-white`}
+                    >
+                      {seasons.map((season) => (
+                        <option key={season.id} value={season.id}>
+                          {season.code ? `${season.code} · ${season.name}` : season.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                );
+              }
+              if (field.builtinKey === "material") {
+                return (
+                  <label key={field.id} className="block">
+                    <span className={labelClass}>{field.label}</span>
+                    <TextOrSelect
+                      value={material}
+                      onChange={setMaterial}
+                      options={field.options}
+                      placeholder="ウール80% ナイロン20%"
+                    />
+                  </label>
+                );
+              }
+              if (field.builtinKey === "originCountry") {
+                return (
+                  <label key={field.id} className="block">
+                    <span className={labelClass}>{field.label}</span>
+                    <TextOrSelect
+                      value={originCountry}
+                      onChange={setOriginCountry}
+                      options={field.options}
+                      placeholder="日本"
+                    />
+                  </label>
+                );
+              }
+              if (field.builtinKey === "careNote") {
+                return (
+                  <label key={field.id} className="block">
+                    <span className={labelClass}>{field.label}</span>
+                    <TextOrSelect
+                      value={careNote}
+                      onChange={setCareNote}
+                      options={field.options}
+                      placeholder="ドライクリーニング推奨"
+                    />
+                  </label>
+                );
+              }
+              // カスタム項目
+              return (
+                <label key={field.id} className="block">
+                  <span className={labelClass}>{field.label}</span>
+                  <TextOrSelect
+                    value={customValues[field.id] ?? ""}
+                    onChange={(next) =>
+                      setCustomValues((prev) => ({ ...prev, [field.id]: next }))
+                    }
+                    options={field.options}
+                  />
+                </label>
+              );
+            })}
           </div>
 
           {/* カラー × サイズ (選んだ全組み合わせが SKU になる) */}
@@ -436,41 +479,6 @@ export function ProductForm({
                 className={`${inputClass} tabular text-right`}
               />
             </label>
-          </div>
-          <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
-            {showField("material") && (
-              <label className="block">
-                <span className={labelClass}>{labelFor("material", "素材・組成")}</span>
-                <TextOrSelect
-                  value={material}
-                  onChange={setMaterial}
-                  options={builtinOptions("material")}
-                  placeholder="ウール80% ナイロン20%"
-                />
-              </label>
-            )}
-            {showField("originCountry") && (
-              <label className="block">
-                <span className={labelClass}>{labelFor("originCountry", "原産国")}</span>
-                <TextOrSelect
-                  value={originCountry}
-                  onChange={setOriginCountry}
-                  options={builtinOptions("originCountry")}
-                  placeholder="日本"
-                />
-              </label>
-            )}
-            {showField("careNote") && (
-              <label className="block">
-                <span className={labelClass}>{labelFor("careNote", "取扱い注意")}</span>
-                <TextOrSelect
-                  value={careNote}
-                  onChange={setCareNote}
-                  options={builtinOptions("careNote")}
-                  placeholder="ドライクリーニング推奨"
-                />
-              </label>
-            )}
           </div>
         </div>
 
