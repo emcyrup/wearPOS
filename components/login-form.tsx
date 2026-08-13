@@ -3,7 +3,7 @@
 import { useActionState } from "react";
 import { useFormStatus } from "react-dom";
 
-import { createInitialAdmin, login, type LoginState } from "@/app/login/actions";
+import { createInitialAdmin, login, type LoginState } from "@/app/(app)/login/actions";
 
 const INITIAL: LoginState = { error: "" };
 

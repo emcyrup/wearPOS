@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 
-import { runRemindersNow, updateReminderRule } from "@/app/settings/reminder-actions";
+import { runRemindersNow, updateReminderRule } from "@/app/(app)/settings/reminder-actions";
 
 type RuleView = {
   key: "PURCHASE_FOLLOW" | "REVISIT" | "DORMANT" | "BIRTHDAY";

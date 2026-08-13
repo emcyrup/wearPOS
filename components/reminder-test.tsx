@@ -7,7 +7,7 @@ import {
   searchTestCustomers,
   sendTestReminder,
   type TestCustomer,
-} from "@/app/settings/reminder-test-actions";
+} from "@/app/(app)/settings/reminder-test-actions";
 
 type RuleOption = { key: string; label: string };
 

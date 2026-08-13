@@ -24,7 +24,13 @@ const createSchema = z.object({
   costPrice: z.number().int().nonnegative().max(10_000_000).default(0),
   taxRate: z.number().min(0).max(1).default(0.1),
   material: z.string().trim().max(200).default(""),
+  originCountry: z.string().trim().max(50).default(""),
   careNote: z.string().trim().max(200).default(""),
+  /** 設定で追加したカスタム項目の入力値 */
+  customFields: z
+    .array(z.object({ fieldId: z.string().min(1), value: z.string().trim().min(1).max(200) }))
+    .max(30)
+    .default([]),
   colors: z
     .array(
       z.object({
@@ -125,6 +131,7 @@ export async function createProduct(input: unknown): Promise<CreateProductResult
           costPrice: data.costPrice,
           taxRate: data.taxRate,
           material: data.material || null,
+          originCountry: data.originCountry || null,
           careNote: data.careNote || null,
           variants: {
             create: variants.map((variant, index) => ({
@@ -135,6 +142,25 @@ export async function createProduct(input: unknown): Promise<CreateProductResult
         },
         include: { variants: true },
       });
+
+      // カスタム項目 (設定で追加した項目) の入力値を保存する
+      if (data.customFields.length > 0) {
+        const validFields = await tx.productField.findMany({
+          where: { id: { in: data.customFields.map((entry) => entry.fieldId) }, builtinKey: null },
+          select: { id: true },
+        });
+        const validIds = new Set(validFields.map((field) => field.id));
+        const entries = data.customFields.filter((entry) => validIds.has(entry.fieldId));
+        if (entries.length > 0) {
+          await tx.productFieldValue.createMany({
+            data: entries.map((entry) => ({
+              productId: created.id,
+              fieldId: entry.fieldId,
+              value: entry.value,
+            })),
+          });
+        }
+      }
 
       // 初期在庫。指定した店舗すべてに同じ数量で作る
       if (data.storeIds.length > 0 && (data.initialStock > 0 || data.safetyStock > 0)) {

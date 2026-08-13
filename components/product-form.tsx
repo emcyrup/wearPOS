@@ -3,10 +3,14 @@
 import Link from "next/link";
 import { useMemo, useState, useTransition } from "react";
 
-import { createProduct, type CreateProductResult } from "@/app/products/new/actions";
+import { createProduct, type CreateProductResult } from "@/app/(app)/products/new/actions";
+import { JanMonthInput } from "@/components/jan-month-input";
 import { buildSku, STANDARD_COLORS, STANDARD_SIZES } from "@/lib/apparel";
 
 type Option = { id: string; name: string; code?: string };
+
+/** 設定 (商品の基本情報 項目) で表示にした項目。builtinKey が null ならカスタム項目 */
+export type FieldOption = { id: string; builtinKey: string | null; label: string };
 
 const inputClass =
   "w-full rounded-lg border border-ink-200 px-3 py-2 text-sm outline-none focus:border-ink-400";
@@ -21,12 +25,17 @@ export function ProductForm({
   categories,
   seasons,
   stores,
+  fields,
 }: {
   brands: Option[];
   categories: Option[];
   seasons: Option[];
   stores: Option[];
+  fields: FieldOption[];
 }) {
+  // 設定で表示にした項目だけをフォームに出す (非表示の組み込み項目は既定値で登録される)
+  const showField = (key: string) => fields.some((field) => field.builtinKey === key);
+  const customFields = fields.filter((field) => field.builtinKey === null);
   const [styleCode, setStyleCode] = useState("");
   const [name, setName] = useState("");
   const [brandId, setBrandId] = useState(brands[0]?.id ?? "");
@@ -36,12 +45,16 @@ export function ProductForm({
   const [currentPrice, setCurrentPrice] = useState("");
   const [costPrice, setCostPrice] = useState("");
   const [material, setMaterial] = useState("");
+  const [originCountry, setOriginCountry] = useState("");
   const [careNote, setCareNote] = useState("");
+  /** カスタム項目の入力値 (fieldId → value) */
+  const [customValues, setCustomValues] = useState<Record<string, string>>({});
   const [colorCodes, setColorCodes] = useState<string[]>(["BLK"]);
   const [sizeCodes, setSizeCodes] = useState<string[]>(["S", "M", "L"]);
   const [generateBarcodes, setGenerateBarcodes] = useState(true);
-  // JAN 採番の年月 (490 + YYMM + 連番5桁 + チェックデジット)。既定は当月
-  const [janYearMonth, setJanYearMonth] = useState(() => {
+  // JAN 採番の年月 "YYYY-MM" (490 + YYMM + 連番5桁 + チェックデジット)。既定は当月。
+  // 入力欄では数字6桁 (YYYYMM) で受け、正規化できないあいだは null
+  const [janYearMonth, setJanYearMonth] = useState<string | null>(() => {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
   });
@@ -84,7 +97,11 @@ export function ProductForm({
         costPrice: Number(costPrice) || 0,
         taxRate: 0.1,
         material,
+        originCountry,
         careNote,
+        customFields: customFields
+          .map((field) => ({ fieldId: field.id, value: (customValues[field.id] ?? "").trim() }))
+          .filter((entry) => entry.value),
         colors: selectedColors.map((color) => ({
           code: color.code,
           name: color.name,
@@ -92,7 +109,7 @@ export function ProductForm({
         })),
         sizes: selectedSizes.map((size) => ({ code: size.code, name: size.name })),
         generateBarcodes,
-        janYearMonth,
+        janYearMonth: janYearMonth ?? undefined,
         initialStock: Number(initialStock) || 0,
         safetyStock: Number(safetyStock) || 0,
         storeIds,
@@ -183,48 +200,67 @@ export function ProductForm({
                 className={inputClass}
               />
             </label>
-            <label className="block">
-              <span className={labelClass}>ブランド</span>
-              <select
-                value={brandId}
-                onChange={(event) => setBrandId(event.target.value)}
-                className={`${inputClass} bg-white`}
-              >
-                {brands.map((brand) => (
-                  <option key={brand.id} value={brand.id}>
-                    {brand.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="block">
-              <span className={labelClass}>カテゴリ</span>
-              <select
-                value={categoryId}
-                onChange={(event) => setCategoryId(event.target.value)}
-                className={`${inputClass} bg-white`}
-              >
-                {categories.map((category) => (
-                  <option key={category.id} value={category.id}>
-                    {category.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="block">
-              <span className={labelClass}>シーズン</span>
-              <select
-                value={seasonId}
-                onChange={(event) => setSeasonId(event.target.value)}
-                className={`${inputClass} bg-white`}
-              >
-                {seasons.map((season) => (
-                  <option key={season.id} value={season.id}>
-                    {season.code ? `${season.code} · ${season.name}` : season.name}
-                  </option>
-                ))}
-              </select>
-            </label>
+            {showField("brand") && (
+              <label className="block">
+                <span className={labelClass}>ブランド</span>
+                <select
+                  value={brandId}
+                  onChange={(event) => setBrandId(event.target.value)}
+                  className={`${inputClass} bg-white`}
+                >
+                  {brands.map((brand) => (
+                    <option key={brand.id} value={brand.id}>
+                      {brand.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
+            {showField("category") && (
+              <label className="block">
+                <span className={labelClass}>カテゴリ</span>
+                <select
+                  value={categoryId}
+                  onChange={(event) => setCategoryId(event.target.value)}
+                  className={`${inputClass} bg-white`}
+                >
+                  {categories.map((category) => (
+                    <option key={category.id} value={category.id}>
+                      {category.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
+            {showField("season") && (
+              <label className="block">
+                <span className={labelClass}>シーズン</span>
+                <select
+                  value={seasonId}
+                  onChange={(event) => setSeasonId(event.target.value)}
+                  className={`${inputClass} bg-white`}
+                >
+                  {seasons.map((season) => (
+                    <option key={season.id} value={season.id}>
+                      {season.code ? `${season.code} · ${season.name}` : season.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
+            {/* 設定で追加したカスタム項目 (自由入力) */}
+            {customFields.map((field) => (
+              <label key={field.id} className="block">
+                <span className={labelClass}>{field.label}</span>
+                <input
+                  value={customValues[field.id] ?? ""}
+                  onChange={(event) =>
+                    setCustomValues((prev) => ({ ...prev, [field.id]: event.target.value }))
+                  }
+                  className={inputClass}
+                />
+              </label>
+            ))}
           </div>
         </div>
 
@@ -269,24 +305,39 @@ export function ProductForm({
             </label>
           </div>
           <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <label className="block">
-              <span className={labelClass}>素材・組成</span>
-              <input
-                value={material}
-                onChange={(event) => setMaterial(event.target.value)}
-                placeholder="ウール80% ナイロン20%"
-                className={inputClass}
-              />
-            </label>
-            <label className="block">
-              <span className={labelClass}>取扱い注意</span>
-              <input
-                value={careNote}
-                onChange={(event) => setCareNote(event.target.value)}
-                placeholder="ドライクリーニング推奨"
-                className={inputClass}
-              />
-            </label>
+            {showField("material") && (
+              <label className="block">
+                <span className={labelClass}>素材・組成</span>
+                <input
+                  value={material}
+                  onChange={(event) => setMaterial(event.target.value)}
+                  placeholder="ウール80% ナイロン20%"
+                  className={inputClass}
+                />
+              </label>
+            )}
+            {showField("originCountry") && (
+              <label className="block">
+                <span className={labelClass}>原産国</span>
+                <input
+                  value={originCountry}
+                  onChange={(event) => setOriginCountry(event.target.value)}
+                  placeholder="日本"
+                  className={inputClass}
+                />
+              </label>
+            )}
+            {showField("careNote") && (
+              <label className="block">
+                <span className={labelClass}>取扱い注意</span>
+                <input
+                  value={careNote}
+                  onChange={(event) => setCareNote(event.target.value)}
+                  placeholder="ドライクリーニング推奨"
+                  className={inputClass}
+                />
+              </label>
+            )}
           </div>
         </div>
 
@@ -351,17 +402,18 @@ export function ProductForm({
             </label>
             {generateBarcodes && (
               <div className="mt-2 flex flex-wrap items-center gap-2 pl-6">
-                <label className="flex items-center gap-2 text-sm text-ink-600">
+                <span className="flex items-center gap-2 text-sm text-ink-600">
                   採番年月
-                  <input
-                    type="month"
-                    value={janYearMonth}
-                    onChange={(event) => setJanYearMonth(event.target.value)}
-                    className="rounded-lg border border-ink-200 px-2 py-1 text-sm outline-none focus:border-ink-400"
+                  <JanMonthInput
+                    defaultValue={(() => {
+                      const now = new Date();
+                      return `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}`;
+                    })()}
+                    onValueChange={setJanYearMonth}
                   />
-                </label>
+                </span>
                 <span className="text-xs text-ink-400">
-                  コードは「年月 (YYMM) + 連番5桁」で自動採番されます
+                  数字6桁 (例: 202608)。コードは「年月 + 連番5桁」で自動採番されます
                 </span>
               </div>
             )}
@@ -441,7 +493,14 @@ export function ProductForm({
           {error && <p className="mb-3 text-sm text-rose-700">{error}</p>}
           <button
             type="submit"
-            disabled={pending || skus.length === 0 || !name.trim() || !listPrice}
+            disabled={
+              pending ||
+              skus.length === 0 ||
+              !name.trim() ||
+              !listPrice ||
+              // 採番する場合は年月 (数字6桁) が正しく入力されていること
+              (generateBarcodes && !janYearMonth)
+            }
             className="w-full rounded-lg bg-ink-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-ink-800 disabled:opacity-40"
           >
             {pending ? "登録中..." : `${skus.length} SKU を登録する`}

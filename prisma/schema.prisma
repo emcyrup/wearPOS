@@ -121,11 +121,40 @@ model Product {
 
   variants     ProductVariant[]
   priceChanges PriceChange[]
+  fieldValues  ProductFieldValue[]
 
   @@index([brandId])
   @@index([categoryId])
   @@index([seasonId])
   @@index([status])
+}
+
+/// 商品の基本情報に表示する項目。
+/// 組み込み項目 (builtinKey あり) は表示のオンオフのみ、カスタム項目はユーザーが任意に追加・削除できる
+model ProductField {
+  id         String   @id @default(cuid())
+  /// 組み込み項目のキー (brand | category | season | material | originCountry | careNote)。カスタム項目は null
+  builtinKey String?  @unique
+  label      String
+  isVisible  Boolean  @default(true)
+  sortOrder  Int      @default(0)
+  createdAt  DateTime @default(now())
+
+  values ProductFieldValue[]
+}
+
+/// カスタム項目の商品ごとの値
+model ProductFieldValue {
+  id        String @id @default(cuid())
+  productId String
+  fieldId   String
+  value     String
+
+  product Product      @relation(fields: [productId], references: [id], onDelete: Cascade)
+  field   ProductField @relation(fields: [fieldId], references: [id], onDelete: Cascade)
+
+  @@unique([productId, fieldId])
+  @@index([fieldId])
 }
 
 /// カラー×サイズの実在庫単位 (SKU)

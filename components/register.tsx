@@ -1,9 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { checkout, lookupMember, type CheckoutResult, type MemberSummary } from "@/app/register/actions";
+import { checkout, lookupMember, type CheckoutResult, type MemberSummary } from "@/app/(public)/register/actions";
 import { ScanButton } from "@/components/barcode-scanner";
 import { MemberSearchModal, ProductSearchModal } from "@/components/register-search";
 
@@ -107,6 +107,12 @@ export function Register({ stores, staff }: { stores: StoreOption[]; staff: Staf
   const freeSeq = useRef(0);
   const [done, setDone] = useState<(CheckoutResult & { ok: true; change: number | null }) | null>(null);
   const codeRef = useRef<HTMLInputElement | null>(null);
+
+  // ナビの「レジ」クリックで既存タブを再利用できるよう、タブに名前を付ける
+  // (components/nav-links.tsx の REGISTER_WINDOW_NAME と一致させる)
+  useEffect(() => {
+    window.name = "wearpos-register";
+  }, []);
 
   const storeStaff = staff.filter((s) => !s.storeCode || s.storeCode === storeCode);
 

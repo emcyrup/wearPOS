@@ -11,7 +11,7 @@ import {
   deleteStaff,
   restoreStaff,
   type MasterActionState,
-} from "@/app/settings/master-actions";
+} from "@/app/(app)/settings/master-actions";
 import { Badge } from "@/components/ui";
 
 const inputClass =

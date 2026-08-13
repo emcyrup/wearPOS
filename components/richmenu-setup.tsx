@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 
-import { applyRichMenu, type RichMenuResult } from "@/app/settings/line-actions";
+import { applyRichMenu, type RichMenuResult } from "@/app/(app)/settings/line-actions";
 
 /**
  * リッチメニューの適用ボタン。

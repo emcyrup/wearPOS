@@ -15,7 +15,11 @@ export default async function RegisterPage() {
   ]);
 
   return (
-    <>
+    // レジ専用タブ想定のため、サイドバーなしの全幅レイアウトで表示する
+    <div className="mx-auto max-w-6xl">
+      <p className="mb-1 text-sm font-semibold tracking-tight text-ink-400">
+        wear<span className="text-accent">POS</span>
+      </p>
       <PageHeader
         title="レジ"
         description="バーコードをスキャンして商品を追加し、その場で会計します。在庫・顧客実績・ポイントに即時反映されます"
@@ -28,6 +32,6 @@ export default async function RegisterPage() {
           storeCode: s.store?.code ?? null,
         }))}
       />
-    </>
+    </div>
   );
 }

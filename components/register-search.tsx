@@ -7,7 +7,7 @@ import {
   searchProducts,
   type MemberSearchResult,
   type ProductSearchResult,
-} from "@/app/register/actions";
+} from "@/app/(public)/register/actions";
 
 const yen = new Intl.NumberFormat("ja-JP", {
   style: "currency",

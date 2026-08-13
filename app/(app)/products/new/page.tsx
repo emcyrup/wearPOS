@@ -5,6 +5,7 @@ import { ProductForm } from "@/components/product-form";
 import { PageHeader } from "@/components/ui";
 import { getSessionUser } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { visibleProductFields } from "@/lib/product-fields";
 
 export const dynamic = "force-dynamic";
 
@@ -13,11 +14,12 @@ export default async function NewProductPage() {
   const user = await getSessionUser();
   if (user?.role !== "ADMIN") notFound();
 
-  const [brands, categories, seasons, stores] = await Promise.all([
+  const [brands, categories, seasons, stores, fields] = await Promise.all([
     prisma.brand.findMany({ orderBy: { code: "asc" } }),
     prisma.category.findMany({ orderBy: { code: "asc" } }),
     prisma.season.findMany({ where: { isArchived: false }, orderBy: [{ year: "desc" }, { term: "asc" }] }),
     prisma.store.findMany({ where: { isActive: true }, orderBy: { code: "asc" } }),
+    visibleProductFields(),
   ]);
 
   return (
@@ -40,6 +42,11 @@ export default async function NewProductPage() {
           code: season.code,
         }))}
         stores={stores.map((store) => ({ id: store.id, name: store.name }))}
+        fields={fields.map((field) => ({
+          id: field.id,
+          builtinKey: field.builtinKey,
+          label: field.label,
+        }))}
       />
     </>
   );

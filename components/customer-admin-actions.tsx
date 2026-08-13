@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 
-import { deleteCustomer, unlinkCustomerLine } from "@/app/customers/actions";
+import { deleteCustomer, unlinkCustomerLine } from "@/app/(app)/customers/actions";
 
 /** 顧客詳細ページの削除ボタン。履歴の有無で削除 / 無効化が変わる */
 export function CustomerDeleteButton({

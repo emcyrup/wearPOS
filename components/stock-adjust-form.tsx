@@ -3,7 +3,7 @@
 import { useActionState, useState } from "react";
 import { useFormStatus } from "react-dom";
 
-import { adjustStock, type AdjustState } from "@/app/inventory/actions";
+import { adjustStock, type AdjustState } from "@/app/(app)/inventory/actions";
 import { ScanButton } from "@/components/barcode-scanner";
 
 const INITIAL: AdjustState = { status: "idle", message: "" };

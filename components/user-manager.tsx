@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 
-import { createUser, updateUser, type UserActionState } from "@/app/settings/user-actions";
+import { createUser, updateUser, type UserActionState } from "@/app/(app)/settings/user-actions";
 
 type FeatureOption = { key: string; label: string };
 

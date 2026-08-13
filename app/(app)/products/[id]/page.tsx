@@ -13,6 +13,7 @@ import {
 } from "@/lib/apparel";
 import { prisma } from "@/lib/db";
 import { formatDate, formatNumber, formatPercent, formatYen } from "@/lib/format";
+import { builtinVisibility, ensureProductFields } from "@/lib/product-fields";
 
 export const dynamic = "force-dynamic";
 
@@ -25,6 +26,7 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
       brand: true,
       category: true,
       season: true,
+      fieldValues: { include: { field: true } },
       priceChanges: { orderBy: { changedAt: "desc" } },
       variants: {
         orderBy: [{ colorCode: "asc" }, { sizeOrder: "asc" }],
@@ -42,6 +44,16 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
   if (!product) notFound();
 
   const stores = await prisma.store.findMany({ where: { isActive: true }, orderBy: { code: "asc" } });
+
+  // 設定 (商品の基本情報 項目) に従って表示項目を組み立てる
+  const productFields = await ensureProductFields();
+  const fieldVisible = builtinVisibility(productFields);
+  const customFieldRows: [string, string][] = productFields
+    .filter((field) => field.builtinKey === null && field.isVisible)
+    .map((field) => [
+      field.label,
+      product.fieldValues.find((entry) => entry.fieldId === field.id)?.value ?? "—",
+    ]);
 
   // カラー×サイズのマトリクスを組み立てる
   const colors = Array.from(
@@ -269,14 +281,19 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
         <dl className="grid gap-x-8 gap-y-3 text-sm sm:grid-cols-2">
           {[
             ["品番", product.styleCode],
-            ["ブランド", product.brand.name],
-            ["カテゴリ", product.category.name],
-            ["シーズン", `${product.season.code} (${product.season.name})`],
-            ["素材", product.material ?? "—"],
-            ["原産国", product.originCountry ?? "—"],
+            // 設定 (商品の基本情報 項目) の表示設定に従う
+            ...(fieldVisible.brand ? [["ブランド", product.brand.name]] : []),
+            ...(fieldVisible.category ? [["カテゴリ", product.category.name]] : []),
+            ...(fieldVisible.season
+              ? [["シーズン", `${product.season.code} (${product.season.name})`]]
+              : []),
+            ...(fieldVisible.material ? [["素材", product.material ?? "—"]] : []),
+            ...(fieldVisible.originCountry ? [["原産国", product.originCountry ?? "—"]] : []),
             ["原価", formatYen(product.costPrice)],
             ["消費税率", `${Math.round(product.taxRate * 100)}%`],
-            ["取扱い", product.careNote ?? "—"],
+            ...(fieldVisible.careNote ? [["取扱い", product.careNote ?? "—"]] : []),
+            // 設定で追加したカスタム項目の入力値
+            ...customFieldRows,
             ["登録日", formatDate(product.createdAt)],
           ].map(([label, value]) => (
             <div key={label} className="flex justify-between gap-4 border-b border-ink-100 pb-2">

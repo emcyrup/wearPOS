@@ -1,5 +1,6 @@
 import { Badge, Card, LinkButton, PageHeader, Table } from "@/components/ui";
 import { StaffManager } from "@/components/master-managers";
+import { ProductFieldSettings } from "@/components/product-field-settings";
 import { ReminderSettings } from "@/components/reminder-settings";
 import { RichMenuSetup } from "@/components/richmenu-setup";
 import { UserManager } from "@/components/user-manager";
@@ -9,6 +10,7 @@ import { DEFAULT_STAFF_FEATURES, FEATURES, getSessionUser } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { formatDate, formatPercent, formatYen } from "@/lib/format";
 import { isLineConfigured, lineConfig } from "@/lib/line";
+import { ensureProductFields } from "@/lib/product-fields";
 
 export const dynamic = "force-dynamic";
 
@@ -38,6 +40,17 @@ export default async function SettingsPage() {
     }),
     isAdmin ? prisma.appUser.findMany({ orderBy: { createdAt: "asc" } }) : Promise.resolve([]),
   ]);
+
+  // 商品の基本情報に表示する項目 (組み込み + カスタム) の設定
+  const productFields = isAdmin
+    ? await ensureProductFields().then((fields) =>
+        prisma.productField.findMany({
+          where: { id: { in: fields.map((f) => f.id) } },
+          include: { _count: { select: { values: true } } },
+          orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
+        }),
+      )
+    : [];
 
   // LINE 自動リマインドの設定と、テンプレートごとの累計送信数
   const reminderRules = await ensureReminderRules();
@@ -263,6 +276,24 @@ LINE_PUSH_ENABLED=true         # false で送信を停止 (ログのみ記録)`}
           )}
         </Card>
       </div>
+
+      {isAdmin && (
+        <Card title="商品の基本情報 項目" className="mt-4">
+          <p className="mb-3 text-sm text-ink-600">
+            商品の登録フォームと商品詳細に表示する項目をカスタマイズできます。
+            組み込み項目は表示のオンオフ、カスタム項目は任意の名前で追加・削除できます。
+          </p>
+          <ProductFieldSettings
+            fields={productFields.map((field) => ({
+              id: field.id,
+              label: field.label,
+              isBuiltin: Boolean(field.builtinKey),
+              isVisible: field.isVisible,
+              valueCount: field._count.values,
+            }))}
+          />
+        </Card>
+      )}
 
       <Card title="シーズン" className="mt-4">
         <Table head={["コード", "名称", "期間", "セール開始", "状態"]}>

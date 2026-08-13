@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 
-import { submitSignup, type SignupResult } from "@/app/signup/actions";
+import { submitSignup, type SignupResult } from "@/app/(public)/signup/actions";
 
 const inputClass =
   "w-full rounded-lg border border-ink-200 px-3 py-2 text-sm outline-none focus:border-ink-400";

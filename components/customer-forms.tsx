@@ -12,7 +12,7 @@ import {
   sendLineMessage,
   updateCustomerProfile,
   type ActionState,
-} from "@/app/customers/actions";
+} from "@/app/(app)/customers/actions";
 
 const INITIAL_STATE: ActionState = { status: "idle", message: "" };
 

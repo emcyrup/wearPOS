@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 
-import { previewCampaign, sendCampaign } from "@/app/customers/actions";
+import { previewCampaign, sendCampaign } from "@/app/(app)/customers/actions";
 import {
   CAMPAIGN_TARGETS,
   CAMPAIGN_TYPES,

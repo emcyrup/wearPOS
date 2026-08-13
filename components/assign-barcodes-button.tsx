@@ -3,7 +3,8 @@
 import { useActionState } from "react";
 import { useFormStatus } from "react-dom";
 
-import { assignMissingBarcodes, type AssignBarcodesState } from "@/app/products/[id]/actions";
+import { assignMissingBarcodes, type AssignBarcodesState } from "@/app/(app)/products/[id]/actions";
+import { JanMonthInput } from "@/components/jan-month-input";
 
 const INITIAL: AssignBarcodesState = { status: "idle", message: "" };
 
@@ -33,7 +34,7 @@ export function AssignBarcodesButton({
     INITIAL,
   );
   const now = new Date();
-  const defaultMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  const defaultMonth = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}`;
 
   return (
     <form action={formAction} className="flex flex-wrap items-center gap-2">
@@ -42,15 +43,10 @@ export function AssignBarcodesButton({
         <span className="text-xs text-emerald-700">{state.message}</span>
       )}
       {/* 採番ルール: 490 + 年月(YYMM) + 連番5桁 + チェックデジット */}
-      <label className="flex items-center gap-1.5 text-xs text-ink-500">
+      <span className="flex items-center gap-1.5 text-xs text-ink-500">
         採番年月
-        <input
-          type="month"
-          name="janYearMonth"
-          defaultValue={defaultMonth}
-          className="rounded-lg border border-ink-200 px-2 py-1 text-sm outline-none focus:border-ink-400"
-        />
-      </label>
+        <JanMonthInput name="janYearMonth" defaultValue={defaultMonth} />
+      </span>
       <SubmitButton count={missingCount} />
     </form>
   );

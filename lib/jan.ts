@@ -4,9 +4,9 @@ import { prisma } from "@/lib/db";
 /** 社内採番用の JAN 企業プレフィックス (デモ用。実運用では GS1 で取得したコードを使う) */
 const JAN_PREFIX = "490";
 
-/** "2026-08" → "2608"。形式が不正なら null */
+/** "2026-08" または "202608" → "2608"。形式が不正なら null */
 export function yymmOf(yearMonth: string): string | null {
-  const m = /^(\d{4})-(\d{2})$/.exec(yearMonth.trim());
+  const m = /^(\d{4})-?(\d{2})$/.exec(yearMonth.trim());
   if (!m) return null;
   const month = Number(m[2]);
   if (month < 1 || month > 12) return null;
@@ -26,7 +26,7 @@ export function currentYearMonth(): string {
  */
 export async function reserveSequentialJan(yearMonth: string, count: number): Promise<string[]> {
   const yymm = yymmOf(yearMonth);
-  if (!yymm) throw new Error("採番年月の形式が不正です (例: 2026-08)");
+  if (!yymm) throw new Error("採番年月の形式が不正です (数字6桁。例: 202608)");
 
   const prefix = JAN_PREFIX + yymm;
   const last = await prisma.productVariant.findFirst({
