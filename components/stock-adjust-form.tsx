@@ -31,12 +31,19 @@ function SubmitButton() {
 export function StockAdjustForm({
   stores,
   staff,
+  sku,
+  onSkuChange,
 }: {
   stores: { id: string; name: string }[];
   staff: { id: string; name: string; storeId: string | null }[];
+  /** 指定すると SKU 入力を外部制御にする (在庫一覧のラジオ選択から流し込む用) */
+  sku?: string;
+  onSkuChange?: (next: string) => void;
 }) {
   const [state, formAction] = useActionState(adjustStock, INITIAL);
-  const [skuValue, setSkuValue] = useState("");
+  const [internalSku, setInternalSku] = useState("");
+  const skuValue = sku ?? internalSku;
+  const setSkuValue = onSkuChange ?? setInternalSku;
 
   return (
     <form action={formAction} className="space-y-3">

@@ -179,7 +179,7 @@ export function AiInsights({ from, to }: { from: string; to: string }) {
     (m) => m.speaker === "user" || m.speaker === "note",
   );
 
-  /** 「結論: 〜 / 打ち手: 〜」の行を拾って構造化する */
+  /** 「結論: 〜 / 打ち手: 〜 / 提案: 〜」の行を拾って構造化する */
   const parseConclusion = (text: string) => {
     const lines = text.split("\n").map((line) => line.trim()).filter(Boolean);
     const summary = lines
@@ -189,9 +189,14 @@ export function AiInsights({ from, to }: { from: string; to: string }) {
     const actions = lines
       .filter((line) => line.startsWith("打ち手"))
       .map((line) => line.replace(/^打ち手[:：]?\s*/, ""));
+    const proposals = lines
+      .filter((line) => line.startsWith("提案"))
+      .map((line) => line.replace(/^提案[:：]?\s*/, ""));
     // 形式どおりでなければ本文をそのまま結論として扱う
-    if (!summary && actions.length === 0) return { summary: text.trim(), actions: [] };
-    return { summary, actions };
+    if (!summary && actions.length === 0 && proposals.length === 0) {
+      return { summary: text.trim(), actions: [], proposals: [] };
+    }
+    return { summary, actions, proposals };
   };
 
   const renderMessage = (message: DebateMessage, index: number) => {
@@ -264,7 +269,7 @@ export function AiInsights({ from, to }: { from: string; to: string }) {
 
         {/* 結論を主役に表示する */}
         {conclusion && (() => {
-          const { summary, actions } = parseConclusion(conclusion.content);
+          const { summary, actions, proposals } = parseConclusion(conclusion.content);
           return (
             <div className="rounded-xl border border-ink-200 bg-ink-50/60 p-4">
               <p className="text-[15px] leading-relaxed font-medium text-ink-900">{summary}</p>
@@ -274,6 +279,20 @@ export function AiInsights({ from, to }: { from: string; to: string }) {
                     <li key={index} className="flex gap-2 text-sm text-ink-700">
                       <span className="shrink-0 text-accent">→</span>
                       <span>{action}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {/* すぐの打ち手より一歩先の提案 */}
+              {proposals.length > 0 && (
+                <ul className="mt-3 space-y-1.5 border-t border-ink-200 pt-3">
+                  {proposals.map((proposal, index) => (
+                    <li key={index} className="flex gap-2 text-sm text-ink-700">
+                      <span className="shrink-0">💡</span>
+                      <span>
+                        <span className="mr-1 text-xs font-semibold text-ink-400">提案</span>
+                        {proposal}
+                      </span>
                     </li>
                   ))}
                 </ul>

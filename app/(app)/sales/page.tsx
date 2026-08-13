@@ -2,6 +2,7 @@ import Link from "next/link";
 
 import { Badge, Card, EmptyState, PAGE_SIZE, PageHeader, Pagination, Table } from "@/components/ui";
 import { PAYMENT_METHOD_LABEL } from "@/lib/apparel";
+import { LinkRow } from "@/components/link-row";
 import { MULTI_STORE } from "@/lib/config";
 import { prisma } from "@/lib/db";
 import { formatDateTime, formatNumber, formatYen, fullName } from "@/lib/format";
@@ -288,7 +289,7 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
             ]}
           >
             {sales.map((sale) => (
-              <tr key={sale.id}>
+              <LinkRow key={sale.id} href={`/sales/${sale.id}`}>
                 <td className="px-2 py-2.5">
                   <Link
                     href={`/sales/${sale.id}`}
@@ -358,7 +359,7 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
                 <td className="px-2 py-2.5 text-xs whitespace-nowrap text-ink-400">
                   {sale.staff?.name ?? "—"}
                 </td>
-              </tr>
+              </LinkRow>
             ))}
           </Table>
         ) : (

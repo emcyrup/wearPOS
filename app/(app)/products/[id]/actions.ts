@@ -56,3 +56,108 @@ export async function assignMissingBarcodes(
     message: `${variants.length} 件の SKU に JAN コードを採番しました`,
   };
 }
+
+// ---------------------------------------------------------------------------
+// 商品情報の編集
+// ---------------------------------------------------------------------------
+
+import { z } from "zod";
+
+import { requireAdmin } from "@/lib/auth";
+
+const updateProductSchema = z.object({
+  productId: z.string().min(1),
+  name: z.string().trim().min(1).max(80),
+  brandId: z.string().min(1),
+  categoryId: z.string().min(1),
+  seasonId: z.string().min(1),
+  material: z.string().trim().max(200),
+  originCountry: z.string().trim().max(50),
+  careNote: z.string().trim().max(200),
+  costPrice: z.number().int().nonnegative().max(10_000_000),
+  /** 販売価格 (税抜)。変更時は価格改定履歴に残す */
+  currentPrice: z.number().int().nonnegative().max(10_000_000),
+  taxRate: z.number().min(0).max(1),
+  customFields: z
+    .array(z.object({ fieldId: z.string().min(1), value: z.string().trim().max(200) }))
+    .max(30)
+    .default([]),
+});
+
+export type UpdateProductResult = { ok: true } | { ok: false; error: string };
+
+/** 商品詳細からの基本情報の編集。販売価格の変更は PriceChange に履歴を残す */
+export async function updateProductInfo(input: unknown): Promise<UpdateProductResult> {
+  if (!(await requireAdmin())) {
+    return { ok: false, error: "管理者のみ編集できます" };
+  }
+  const parsed = updateProductSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, error: "入力内容を確認してください" };
+  }
+  const data = parsed.data;
+
+  const product = await prisma.product.findUnique({ where: { id: data.productId } });
+  if (!product) return { ok: false, error: "商品が見つかりません" };
+
+  try {
+    await prisma.$transaction(async (tx) => {
+      await tx.product.update({
+        where: { id: product.id },
+        data: {
+          name: data.name,
+          brandId: data.brandId,
+          categoryId: data.categoryId,
+          seasonId: data.seasonId,
+          material: data.material || null,
+          originCountry: data.originCountry || null,
+          careNote: data.careNote || null,
+          costPrice: data.costPrice,
+          currentPrice: data.currentPrice,
+          taxRate: data.taxRate,
+        },
+      });
+
+      // 販売価格が変わったら価格改定履歴に残す (値下げ / 訂正)
+      if (data.currentPrice !== product.currentPrice) {
+        await tx.priceChange.create({
+          data: {
+            productId: product.id,
+            fromPrice: product.currentPrice,
+            toPrice: data.currentPrice,
+            reason: data.currentPrice < product.currentPrice ? "MARKDOWN" : "CORRECTION",
+            note: "商品詳細から変更",
+          },
+        });
+      }
+
+      // カスタム項目: 入力ありは upsert、空にしたものは削除
+      const validFields = await tx.productField.findMany({
+        where: { builtinKey: null },
+        select: { id: true },
+      });
+      const validIds = new Set(validFields.map((field) => field.id));
+      for (const entry of data.customFields) {
+        if (!validIds.has(entry.fieldId)) continue;
+        if (entry.value) {
+          await tx.productFieldValue.upsert({
+            where: { productId_fieldId: { productId: product.id, fieldId: entry.fieldId } },
+            update: { value: entry.value },
+            create: { productId: product.id, fieldId: entry.fieldId, value: entry.value },
+          });
+        } else {
+          await tx.productFieldValue.deleteMany({
+            where: { productId: product.id, fieldId: entry.fieldId },
+          });
+        }
+      }
+    });
+  } catch (error) {
+    console.error("商品情報の更新に失敗しました", error);
+    return { ok: false, error: "更新に失敗しました。時間をおいて再度お試しください" };
+  }
+
+  revalidatePath(`/products/${product.id}`);
+  revalidatePath("/products");
+  return { ok: true };
+}

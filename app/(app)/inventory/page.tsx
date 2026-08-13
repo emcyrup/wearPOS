@@ -1,7 +1,7 @@
 import Link from "next/link";
 
-import { StockAdjustForm } from "@/components/stock-adjust-form";
-import { Badge, Card, EmptyState, PAGE_SIZE, PageHeader, Pagination, StockCell, Table } from "@/components/ui";
+import { InventoryManager } from "@/components/inventory-manager";
+import { Badge, Card, EmptyState, PAGE_SIZE, PageHeader, Pagination, Table } from "@/components/ui";
 import { MOVEMENT_TYPE_LABEL } from "@/lib/apparel";
 import { MULTI_STORE } from "@/lib/config";
 import { prisma } from "@/lib/db";
@@ -56,13 +56,23 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
         }
       />
 
-      <Card title="入荷 / 在庫調整 / 棚卸" className="mb-4">
-        <StockAdjustForm
-          stores={stores.map((s) => ({ id: s.id, name: s.name }))}
-          staff={staff.map((s) => ({ id: s.id, name: s.name, storeId: s.storeId }))}
-        />
-      </Card>
-
+      <InventoryManager
+        stores={stores.map((s) => ({ id: s.id, name: s.name }))}
+        staff={staff.map((s) => ({ id: s.id, name: s.name, storeId: s.storeId }))}
+        rows={rows.map((item) => ({
+          id: item.id,
+          sku: item.sku,
+          productId: item.productId,
+          productName: item.productName,
+          colorName: item.colorName,
+          colorHex: item.colorHex,
+          sizeName: item.sizeName,
+          seasonCode: item.seasonCode,
+          quantity: item.quantity,
+          safetyStock: item.safetyStock,
+        }))}
+        total={total}
+      >
       <Card className="mb-4">
         <form className="flex flex-wrap items-end gap-3" method="get">
           {MULTI_STORE && (
@@ -117,65 +127,14 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
         </form>
       </Card>
 
-      <Card title={`在庫一覧 (${total.toLocaleString("ja-JP")} 件)`}>
-        {rows.length ? (
-          <Table
-            minWidth={860}
-            head={[
-              ...(MULTI_STORE ? ["店舗"] : []),
-              "SKU",
-              "商品",
-              "カラー / サイズ",
-              "シーズン",
-              { label: "在庫", align: "right" },
-              { label: "発注点", align: "right" },
-            ]}
-          >
-            {rows.map((item) => (
-              <tr key={item.id}>
-                {MULTI_STORE && (
-                  <td className="px-2 py-2 whitespace-nowrap text-ink-600">{item.storeName}</td>
-                )}
-                <td className="tabular px-2 py-2 text-xs text-ink-400">{item.sku}</td>
-                <td className="px-2 py-2">
-                  <Link
-                    href={`/products/${item.productId}`}
-                    className="font-medium text-ink-800 hover:text-accent"
-                  >
-                    {item.productName}
-                  </Link>
-                </td>
-                <td className="px-2 py-2 whitespace-nowrap">
-                  <span className="flex items-center gap-1.5">
-                    <span
-                      className="inline-block h-3 w-3 rounded-full border border-ink-200"
-                      style={{ backgroundColor: item.colorHex ?? "transparent" }}
-                    />
-                    <span className="text-ink-600">
-                      {item.colorName} / {item.sizeName}
-                    </span>
-                  </span>
-                </td>
-                <td className="tabular px-2 py-2 text-xs text-ink-400">{item.seasonCode}</td>
-                <td className="px-2 py-2 text-right">
-                  <StockCell quantity={item.quantity} safetyStock={item.safetyStock} />
-                </td>
-                <td className="tabular px-2 py-2 text-right text-xs text-ink-400">
-                  {item.safetyStock}
-                </td>
-              </tr>
-            ))}
-          </Table>
-        ) : (
-          <EmptyState message="該当する在庫がありません" />
-        )}
-        <Pagination
-          page={page}
-          total={total}
-          basePath="/inventory"
-          params={{ store: params.store, q: params.q, low: params.low }}
-        />
-      </Card>
+      </InventoryManager>
+
+      <Pagination
+        page={page}
+        total={total}
+        basePath="/inventory"
+        params={{ store: params.store, q: params.q, low: params.low }}
+      />
 
       <Card title="直近の在庫変動" className="mt-4">
         {movements.length ? (

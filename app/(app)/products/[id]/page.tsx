@@ -11,6 +11,8 @@ import {
   sellThroughRate,
   SEASON_PHASE_LABEL,
 } from "@/lib/apparel";
+import { ProductInfoEditor } from "@/components/product-info-editor";
+import { getSessionUser } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { formatDate, formatNumber, formatPercent, formatYen } from "@/lib/format";
 import { ensureProductFields } from "@/lib/product-fields";
@@ -44,32 +46,18 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
   if (!product) notFound();
 
   const stores = await prisma.store.findMany({ where: { isActive: true }, orderBy: { code: "asc" } });
+  // 編集フォーム用のマスタと権限
+  const [brands, categories, allSeasons, sessionUser] = await Promise.all([
+    prisma.brand.findMany({ orderBy: { code: "asc" } }),
+    prisma.category.findMany({ orderBy: { code: "asc" } }),
+    prisma.season.findMany({ orderBy: [{ year: "desc" }, { term: "asc" }] }),
+    getSessionUser(),
+  ]);
+  const isAdmin = sessionUser?.role === "ADMIN";
 
-  // 設定 (商品の基本情報 項目) の表示・並び順に従って商品情報の行を組み立てる
+  // 設定 (商品の基本情報 項目) の表示・並び順は編集コンポーネント側で使う
   const productFields = await ensureProductFields();
-  const fieldRows: [string, string][] = productFields
-    .filter((field) => field.isVisible)
-    .map((field) => {
-      switch (field.builtinKey) {
-        case "brand":
-          return [field.label, product.brand.name];
-        case "category":
-          return [field.label, product.category.name];
-        case "season":
-          return [field.label, `${product.season.code} (${product.season.name})`];
-        case "material":
-          return [field.label, product.material ?? "—"];
-        case "originCountry":
-          return [field.label, product.originCountry ?? "—"];
-        case "careNote":
-          return [field.label, product.careNote ?? "—"];
-        default:
-          return [
-            field.label,
-            product.fieldValues.find((entry) => entry.fieldId === field.id)?.value ?? "—",
-          ];
-      }
-    });
+  const visibleFields = productFields.filter((field) => field.isVisible);
 
   // カラー×サイズのマトリクスを組み立てる
   const colors = Array.from(
@@ -101,15 +89,6 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
   const discount = markdownRate(product.listPrice, product.currentPrice);
   const phase = seasonPhase(product.season);
   const missingBarcodes = product.variants.filter((v) => !v.barcode).length;
-
-  // 店舗別の在庫合計
-  const storeTotals = stores.map((store) => ({
-    store,
-    quantity: product.variants.reduce(
-      (sum, v) => sum + (v.inventory.find((inv) => inv.storeId === store.id)?.quantity ?? 0),
-      0,
-    ),
-  }));
 
   const grossMargin =
     product.currentPrice > 0 ? (product.currentPrice - product.costPrice) / product.currentPrice : 0;
@@ -258,20 +237,7 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
         </div>
       </Card>
 
-      <div className="mt-4 grid gap-4 lg:grid-cols-2">
-        <Card title="店舗別在庫">
-          <Table head={["店舗", "在庫"]}>
-            {storeTotals.map((row) => (
-              <tr key={row.store.id} className="border-b border-ink-100 last:border-0">
-                <td className="px-2 py-2 font-medium text-ink-800">{row.store.name}</td>
-                <td className="px-2 py-2">
-                  <StockCell quantity={row.quantity} />
-                </td>
-              </tr>
-            ))}
-          </Table>
-        </Card>
-
+      <div className="mt-4">
         <Card title="価格改定履歴">
           {product.priceChanges.length ? (
             <Table head={["日付", "変更", "理由"]}>
@@ -294,20 +260,42 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
       </div>
 
       <Card title="商品情報" className="mt-4">
-        <dl className="grid gap-x-8 gap-y-3 text-sm sm:grid-cols-2">
-          {[
-            ["品番", product.styleCode],
-            ...fieldRows,
-            ["原価", formatYen(product.costPrice)],
-            ["消費税率", `${Math.round(product.taxRate * 100)}%`],
-            ["登録日", formatDate(product.createdAt)],
-          ].map(([label, value]) => (
-            <div key={label} className="flex justify-between gap-4 border-b border-ink-100 pb-2">
-              <dt className="shrink-0 text-ink-400">{label}</dt>
-              <dd className="text-right text-ink-800">{value}</dd>
-            </div>
-          ))}
-        </dl>
+        {/* 設定の項目定義に従って表示し、管理者は編集できる */}
+        <ProductInfoEditor
+          product={{
+            id: product.id,
+            styleCode: product.styleCode,
+            name: product.name,
+            brandId: product.brandId,
+            categoryId: product.categoryId,
+            seasonId: product.seasonId,
+            material: product.material ?? "",
+            originCountry: product.originCountry ?? "",
+            careNote: product.careNote ?? "",
+            costPrice: product.costPrice,
+            currentPrice: product.currentPrice,
+            listPrice: product.listPrice,
+            taxRate: product.taxRate,
+            createdAt: formatDate(product.createdAt),
+            customValues: Object.fromEntries(
+              product.fieldValues.map((entry) => [entry.fieldId, entry.value]),
+            ),
+          }}
+          brands={brands.map((brand) => ({ id: brand.id, name: brand.name }))}
+          categories={categories.map((category) => ({ id: category.id, name: category.name }))}
+          seasons={allSeasons.map((season) => ({
+            id: season.id,
+            name: season.name,
+            code: season.code,
+          }))}
+          fields={visibleFields.map((field) => ({
+            id: field.id,
+            builtinKey: field.builtinKey,
+            label: field.label,
+            options: field.options,
+          }))}
+          canEdit={isAdmin}
+        />
       </Card>
 
       <Card
