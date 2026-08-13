@@ -31,10 +31,18 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "リクエストが不正です" }, { status: 400 });
   }
 
+  // 未設定と検証失敗を区別して返す (設定漏れの切り分け用)
+  if (!process.env.LIFF_CHANNEL_ID) {
+    return NextResponse.json(
+      { error: "LIFF_CHANNEL_ID が未設定です (ホスティングの環境変数を確認してください)" },
+      { status: 503 },
+    );
+  }
+
   const lineUserId = await verifyLiffIdToken(parsed.data.idToken);
   if (!lineUserId) {
     return NextResponse.json(
-      { error: "本人確認に失敗しました。トークを開き直してもう一度お試しください" },
+      { error: "本人確認に失敗しました (ID トークンの検証に失敗)" },
       { status: 401 },
     );
   }

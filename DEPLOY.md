@@ -265,6 +265,9 @@ curl -X POST https://YOUR_APP.vercel.app/api/pos/sales \
    - サイズ: **Full**
    - エンドポイント URL: `https://YOUR_APP.vercel.app/liff`
    - スコープ: **openid** にチェック（profile も推奨）
+   - **「必須同意」に設定**するのを推奨します。任意のままだと、初めて開くお客様が
+     同意画面でプロフィール提供をスキップでき、本人確認ができず画面を開けません
+     （その場合はトークに「会員登録」等と送る案内が表示され、そちらから登録できます）
 3. 発行された **LIFF ID** を控えます → 環境変数 `LIFF_ID`
 4. LINE Login チャネルの **チャネル基本設定** にある **チャネル ID** を控えます → `LIFF_CHANNEL_ID`
 5. Vercel に 2 つの環境変数を登録して **Redeploy** します。

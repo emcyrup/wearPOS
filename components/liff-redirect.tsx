@@ -7,6 +7,8 @@ type LiffSdk = {
   isLoggedIn: () => boolean;
   login: (options?: { redirectUri?: string }) => void;
   getIDToken: () => string | null;
+  isInClient: () => boolean;
+  closeWindow: () => void;
 };
 
 declare global {
@@ -15,16 +17,33 @@ declare global {
   }
 }
 
+/** タップされたメニューに対応する、トークで送ってもらうキーワード */
+const KEYWORD_BY_DEST: Record<string, string> = {
+  signup: "会員登録",
+  card: "会員証",
+  points: "ポイント",
+};
+
 /**
  * リッチメニューから開かれる LIFF の入り口。
  * LINE が本人を自動認証するので、ID トークンをサーバーで検証して
  * 会員登録フォーム / 会員証 / ポイントの本人専用ページへ即リダイレクトする。
+ *
+ * 本人確認できないとき (LIFF の同意でプロフィール提供に同意していない等) は
+ * 行き止まりにせず、トークにキーワードを送る方法を案内する。
+ * キーワード応答は Webhook の署名検証を通るため、確実かつ安全に同じ画面へ辿り着ける。
  */
 export function LiffRedirect({ liffId }: { liffId: string }) {
-  const [error, setError] = useState<string | null>(null);
+  const [failure, setFailure] = useState<{ detail: string; keyword: string } | null>(null);
 
   useEffect(() => {
     let cancelled = false;
+    const dest =
+      new URLSearchParams(window.location.search).get("dest") ?? "card";
+    const keyword = KEYWORD_BY_DEST[dest] ?? "会員登録";
+    const fail = (detail: string) => {
+      if (!cancelled) setFailure({ detail, keyword });
+    };
 
     const run = async () => {
       try {
@@ -39,7 +58,10 @@ export function LiffRedirect({ liffId }: { liffId: string }) {
           });
         }
         const liff = window.liff;
-        if (!liff) throw new Error("LIFF SDK を初期化できませんでした");
+        if (!liff) {
+          fail("LIFF SDK を初期化できませんでした");
+          return;
+        }
 
         await liff.init({ liffId });
         if (!liff.isLoggedIn()) {
@@ -47,10 +69,13 @@ export function LiffRedirect({ liffId }: { liffId: string }) {
           return;
         }
 
+        // 同意でプロフィール提供に同意していない場合などは null になる
         const idToken = liff.getIDToken();
-        if (!idToken) throw new Error("本人確認情報を取得できませんでした");
+        if (!idToken) {
+          fail("本人確認情報を取得できませんでした (プロフィール提供の同意が必要です)");
+          return;
+        }
 
-        const dest = new URLSearchParams(window.location.search).get("dest") ?? "card";
         const response = await fetch("/api/liff/resolve", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -58,14 +83,13 @@ export function LiffRedirect({ liffId }: { liffId: string }) {
         });
         if (!response.ok) {
           const data = (await response.json().catch(() => null)) as { error?: string } | null;
-          throw new Error(data?.error ?? "遷移先の取得に失敗しました");
+          fail(data?.error ?? `遷移先の取得に失敗しました (${response.status})`);
+          return;
         }
         const { url } = (await response.json()) as { url: string };
         if (!cancelled) window.location.replace(url);
       } catch (err) {
-        if (!cancelled) {
-          setError(err instanceof Error ? err.message : "読み込みに失敗しました");
-        }
+        fail(err instanceof Error ? err.message : "読み込みに失敗しました");
       }
     };
 
@@ -75,21 +99,41 @@ export function LiffRedirect({ liffId }: { liffId: string }) {
     };
   }, [liffId]);
 
+  if (failure) {
+    return (
+      <div className="mx-auto flex min-h-[70vh] max-w-sm items-center justify-center px-6">
+        <div className="w-full rounded-xl border border-ink-200 bg-white p-6 text-center">
+          <p className="text-sm font-medium text-ink-900">この画面を開けませんでした</p>
+          <p className="mt-3 text-sm leading-relaxed text-ink-600">
+            お手数ですが、LINE のトークに
+            <span className="mx-1 rounded bg-accent-soft px-1.5 py-0.5 font-semibold text-accent">
+              {failure.keyword}
+            </span>
+            と送信してください。すぐにご案内をお送りします。
+          </p>
+          <button
+            type="button"
+            onClick={() => {
+              // LINE アプリ内ならトークへ戻す
+              if (window.liff?.isInClient?.()) window.liff.closeWindow();
+              else window.history.back();
+            }}
+            className="mt-5 w-full rounded-lg bg-ink-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-ink-800"
+          >
+            トークに戻る
+          </button>
+          <p className="mt-4 text-[11px] leading-relaxed text-ink-400">{failure.detail}</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex min-h-[70vh] items-center justify-center px-6 text-center">
-      {error ? (
-        <div>
-          <p className="text-sm text-rose-700">{error}</p>
-          <p className="mt-2 text-xs text-ink-400">
-            LINE のトークからメニューを開き直してください
-          </p>
-        </div>
-      ) : (
-        <div>
-          <div className="mx-auto h-8 w-8 animate-spin rounded-full border-2 border-ink-200 border-t-ink-900" />
-          <p className="mt-3 text-sm text-ink-500">開いています...</p>
-        </div>
-      )}
+      <div>
+        <div className="mx-auto h-8 w-8 animate-spin rounded-full border-2 border-ink-200 border-t-ink-900" />
+        <p className="mt-3 text-sm text-ink-500">開いています...</p>
+      </div>
     </div>
   );
 }
