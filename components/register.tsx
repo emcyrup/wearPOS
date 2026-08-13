@@ -6,6 +6,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { checkout, lookupMember, type CheckoutResult, type MemberSummary } from "@/app/(public)/register/actions";
 import { ScanButton } from "@/components/barcode-scanner";
 import { MemberSearchModal, ProductSearchModal } from "@/components/register-search";
+import { MULTI_STORE } from "@/lib/config";
 
 type StoreOption = { code: string; name: string };
 type StaffOption = { code: string; name: string; storeCode: string | null };
@@ -582,24 +583,27 @@ export function Register({ stores, staff }: { stores: StoreOption[]; staff: Staf
       {/* 右: 会員・支払 */}
       <div className="min-w-0 space-y-4 lg:col-span-2">
         <div className="rounded-xl border border-ink-200 bg-white p-4">
-          <div className="grid grid-cols-2 gap-3">
-            <label className="flex flex-col gap-1">
-              <span className="text-xs text-ink-400">店舗</span>
-              <select
-                value={storeCode}
-                onChange={(event) => {
-                  setStoreCode(event.target.value);
-                  setStaffCode("");
-                }}
-                className="rounded-lg border border-ink-200 bg-white px-2 py-1.5 text-sm outline-none focus:border-ink-400"
-              >
-                {stores.map((store) => (
-                  <option key={store.code} value={store.code}>
-                    {store.name}
-                  </option>
-                ))}
-              </select>
-            </label>
+          <div className={`grid gap-3 ${MULTI_STORE ? "grid-cols-2" : "grid-cols-1"}`}>
+            {/* 単店舗運用では店舗の選択を出さず、先頭の店舗で会計する */}
+            {MULTI_STORE && (
+              <label className="flex flex-col gap-1">
+                <span className="text-xs text-ink-400">店舗</span>
+                <select
+                  value={storeCode}
+                  onChange={(event) => {
+                    setStoreCode(event.target.value);
+                    setStaffCode("");
+                  }}
+                  className="rounded-lg border border-ink-200 bg-white px-2 py-1.5 text-sm outline-none focus:border-ink-400"
+                >
+                  {stores.map((store) => (
+                    <option key={store.code} value={store.code}>
+                      {store.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
             <div className="flex flex-col gap-1">
               <span className="text-xs text-ink-400">担当スタッフ</span>
               <div className="flex gap-1.5">

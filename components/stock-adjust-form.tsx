@@ -2,6 +2,7 @@
 
 import { useActionState, useState } from "react";
 import { useFormStatus } from "react-dom";
+import { MULTI_STORE } from "@/lib/config";
 
 import { adjustStock, type AdjustState } from "@/app/(app)/inventory/actions";
 import { ScanButton } from "@/components/barcode-scanner";
@@ -40,20 +41,25 @@ export function StockAdjustForm({
   return (
     <form action={formAction} className="space-y-3">
       <div className="grid gap-3 sm:grid-cols-2">
-        <label className="flex flex-col gap-1">
-          <span className="text-xs text-ink-400">店舗</span>
-          <select
-            name="storeId"
-            required
-            className="rounded-lg border border-ink-200 px-3 py-1.5 text-sm outline-none focus:border-ink-400"
-          >
-            {stores.map((store) => (
-              <option key={store.id} value={store.id}>
-                {store.name}
-              </option>
-            ))}
-          </select>
-        </label>
+        {/* 単店舗運用では店舗選択を出さず、先頭の店舗へ登録する */}
+        {MULTI_STORE ? (
+          <label className="flex flex-col gap-1">
+            <span className="text-xs text-ink-400">店舗</span>
+            <select
+              name="storeId"
+              required
+              className="rounded-lg border border-ink-200 px-3 py-1.5 text-sm outline-none focus:border-ink-400"
+            >
+              {stores.map((store) => (
+                <option key={store.id} value={store.id}>
+                  {store.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : (
+          <input type="hidden" name="storeId" value={stores[0]?.id ?? ""} />
+        )}
 
         <label className="flex flex-col gap-1">
           <span className="text-xs text-ink-400">区分</span>

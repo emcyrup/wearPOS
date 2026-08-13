@@ -4,6 +4,7 @@ import { LineCampaign } from "@/components/line-campaign";
 import { Badge, Card, EmptyState, LinkButton, PAGE_SIZE, PageHeader, Pagination, Table } from "@/components/ui";
 import { DORMANT_DAYS, MEMBER_RANKS, parseTags, rankLabel } from "@/lib/apparel";
 import { LinkRow } from "@/components/link-row";
+import { MULTI_STORE } from "@/lib/config";
 import { prisma } from "@/lib/db";
 import { daysSince, formatDate, formatNumber, formatYen, fullName, fullNameKana } from "@/lib/format";
 
@@ -191,7 +192,7 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
                     </Link>
                     <div className="text-xs text-ink-400">
                       {fullNameKana(customer)}
-                      {customer.store && ` · ${customer.store.name}`}
+                      {MULTI_STORE && customer.store && ` · ${customer.store.name}`}
                     </div>
                   </td>
                   <td className="px-2 py-2.5">

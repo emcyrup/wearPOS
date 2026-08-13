@@ -7,6 +7,7 @@ import { UserManager } from "@/components/user-manager";
 import { ensureReminderRules } from "@/lib/reminders";
 import { RANK_RULES, SEASON_PHASE_LABEL, SEASON_TERM_LABEL, seasonPhase } from "@/lib/apparel";
 import { DEFAULT_STAFF_FEATURES, FEATURES, getSessionUser } from "@/lib/auth";
+import { MULTI_STORE } from "@/lib/config";
 import { prisma } from "@/lib/db";
 import { formatDate, formatPercent, formatYen } from "@/lib/format";
 import { isLineConfigured, lineConfig } from "@/lib/line";
@@ -229,19 +230,22 @@ LINE_PUSH_ENABLED=true         # false で送信を停止 (ログのみ記録)`}
         </Card>
       </div>
 
-      <div className="mt-4 grid gap-4 lg:grid-cols-2">
-        <Card title="店舗">
-          <Table head={["コード", "店舗名", "電話", "取引数"]}>
-            {stores.map((store) => (
-              <tr key={store.id} className="border-b border-ink-100 last:border-0">
-                <td className="tabular px-2 py-2 text-xs text-ink-400">{store.code}</td>
-                <td className="px-2 py-2 font-medium text-ink-800">{store.name}</td>
-                <td className="tabular px-2 py-2 text-xs text-ink-400">{store.phone ?? "—"}</td>
-                <td className="tabular px-2 py-2">{store._count.sales}</td>
-              </tr>
-            ))}
-          </Table>
-        </Card>
+      <div className={`mt-4 grid gap-4 ${MULTI_STORE ? "lg:grid-cols-2" : ""}`}>
+        {/* 単店舗運用では店舗マスタの表示を省く */}
+        {MULTI_STORE && (
+          <Card title="店舗">
+            <Table head={["コード", "店舗名", "電話", "取引数"]}>
+              {stores.map((store) => (
+                <tr key={store.id} className="border-b border-ink-100 last:border-0">
+                  <td className="tabular px-2 py-2 text-xs text-ink-400">{store.code}</td>
+                  <td className="px-2 py-2 font-medium text-ink-800">{store.name}</td>
+                  <td className="tabular px-2 py-2 text-xs text-ink-400">{store.phone ?? "—"}</td>
+                  <td className="tabular px-2 py-2">{store._count.sales}</td>
+                </tr>
+              ))}
+            </Table>
+          </Card>
+        )}
 
         <Card
           title="スタッフ"
@@ -289,6 +293,10 @@ LINE_PUSH_ENABLED=true         # false で送信を停止 (ログのみ記録)`}
               label: field.label,
               isBuiltin: Boolean(field.builtinKey),
               isVisible: field.isVisible,
+              // ブランド/カテゴリ/シーズンは専用マスタが選択肢の役割のため対象外
+              optionsEditable:
+                !field.builtinKey ||
+                ["material", "originCountry", "careNote"].includes(field.builtinKey),
               options: field.options,
               valueCount: field._count.values,
             }))}

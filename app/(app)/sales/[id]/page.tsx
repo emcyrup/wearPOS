@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 
 import { Badge, Card, LinkButton, PageHeader, Table } from "@/components/ui";
 import { markdownRate, PAYMENT_METHOD_LABEL, rankLabel } from "@/lib/apparel";
+import { MULTI_STORE } from "@/lib/config";
 import { prisma } from "@/lib/db";
 import { formatDateTime, formatPercent, formatYen, fullName } from "@/lib/format";
 
@@ -38,7 +39,7 @@ export default async function SaleDetailPage({ params }: { params: Promise<{ id:
 
       <PageHeader
         title={sale.receiptNo}
-        description={`${formatDateTime(sale.soldAt)} · ${sale.store.name}${
+        description={`${formatDateTime(sale.soldAt)}${MULTI_STORE ? ` · ${sale.store.name}` : ""}${
           sale.staff ? ` · ${sale.staff.name}` : ""
         }`}
         action={

@@ -2,6 +2,7 @@ import Link from "next/link";
 
 import { Badge, Card, EmptyState, PAGE_SIZE, PageHeader, Pagination, Table } from "@/components/ui";
 import { PAYMENT_METHOD_LABEL } from "@/lib/apparel";
+import { MULTI_STORE } from "@/lib/config";
 import { prisma } from "@/lib/db";
 import { formatDateTime, formatNumber, formatYen, fullName } from "@/lib/format";
 
@@ -54,7 +55,13 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
         store: true,
         staff: true,
         customer: true,
-        lines: { select: { quantity: true } },
+        lines: {
+          select: {
+            quantity: true,
+            note: true,
+            variant: { select: { product: { select: { name: true } } } },
+          },
+        },
       },
       orderBy: { soldAt: "desc" },
       skip: (page - 1) * PAGE_SIZE,
@@ -124,21 +131,23 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
             />
           </label>
 
-          <label className="flex flex-col gap-1">
-            <span className="text-xs text-ink-400">店舗</span>
-            <select
-              name="store"
-              defaultValue={storeId ?? ""}
-              className="rounded-lg border border-ink-200 px-3 py-1.5 text-sm outline-none focus:border-ink-400"
-            >
-              <option value="">全店舗</option>
-              {stores.map((store) => (
-                <option key={store.id} value={store.id}>
-                  {store.name}
-                </option>
-              ))}
-            </select>
-          </label>
+          {MULTI_STORE && (
+            <label className="flex flex-col gap-1">
+              <span className="text-xs text-ink-400">店舗</span>
+              <select
+                name="store"
+                defaultValue={storeId ?? ""}
+                className="rounded-lg border border-ink-200 px-3 py-1.5 text-sm outline-none focus:border-ink-400"
+              >
+                <option value="">全店舗</option>
+                {stores.map((store) => (
+                  <option key={store.id} value={store.id}>
+                    {store.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
 
           <label className="flex flex-col gap-1">
             <span className="text-xs text-ink-400">区分</span>
@@ -264,15 +273,16 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
       <Card>
         {sales.length ? (
           <Table
-            minWidth={860}
+            minWidth={960}
             head={[
               "伝票番号",
               "日時",
-              "店舗",
+              ...(MULTI_STORE ? ["店舗"] : []),
+              "商品",
               "顧客",
-              { label: "点数", align: "right" },
+              { label: "点数", align: "right" } as const,
               "支払",
-              { label: "金額", align: "right" },
+              { label: "金額", align: "right" } as const,
               "担当",
             ]}
           >
@@ -294,7 +304,24 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
                 <td className="tabular px-2 py-2.5 text-xs whitespace-nowrap text-ink-400">
                   {formatDateTime(sale.soldAt)}
                 </td>
-                <td className="px-2 py-2.5 whitespace-nowrap text-ink-600">{sale.store.name}</td>
+                {MULTI_STORE && (
+                  <td className="px-2 py-2.5 whitespace-nowrap text-ink-600">{sale.store.name}</td>
+                )}
+                {/* 購入商品: 先頭の商品名 + ほかN点 (手入力商品は note の名前) */}
+                <td className="max-w-56 px-2 py-2.5">
+                  {sale.lines.length ? (
+                    <>
+                      <span className="block truncate text-sm text-ink-800">
+                        {sale.lines[0].variant?.product.name ?? sale.lines[0].note ?? "手入力商品"}
+                      </span>
+                      {sale.lines.length > 1 && (
+                        <span className="text-xs text-ink-400">ほか {sale.lines.length - 1} 点</span>
+                      )}
+                    </>
+                  ) : (
+                    <span className="text-xs text-ink-400">—</span>
+                  )}
+                </td>
                 <td className="px-2 py-2.5">
                   {sale.customer ? (
                     <Link

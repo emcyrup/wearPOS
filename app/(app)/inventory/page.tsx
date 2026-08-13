@@ -3,6 +3,7 @@ import Link from "next/link";
 import { StockAdjustForm } from "@/components/stock-adjust-form";
 import { Badge, Card, EmptyState, PAGE_SIZE, PageHeader, Pagination, StockCell, Table } from "@/components/ui";
 import { MOVEMENT_TYPE_LABEL } from "@/lib/apparel";
+import { MULTI_STORE } from "@/lib/config";
 import { prisma } from "@/lib/db";
 import { inventoryList, recentMovements } from "@/lib/inventory";
 import { formatDateTime, formatNumber } from "@/lib/format";
@@ -20,7 +21,12 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
     prisma.staff.findMany({ where: { isActive: true }, orderBy: { code: "asc" } }),
   ]);
 
-  const storeId = stores.some((s) => s.id === params.store) ? params.store : undefined;
+  // 単店舗運用では常に先頭の店舗に絞る (店舗ごとの重複行を出さない)
+  const storeId = MULTI_STORE
+    ? stores.some((s) => s.id === params.store)
+      ? params.store
+      : undefined
+    : stores[0]?.id;
 
   const page = Math.max(1, Number(params.page) || 1);
 
@@ -41,7 +47,7 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
     <>
       <PageHeader
         title="在庫"
-        description="店舗 × SKU 単位で在庫を管理します。すべての増減は履歴に残ります"
+        description={MULTI_STORE ? "店舗 × SKU 単位で在庫を管理します。すべての増減は履歴に残ります" : "SKU 単位で在庫を管理します。すべての増減は履歴に残ります"}
         action={
           <div className="flex gap-2">
             <Badge tone="neutral">{formatNumber(totalUnits)} 点</Badge>
@@ -59,21 +65,23 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
 
       <Card className="mb-4">
         <form className="flex flex-wrap items-end gap-3" method="get">
-          <label className="flex flex-col gap-1">
-            <span className="text-xs text-ink-400">店舗</span>
-            <select
-              name="store"
-              defaultValue={storeId ?? ""}
-              className="rounded-lg border border-ink-200 px-3 py-1.5 text-sm outline-none focus:border-ink-400"
-            >
-              <option value="">全店舗</option>
-              {stores.map((store) => (
-                <option key={store.id} value={store.id}>
-                  {store.name}
-                </option>
-              ))}
-            </select>
-          </label>
+          {MULTI_STORE && (
+            <label className="flex flex-col gap-1">
+              <span className="text-xs text-ink-400">店舗</span>
+              <select
+                name="store"
+                defaultValue={storeId ?? ""}
+                className="rounded-lg border border-ink-200 px-3 py-1.5 text-sm outline-none focus:border-ink-400"
+              >
+                <option value="">全店舗</option>
+                {stores.map((store) => (
+                  <option key={store.id} value={store.id}>
+                    {store.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
 
           <label className="flex flex-col gap-1">
             <span className="text-xs text-ink-400">SKU / 商品名</span>
@@ -114,7 +122,7 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
           <Table
             minWidth={860}
             head={[
-              "店舗",
+              ...(MULTI_STORE ? ["店舗"] : []),
               "SKU",
               "商品",
               "カラー / サイズ",
@@ -125,7 +133,9 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
           >
             {rows.map((item) => (
               <tr key={item.id}>
-                <td className="px-2 py-2 whitespace-nowrap text-ink-600">{item.storeName}</td>
+                {MULTI_STORE && (
+                  <td className="px-2 py-2 whitespace-nowrap text-ink-600">{item.storeName}</td>
+                )}
                 <td className="tabular px-2 py-2 text-xs text-ink-400">{item.sku}</td>
                 <td className="px-2 py-2">
                   <Link

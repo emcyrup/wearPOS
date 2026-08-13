@@ -1,5 +1,6 @@
 "use client";
 
+import { MULTI_STORE } from "@/lib/config";
 import Link from "next/link";
 import { useCallback, useState } from "react";
 
@@ -127,7 +128,15 @@ export function ScanLookup() {
 
           <table className="mt-4 w-full border-t border-ink-100 text-sm">
             <tbody>
-              {result.stock.map((row) => (
+              {(MULTI_STORE
+                ? result.stock
+                : [
+                    {
+                      storeName: "在庫",
+                      quantity: result.stock.reduce((sum, row) => sum + row.quantity, 0),
+                    },
+                  ]
+              ).map((row) => (
                 <tr key={row.storeName} className="border-b border-ink-100 last:border-0">
                   <td className="py-2 text-ink-600">{row.storeName}</td>
                   <td

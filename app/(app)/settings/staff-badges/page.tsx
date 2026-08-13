@@ -5,6 +5,7 @@ import { Barcode } from "@/components/barcode";
 import { PrintButton } from "@/components/print-button";
 import { PageHeader } from "@/components/ui";
 import { getSessionUser } from "@/lib/auth";
+import { MULTI_STORE } from "@/lib/config";
 import { prisma } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
@@ -46,7 +47,7 @@ export default async function StaffBadgesPage() {
           >
             <p className="text-sm font-semibold text-ink-900">{person.name}</p>
             <p className="mt-0.5 text-[11px] text-ink-400">
-              {person.store?.name ?? "全店舗"} · {person.role}
+              {MULTI_STORE ? `${person.store?.name ?? "全店舗"} · ${person.role}` : person.role}
             </p>
             <div className="mt-3">
               <Barcode code={person.code} moduleWidth={1.6} height={44} />

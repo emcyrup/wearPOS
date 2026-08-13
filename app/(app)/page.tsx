@@ -23,6 +23,7 @@ import { DateRangePicker } from "@/components/date-range-picker";
 import { rankLabel } from "@/lib/apparel";
 import { getSessionUser } from "@/lib/auth";
 import { type DashboardSectionKey } from "@/lib/dashboard";
+import { MULTI_STORE } from "@/lib/config";
 import { prisma } from "@/lib/db";
 import { formatNumber, formatPercent, formatYen, toDateInputValue } from "@/lib/format";
 
@@ -297,7 +298,7 @@ export default async function DashboardPage({
           </Card>
           )}
 
-          {show("store") && (
+          {MULTI_STORE && show("store") && (
           <Card title="店舗別 売上">
             {stores.length ? (
               <Table head={["店舗", "客数", "売上"]}>
@@ -350,10 +351,10 @@ export default async function DashboardPage({
           }
         >
           {lowStock.length ? (
-            <Table head={["店舗", "SKU", "在庫", "発注点"]}>
+            <Table head={[...(MULTI_STORE ? ["店舗"] : []), "SKU", "在庫", "発注点"]}>
               {lowStock.map((item) => (
                 <tr key={item.id} className="border-b border-ink-100 last:border-0">
-                  <td className="px-2 py-2 text-ink-600">{item.storeName}</td>
+                  {MULTI_STORE && <td className="px-2 py-2 text-ink-600">{item.storeName}</td>}
                   <td className="px-2 py-2">
                     <div className="font-medium text-ink-800">{item.productName}</div>
                     <div className="tabular text-xs text-ink-400">{item.sku}</div>

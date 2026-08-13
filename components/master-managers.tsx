@@ -13,6 +13,7 @@ import {
   type MasterActionState,
 } from "@/app/(app)/settings/master-actions";
 import { Badge } from "@/components/ui";
+import { MULTI_STORE } from "@/lib/config";
 
 const inputClass =
   "rounded-lg border border-ink-200 px-2.5 py-1.5 text-sm outline-none focus:border-ink-400";
@@ -212,7 +213,7 @@ export function StaffManager({
           <tr className="text-xs text-ink-400">
             <th className="px-2 py-1.5 font-medium">コード</th>
             <th className="px-2 py-1.5 font-medium">氏名</th>
-            <th className="px-2 py-1.5 font-medium">所属</th>
+            {MULTI_STORE && <th className="px-2 py-1.5 font-medium">所属</th>}
             <th className="px-2 py-1.5 font-medium">権限</th>
             <th className="px-2 py-1.5" />
           </tr>
@@ -229,7 +230,9 @@ export function StaffManager({
                   </span>
                 )}
               </td>
-              <td className="px-2 py-2 text-ink-600">{person.storeName ?? "—"}</td>
+              {MULTI_STORE && (
+                <td className="px-2 py-2 text-ink-600">{person.storeName ?? "—"}</td>
+              )}
               <td className="px-2 py-2">
                 <Badge tone={person.role === "MANAGER" ? "info" : "neutral"}>{person.role}</Badge>
               </td>
@@ -283,17 +286,19 @@ export function StaffManager({
             className={`${inputClass} w-32`}
           />
         </label>
-        <label className="flex flex-col gap-1">
-          <span className="text-xs text-ink-400">所属</span>
-          <select value={storeId} onChange={(event) => setStoreId(event.target.value)} className={inputClass}>
-            <option value="">全店舗</option>
-            {stores.map((store) => (
-              <option key={store.id} value={store.id}>
-                {store.name}
-              </option>
-            ))}
-          </select>
-        </label>
+        {MULTI_STORE && (
+          <label className="flex flex-col gap-1">
+            <span className="text-xs text-ink-400">所属</span>
+            <select value={storeId} onChange={(event) => setStoreId(event.target.value)} className={inputClass}>
+              <option value="">全店舗</option>
+              {stores.map((store) => (
+                <option key={store.id} value={store.id}>
+                  {store.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
         <label className="flex flex-col gap-1">
           <span className="text-xs text-ink-400">権限</span>
           <select

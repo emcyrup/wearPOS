@@ -11,6 +11,7 @@ import {
 import { CustomerDeleteButton, LineUnlinkButton } from "@/components/customer-admin-actions";
 import { Badge, Card, EmptyState, PageHeader, Table } from "@/components/ui";
 import { DORMANT_DAYS, parseTags, PAYMENT_METHOD_LABEL, pointRateForRank, rankLabel, RANK_RULES } from "@/lib/apparel";
+import { MULTI_STORE } from "@/lib/config";
 import { prisma } from "@/lib/db";
 import { ensureReminderRules } from "@/lib/reminders";
 import { signMemberCardToken } from "@/lib/session";
@@ -97,7 +98,7 @@ export default async function CustomerDetailPage({ params }: { params: Promise<{
       <PageHeader
         title={fullName(customer)}
         description={`${customer.memberCode} · ${fullNameKana(customer) || "カナ未登録"}${
-          customer.store ? ` · 担当 ${customer.store.name}` : ""
+          MULTI_STORE && customer.store ? ` · 担当 ${customer.store.name}` : ""
         }`}
         action={
           <div className="flex items-center gap-2">

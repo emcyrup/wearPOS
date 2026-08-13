@@ -187,7 +187,7 @@ export function ScanButton({ onDetect }: { onDetect: (code: string) => void }) {
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="rounded-lg border border-ink-200 bg-white px-3 py-1.5 text-sm text-ink-600 hover:bg-ink-50"
+        className="shrink-0 rounded-lg border border-ink-200 bg-white px-3 py-1.5 text-sm whitespace-nowrap text-ink-600 hover:bg-ink-50"
       >
         📷 読み取る
       </button>

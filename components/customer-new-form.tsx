@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 
 import { createCustomer } from "@/app/(app)/customers/actions";
+import { MULTI_STORE } from "@/lib/config";
 
 const inputClass =
   "rounded-lg border border-ink-200 px-3 py-2 text-sm outline-none focus:border-ink-400";
@@ -84,17 +85,20 @@ export function CustomerNewForm({ stores }: { stores: { id: string; name: string
             <option value="UNKNOWN">回答しない</option>
           </select>
         </label>
-        <label className="col-span-2 flex flex-col gap-1">
-          <span className="text-xs text-ink-400">担当店舗</span>
-          <select name="storeId" defaultValue="" className={inputClass}>
-            <option value="">未設定</option>
-            {stores.map((store) => (
-              <option key={store.id} value={store.id}>
-                {store.name}
-              </option>
-            ))}
-          </select>
-        </label>
+        {/* 単店舗運用では担当店舗の選択を出さない */}
+        {MULTI_STORE && (
+          <label className="col-span-2 flex flex-col gap-1">
+            <span className="text-xs text-ink-400">担当店舗</span>
+            <select name="storeId" defaultValue="" className={inputClass}>
+              <option value="">未設定</option>
+              {stores.map((store) => (
+                <option key={store.id} value={store.id}>
+                  {store.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
       </div>
       {error && <p className="mt-3 text-sm text-rose-700">{error}</p>}
       <button

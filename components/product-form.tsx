@@ -6,6 +6,7 @@ import { useMemo, useState, useTransition } from "react";
 import { createProduct, type CreateProductResult } from "@/app/(app)/products/new/actions";
 import { JanMonthInput } from "@/components/jan-month-input";
 import { buildSku, STANDARD_COLORS, STANDARD_SIZES } from "@/lib/apparel";
+import { MULTI_STORE } from "@/lib/config";
 
 type Option = { id: string; name: string; code?: string };
 
@@ -21,6 +22,44 @@ export type FieldOption = {
 const inputClass =
   "w-full rounded-lg border border-ink-200 px-3 py-2 text-sm outline-none focus:border-ink-400";
 const labelClass = "mb-1 block text-xs text-ink-500";
+
+/** 設定で選択肢を登録した項目はドロップダウン、なければ自由入力 */
+function TextOrSelect({
+  value,
+  onChange,
+  options,
+  placeholder,
+}: {
+  value: string;
+  onChange: (next: string) => void;
+  options: string[];
+  placeholder?: string;
+}) {
+  if (options.length > 0) {
+    return (
+      <select
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        className={`${inputClass} bg-white`}
+      >
+        <option value="">未選択</option>
+        {options.map((option) => (
+          <option key={option} value={option}>
+            {option}
+          </option>
+        ))}
+      </select>
+    );
+  }
+  return (
+    <input
+      value={value}
+      onChange={(event) => onChange(event.target.value)}
+      placeholder={placeholder}
+      className={inputClass}
+    />
+  );
+}
 
 /**
  * 商品 (品番) の新規登録フォーム。
@@ -44,6 +83,8 @@ export function ProductForm({
   // 設定で名称変更した組み込み項目のラベルを反映する
   const labelFor = (key: string, fallback: string) =>
     fields.find((field) => field.builtinKey === key)?.label ?? fallback;
+  const builtinOptions = (key: string) =>
+    fields.find((field) => field.builtinKey === key)?.options ?? [];
   const customFields = fields.filter((field) => field.builtinKey === null);
   const [styleCode, setStyleCode] = useState("");
   const [name, setName] = useState("");
@@ -209,6 +250,39 @@ export function ProductForm({
                 className={inputClass}
               />
             </label>
+          </div>
+
+          {/* JAN コード採番 (品番のすぐ下) */}
+          <div className="mt-3 rounded-lg bg-ink-50 px-3.5 py-3">
+            <label className="flex items-center gap-2 text-sm text-ink-700">
+              <input
+                type="checkbox"
+                checked={generateBarcodes}
+                onChange={(event) => setGenerateBarcodes(event.target.checked)}
+                className="h-4 w-4 accent-ink-900"
+              />
+              SKU ごとに JAN コード (EAN-13) を自動採番する
+            </label>
+            {generateBarcodes && (
+              <div className="mt-2 flex flex-wrap items-center gap-2 pl-6">
+                <span className="flex items-center gap-2 text-sm text-ink-600">
+                  採番年月
+                  <JanMonthInput
+                    defaultValue={(() => {
+                      const now = new Date();
+                      return `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}`;
+                    })()}
+                    onValueChange={setJanYearMonth}
+                  />
+                </span>
+                <span className="text-xs text-ink-400">
+                  数字6桁 (例: 202608)。「年月 + 連番5桁」で自動採番されます
+                </span>
+              </div>
+            )}
+          </div>
+
+          <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
             {showField("brand") && (
               <label className="block">
                 <span className={labelClass}>{labelFor("brand", "ブランド")}</span>
@@ -261,33 +335,65 @@ export function ProductForm({
             {customFields.map((field) => (
               <label key={field.id} className="block">
                 <span className={labelClass}>{field.label}</span>
-                {field.options.length > 0 ? (
-                  // 設定で選択肢を登録した項目はドロップダウンで選ぶ
-                  <select
-                    value={customValues[field.id] ?? ""}
-                    onChange={(event) =>
-                      setCustomValues((prev) => ({ ...prev, [field.id]: event.target.value }))
-                    }
-                    className={`${inputClass} bg-white`}
-                  >
-                    <option value="">未選択</option>
-                    {field.options.map((option) => (
-                      <option key={option} value={option}>
-                        {option}
-                      </option>
-                    ))}
-                  </select>
-                ) : (
-                  <input
-                    value={customValues[field.id] ?? ""}
-                    onChange={(event) =>
-                      setCustomValues((prev) => ({ ...prev, [field.id]: event.target.value }))
-                    }
-                    className={inputClass}
-                  />
-                )}
+                <TextOrSelect
+                  value={customValues[field.id] ?? ""}
+                  onChange={(next) =>
+                    setCustomValues((prev) => ({ ...prev, [field.id]: next }))
+                  }
+                  options={field.options}
+                />
               </label>
             ))}
+          </div>
+
+          {/* カラー × サイズ (選んだ全組み合わせが SKU になる) */}
+          <div className="mt-4 border-t border-ink-100 pt-4">
+            <h3 className="mb-1 text-sm font-semibold text-ink-800">カラー × サイズ (SKU)</h3>
+            <p className="mb-3 text-xs text-ink-400">
+              選んだカラーとサイズの全組み合わせが SKU として作られます
+            </p>
+
+            <p className={labelClass}>カラー</p>
+            <div className="flex flex-wrap gap-1.5">
+              {STANDARD_COLORS.map((color) => {
+                const on = colorCodes.includes(color.code);
+                return (
+                  <button
+                    key={color.code}
+                    type="button"
+                    onClick={() => toggle(colorCodes, color.code, setColorCodes)}
+                    className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-sm transition-colors ${
+                      on ? "border-ink-900 bg-ink-900 text-white" : "border-ink-200 bg-white text-ink-600 hover:bg-ink-50"
+                    }`}
+                  >
+                    <span
+                      className="inline-block h-3 w-3 rounded-full border border-ink-200"
+                      style={{ backgroundColor: color.hex }}
+                    />
+                    {color.name}
+                  </button>
+                );
+              })}
+            </div>
+
+            <p className={`${labelClass} mt-4`}>サイズ</p>
+            <div className="flex flex-wrap gap-1.5">
+              {STANDARD_SIZES.map((size) => {
+                const on = sizeCodes.includes(size.code);
+                return (
+                  <button
+                    key={size.code}
+                    type="button"
+                    onClick={() => toggle(sizeCodes, size.code, setSizeCodes)}
+                    className={`min-w-12 rounded-lg border px-2.5 py-1 text-sm transition-colors ${
+                      on ? "border-ink-900 bg-ink-900 text-white" : "border-ink-200 bg-white text-ink-600 hover:bg-ink-50"
+                    }`}
+                  >
+                    {size.name}
+                  </button>
+                );
+              })}
+            </div>
           </div>
         </div>
 
@@ -335,117 +441,39 @@ export function ProductForm({
             {showField("material") && (
               <label className="block">
                 <span className={labelClass}>{labelFor("material", "素材・組成")}</span>
-                <input
+                <TextOrSelect
                   value={material}
-                  onChange={(event) => setMaterial(event.target.value)}
+                  onChange={setMaterial}
+                  options={builtinOptions("material")}
                   placeholder="ウール80% ナイロン20%"
-                  className={inputClass}
                 />
               </label>
             )}
             {showField("originCountry") && (
               <label className="block">
                 <span className={labelClass}>{labelFor("originCountry", "原産国")}</span>
-                <input
+                <TextOrSelect
                   value={originCountry}
-                  onChange={(event) => setOriginCountry(event.target.value)}
+                  onChange={setOriginCountry}
+                  options={builtinOptions("originCountry")}
                   placeholder="日本"
-                  className={inputClass}
                 />
               </label>
             )}
             {showField("careNote") && (
               <label className="block">
                 <span className={labelClass}>{labelFor("careNote", "取扱い注意")}</span>
-                <input
+                <TextOrSelect
                   value={careNote}
-                  onChange={(event) => setCareNote(event.target.value)}
+                  onChange={setCareNote}
+                  options={builtinOptions("careNote")}
                   placeholder="ドライクリーニング推奨"
-                  className={inputClass}
                 />
               </label>
             )}
           </div>
         </div>
 
-        {/* カラー × サイズ */}
-        <div className="rounded-xl border border-ink-200 bg-white p-5">
-          <h2 className="mb-1 text-sm font-semibold text-ink-800">カラー × サイズ (SKU)</h2>
-          <p className="mb-3 text-xs text-ink-400">
-            選んだカラーとサイズの全組み合わせが SKU として作られます
-          </p>
-
-          <p className={labelClass}>カラー</p>
-          <div className="flex flex-wrap gap-1.5">
-            {STANDARD_COLORS.map((color) => {
-              const on = colorCodes.includes(color.code);
-              return (
-                <button
-                  key={color.code}
-                  type="button"
-                  onClick={() => toggle(colorCodes, color.code, setColorCodes)}
-                  className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-sm transition-colors ${
-                    on ? "border-ink-900 bg-ink-900 text-white" : "border-ink-200 bg-white text-ink-600 hover:bg-ink-50"
-                  }`}
-                >
-                  <span
-                    className="inline-block h-3 w-3 rounded-full border border-ink-200"
-                    style={{ backgroundColor: color.hex }}
-                  />
-                  {color.name}
-                </button>
-              );
-            })}
-          </div>
-
-          <p className={`${labelClass} mt-4`}>サイズ</p>
-          <div className="flex flex-wrap gap-1.5">
-            {STANDARD_SIZES.map((size) => {
-              const on = sizeCodes.includes(size.code);
-              return (
-                <button
-                  key={size.code}
-                  type="button"
-                  onClick={() => toggle(sizeCodes, size.code, setSizeCodes)}
-                  className={`min-w-12 rounded-lg border px-2.5 py-1 text-sm transition-colors ${
-                    on ? "border-ink-900 bg-ink-900 text-white" : "border-ink-200 bg-white text-ink-600 hover:bg-ink-50"
-                  }`}
-                >
-                  {size.name}
-                </button>
-              );
-            })}
-          </div>
-
-          <div className="mt-4 border-t border-ink-100 pt-3">
-            <label className="flex items-center gap-2 text-sm text-ink-700">
-              <input
-                type="checkbox"
-                checked={generateBarcodes}
-                onChange={(event) => setGenerateBarcodes(event.target.checked)}
-                className="h-4 w-4 accent-ink-900"
-              />
-              SKU ごとに JAN コード (EAN-13) を自動採番する
-            </label>
-            {generateBarcodes && (
-              <div className="mt-2 flex flex-wrap items-center gap-2 pl-6">
-                <span className="flex items-center gap-2 text-sm text-ink-600">
-                  採番年月
-                  <JanMonthInput
-                    defaultValue={(() => {
-                      const now = new Date();
-                      return `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}`;
-                    })()}
-                    onValueChange={setJanYearMonth}
-                  />
-                </span>
-                <span className="text-xs text-ink-400">
-                  数字6桁 (例: 202608)。コードは「年月 + 連番5桁」で自動採番されます
-                </span>
-              </div>
-            )}
-          </div>
-        </div>
       </div>
 
       {/* 右: プレビューと初期在庫 */}
@@ -500,20 +528,25 @@ export function ProductForm({
               />
             </label>
           </div>
-          <p className={`${labelClass} mt-3`}>配置する店舗</p>
-          <div className="space-y-1.5">
-            {stores.map((store) => (
-              <label key={store.id} className="flex items-center gap-2 text-sm text-ink-700">
-                <input
-                  type="checkbox"
-                  checked={storeIds.includes(store.id)}
-                  onChange={() => toggle(storeIds, store.id, setStoreIds)}
-                  className="h-4 w-4 accent-ink-900"
-                />
-                {store.name}
-              </label>
-            ))}
-          </div>
+          {/* 単店舗運用 (MULTI_STORE=false) では店舗の選択を出さず、全店舗=自店に配置する */}
+          {MULTI_STORE && (
+            <>
+              <p className={`${labelClass} mt-3`}>配置する店舗</p>
+              <div className="space-y-1.5">
+                {stores.map((store) => (
+                  <label key={store.id} className="flex items-center gap-2 text-sm text-ink-700">
+                    <input
+                      type="checkbox"
+                      checked={storeIds.includes(store.id)}
+                      onChange={() => toggle(storeIds, store.id, setStoreIds)}
+                      className="h-4 w-4 accent-ink-900"
+                    />
+                    {store.name}
+                  </label>
+                ))}
+              </div>
+            </>
+          )}
         </div>
 
         <div className="rounded-xl border border-ink-200 bg-white p-5">

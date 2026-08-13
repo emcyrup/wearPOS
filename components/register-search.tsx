@@ -1,5 +1,6 @@
 "use client";
 
+import { MULTI_STORE } from "@/lib/config";
 import { useEffect, useRef, useState, useTransition } from "react";
 
 import {
@@ -242,7 +243,7 @@ export function MemberSearchModal({
                     {member.memberCode}
                     {member.nameKana && ` · ${member.nameKana}`}
                     {member.phone && ` · ${member.phone}`}
-                    {member.storeName && ` · ${member.storeName}`}
+                    {MULTI_STORE && member.storeName && ` · ${member.storeName}`}
                   </span>
                 </span>
                 <span className="shrink-0 text-right">

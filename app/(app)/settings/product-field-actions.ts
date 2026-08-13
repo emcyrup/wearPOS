@@ -44,8 +44,15 @@ const updateFieldSchema = z.object({
 });
 
 /**
+ * 選択肢を設定できる組み込み項目。
+ * ブランド・カテゴリ・シーズンは専用マスタが選択肢の役割を持つため対象外。
+ */
+const OPTIONABLE_BUILTINS = ["material", "originCountry", "careNote"];
+
+/**
  * 項目の編集。名称は組み込み・カスタムとも変更でき、
- * 選択肢はカスタム項目のみ設定できる (あればフォームがドロップダウンになる)。
+ * 選択肢はカスタム項目と自由入力の組み込み項目 (素材・原産国・取扱い) に設定できる
+ * (あればフォームがドロップダウンになる)。
  */
 export async function updateProductField(input: unknown): Promise<ProductFieldActionState> {
   if (!(await requireAdmin())) {
@@ -66,7 +73,8 @@ export async function updateProductField(input: unknown): Promise<ProductFieldAc
     return { status: "error", message: `項目「${parsed.data.label}」は既にあります` };
   }
 
-  const options = field.builtinKey ? [] : [...new Set(parsed.data.options)];
+  const optionsEditable = !field.builtinKey || OPTIONABLE_BUILTINS.includes(field.builtinKey);
+  const options = optionsEditable ? [...new Set(parsed.data.options)] : [];
   await prisma.productField.update({
     where: { id: field.id },
     data: { label: parsed.data.label, options },

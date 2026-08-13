@@ -16,7 +16,9 @@ export type ManagedProductField = {
   label: string;
   isBuiltin: boolean;
   isVisible: boolean;
-  /** カスタム項目の選択肢 (空なら自由入力) */
+  /** 選択肢を設定できるか (カスタム項目と、素材・原産国・取扱いの組み込み項目) */
+  optionsEditable: boolean;
+  /** 選択肢 (空なら自由入力) */
   options: string[];
   /** カスタム項目に入力済みの商品数 */
   valueCount: number;
@@ -118,7 +120,7 @@ function FieldRow({
           />
         </label>
       </div>
-      {!field.isBuiltin && (
+      {field.optionsEditable && (
         <div>
           <p className="mb-1 text-xs text-ink-500">
             選択肢 (設定するとドロップダウンになります。空なら自由入力)
