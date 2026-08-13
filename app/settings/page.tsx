@@ -1,5 +1,5 @@
 import { Badge, Card, LinkButton, PageHeader, Table } from "@/components/ui";
-import { CategoryManager, StaffManager } from "@/components/master-managers";
+import { StaffManager } from "@/components/master-managers";
 import { ReminderSettings } from "@/components/reminder-settings";
 import { RichMenuSetup } from "@/components/richmenu-setup";
 import { UserManager } from "@/components/user-manager";
@@ -323,26 +323,18 @@ LINE_PUSH_ENABLED=true         # false で送信を停止 (ログのみ記録)`}
               </Badge>
             ))}
           </div>
-          <p className="mt-4 mb-2 text-xs font-medium text-ink-400">
-            カテゴリ{isAdmin && <span className="ml-1 text-ink-300">(数字は使用商品数)</span>}
-          </p>
-          {isAdmin ? (
-            <CategoryManager
-              categories={categories.map((category) => ({
-                id: category.id,
-                code: category.code,
-                name: category.name,
-                productCount: category._count.products,
-              }))}
-            />
-          ) : (
-            <div className="flex flex-wrap gap-1.5">
-              {categories.map((category) => (
-                <Badge key={category.id} tone="neutral">
-                  {category.name}
-                </Badge>
-              ))}
-            </div>
+          <p className="mt-4 mb-2 text-xs font-medium text-ink-400">カテゴリ</p>
+          <div className="flex flex-wrap gap-1.5">
+            {categories.map((category) => (
+              <Badge key={category.id} tone="neutral">
+                {category.name}
+              </Badge>
+            ))}
+          </div>
+          {isAdmin && (
+            <p className="mt-3 text-xs text-ink-400">
+              ブランド・カテゴリの追加 / 削除は 商品 / SKU →「ブランド / カテゴリの管理」から行えます。
+            </p>
           )}
         </Card>
       </div>

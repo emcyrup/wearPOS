@@ -1,45 +1,12 @@
 "use server";
 
-import { randomInt } from "node:crypto";
-
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
 import { buildSku, sizeOrderOf } from "@/lib/apparel";
 import { requireAdmin } from "@/lib/auth";
-import { ean13CheckDigit } from "@/lib/barcode";
 import { prisma } from "@/lib/db";
-
-/** 社内採番用の JAN 企業プレフィックス (デモ用。実運用では GS1 で取得したコードを使う) */
-const JAN_PREFIX = "49";
-
-function generateJanCandidate(): string {
-  let body = JAN_PREFIX;
-  while (body.length < 12) body += String(randomInt(0, 10));
-  return body + ean13CheckDigit(body);
-}
-
-/** 重複しない JAN コードを count 件確保する */
-async function reserveBarcodes(count: number): Promise<string[]> {
-  const codes = new Set<string>();
-  for (let guard = 0; codes.size < count && guard < 100; guard++) {
-    const candidates: string[] = [];
-    while (candidates.length < count - codes.size) {
-      const candidate = generateJanCandidate();
-      if (!codes.has(candidate)) candidates.push(candidate);
-    }
-    const existing = await prisma.productVariant.findMany({
-      where: { barcode: { in: candidates } },
-      select: { barcode: true },
-    });
-    const taken = new Set(existing.map((v) => v.barcode));
-    for (const candidate of candidates) {
-      if (!taken.has(candidate)) codes.add(candidate);
-    }
-  }
-  if (codes.size < count) throw new Error("JAN コードの採番に失敗しました");
-  return [...codes];
-}
+import { currentYearMonth, reserveSequentialJan } from "@/lib/jan";
 
 const createSchema = z.object({
   styleCode: z
@@ -74,6 +41,11 @@ const createSchema = z.object({
     .max(20),
   /** SKU ごとに JAN コードを自動採番するか */
   generateBarcodes: z.boolean().default(true),
+  /** JAN の採番年月 (YYYY-MM)。コードは 490 + 年月(YYMM) + 連番5桁 + チェックデジット */
+  janYearMonth: z
+    .string()
+    .regex(/^\d{4}-(0[1-9]|1[0-2])$/, "採番年月の形式が不正です (例: 2026-08)")
+    .optional(),
   /** 初期在庫。店舗ごとに SKU 単位の数量を入れる */
   initialStock: z.number().int().nonnegative().max(9999).default(0),
   safetyStock: z.number().int().nonnegative().max(9999).default(0),
@@ -127,7 +99,17 @@ export async function createProduct(input: unknown): Promise<CreateProductResult
     return { ok: false, error: `SKU が重複しています: ${existingSkus[0].sku}` };
   }
 
-  const barcodes = data.generateBarcodes ? await reserveBarcodes(variants.length) : [];
+  let barcodes: string[] = [];
+  try {
+    if (data.generateBarcodes) {
+      barcodes = await reserveSequentialJan(data.janYearMonth ?? currentYearMonth(), variants.length);
+    }
+  } catch (error) {
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : "JAN コードの採番に失敗しました",
+    };
+  }
 
   try {
     const product = await prisma.$transaction(async (tx) => {

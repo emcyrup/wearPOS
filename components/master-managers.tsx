@@ -3,8 +3,10 @@
 import { useState, useTransition } from "react";
 
 import {
+  addBrand,
   addCategory,
   addStaff,
+  deleteBrand,
   deleteCategory,
   deleteStaff,
   restoreStaff,
@@ -27,12 +29,37 @@ function StatusText({ state }: { state: MasterActionState }) {
 }
 
 // ---------------------------------------------------------------------------
-// カテゴリ (追加 / 削除)
+// カテゴリ / ブランド (追加 / 削除)
 // ---------------------------------------------------------------------------
 
-export type ManagedCategory = { id: string; code: string; name: string; productCount: number };
+export type ManagedMasterItem = { id: string; code: string; name: string; productCount: number };
 
-export function CategoryManager({ categories }: { categories: ManagedCategory[] }) {
+const MASTER_KIND = {
+  category: {
+    label: "カテゴリ",
+    codePlaceholder: "OUTER",
+    namePlaceholder: "アウター",
+    add: addCategory,
+    remove: deleteCategory,
+  },
+  brand: {
+    label: "ブランド",
+    codePlaceholder: "WPS",
+    namePlaceholder: "wearPOS original",
+    add: addBrand,
+    remove: deleteBrand,
+  },
+} as const;
+
+/** ブランド / カテゴリのチップ一覧 + 追加フォーム。ユーザーが任意に項目を作成・削除できる */
+export function MasterChipManager({
+  kind,
+  items,
+}: {
+  kind: keyof typeof MASTER_KIND;
+  items: ManagedMasterItem[];
+}) {
+  const def = MASTER_KIND[kind];
   const [code, setCode] = useState("");
   const [name, setName] = useState("");
   const [state, setState] = useState<MasterActionState>({ status: "idle", message: "" });
@@ -40,7 +67,7 @@ export function CategoryManager({ categories }: { categories: ManagedCategory[] 
 
   const submit = () => {
     startTransition(async () => {
-      const result = await addCategory({ code, name });
+      const result = await def.add({ code, name });
       setState(result);
       if (result.status === "success") {
         setCode("");
@@ -49,39 +76,40 @@ export function CategoryManager({ categories }: { categories: ManagedCategory[] 
     });
   };
 
-  const remove = (category: ManagedCategory) => {
-    if (!window.confirm(`カテゴリ「${category.name}」を削除しますか？`)) return;
+  const remove = (item: ManagedMasterItem) => {
+    if (!window.confirm(`${def.label}「${item.name}」を削除しますか？`)) return;
     startTransition(async () => {
-      setState(await deleteCategory(category.id));
+      setState(await def.remove(item.id));
     });
   };
 
   return (
     <div>
       <div className="flex flex-wrap gap-1.5">
-        {categories.map((category) => (
+        {items.map((item) => (
           <span
-            key={category.id}
+            key={item.id}
             className="inline-flex items-center gap-1 rounded-full border border-ink-200 bg-ink-50 py-0.5 pr-1 pl-2.5 text-xs text-ink-700"
           >
-            {category.name}
-            <span className="text-[10px] text-ink-400">{category.productCount}</span>
+            {item.name}
+            <span className="text-[10px] text-ink-400">{item.productCount}</span>
             <button
               type="button"
-              onClick={() => remove(category)}
-              disabled={pending || category.productCount > 0}
+              onClick={() => remove(item)}
+              disabled={pending || item.productCount > 0}
               title={
-                category.productCount > 0
+                item.productCount > 0
                   ? "商品で使われているため削除できません"
-                  : `${category.name} を削除`
+                  : `${item.name} を削除`
               }
-              aria-label={`カテゴリ ${category.name} を削除`}
+              aria-label={`${def.label} ${item.name} を削除`}
               className="ml-0.5 flex h-4 w-4 items-center justify-center rounded-full text-ink-400 hover:bg-rose-100 hover:text-rose-700 disabled:cursor-not-allowed disabled:opacity-30"
             >
               ×
             </button>
           </span>
         ))}
+        {items.length === 0 && <span className="text-xs text-ink-400">まだ登録がありません</span>}
       </div>
       <form
         className="mt-3 flex flex-wrap items-end gap-2 border-t border-ink-100 pt-3"
@@ -95,16 +123,16 @@ export function CategoryManager({ categories }: { categories: ManagedCategory[] 
           <input
             value={code}
             onChange={(event) => setCode(event.target.value)}
-            placeholder="OUTER"
+            placeholder={def.codePlaceholder}
             className={`${inputClass} w-24 uppercase`}
           />
         </label>
         <label className="flex flex-col gap-1">
-          <span className="text-xs text-ink-400">カテゴリ名</span>
+          <span className="text-xs text-ink-400">{def.label}名</span>
           <input
             value={name}
             onChange={(event) => setName(event.target.value)}
-            placeholder="アウター"
+            placeholder={def.namePlaceholder}
             className={`${inputClass} w-36`}
           />
         </label>

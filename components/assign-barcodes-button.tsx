@@ -32,10 +32,25 @@ export function AssignBarcodesButton({
     assignMissingBarcodes.bind(null, productId),
     INITIAL,
   );
+  const now = new Date();
+  const defaultMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
 
   return (
-    <form action={formAction} className="flex items-center gap-2">
+    <form action={formAction} className="flex flex-wrap items-center gap-2">
       {state.status === "error" && <span className="text-xs text-rose-700">{state.message}</span>}
+      {state.status === "success" && (
+        <span className="text-xs text-emerald-700">{state.message}</span>
+      )}
+      {/* 採番ルール: 490 + 年月(YYMM) + 連番5桁 + チェックデジット */}
+      <label className="flex items-center gap-1.5 text-xs text-ink-500">
+        採番年月
+        <input
+          type="month"
+          name="janYearMonth"
+          defaultValue={defaultMonth}
+          className="rounded-lg border border-ink-200 px-2 py-1 text-sm outline-none focus:border-ink-400"
+        />
+      </label>
       <SubmitButton count={missingCount} />
     </form>
   );

@@ -1,20 +1,9 @@
 "use server";
 
-import { randomInt } from "node:crypto";
-
 import { revalidatePath } from "next/cache";
 
-import { ean13CheckDigit } from "@/lib/barcode";
 import { prisma } from "@/lib/db";
-
-/** 社内採番用の JAN 企業プレフィックス (デモ用。実運用では GS1 で取得したコードを使う) */
-const JAN_PREFIX = "49";
-
-function generateJanCandidate(): string {
-  let body = JAN_PREFIX;
-  while (body.length < 12) body += String(randomInt(0, 10));
-  return body + ean13CheckDigit(body);
-}
+import { currentYearMonth, reserveSequentialJan } from "@/lib/jan";
 
 export type AssignBarcodesState = {
   status: "idle" | "success" | "error";
@@ -22,13 +11,13 @@ export type AssignBarcodesState = {
 };
 
 /**
- * JAN コード未設定の SKU に有効な EAN-13 を一括で採番する。
- * 既存のバーコードとは重複しないことを確認してから割り当てる。
+ * JAN コード未設定の SKU に「年月 + 連番5桁」ルールの EAN-13 を一括で採番する。
+ * 年月はフォームの入力値 (未入力なら当月) を使い、後ろ5桁は自動連番。
  */
 export async function assignMissingBarcodes(
   productId: string,
   _prev: AssignBarcodesState,
-  _formData: FormData,
+  formData: FormData,
 ): Promise<AssignBarcodesState> {
   const variants = await prisma.productVariant.findMany({
     where: { productId, OR: [{ barcode: null }, { barcode: "" }] },
@@ -39,29 +28,17 @@ export async function assignMissingBarcodes(
     return { status: "idle", message: "JAN コード未設定の SKU はありません" };
   }
 
-  // 衝突しないコードを必要数ぶん確保する
-  const codes = new Set<string>();
-  for (let guard = 0; codes.size < variants.length && guard < 1000; guard++) {
-    const candidates: string[] = [];
-    while (candidates.length < variants.length - codes.size) {
-      const candidate = generateJanCandidate();
-      if (!codes.has(candidate)) candidates.push(candidate);
-    }
-    const existing = await prisma.productVariant.findMany({
-      where: { barcode: { in: candidates } },
-      select: { barcode: true },
-    });
-    const taken = new Set(existing.map((v) => v.barcode));
-    for (const candidate of candidates) {
-      if (!taken.has(candidate)) codes.add(candidate);
-    }
-  }
+  const yearMonth = String(formData.get("janYearMonth") ?? "").trim() || currentYearMonth();
 
-  if (codes.size < variants.length) {
-    return { status: "error", message: "採番に失敗しました。再度お試しください" };
+  let assigned: string[];
+  try {
+    assigned = await reserveSequentialJan(yearMonth, variants.length);
+  } catch (error) {
+    return {
+      status: "error",
+      message: error instanceof Error ? error.message : "採番に失敗しました。再度お試しください",
+    };
   }
-
-  const assigned = [...codes];
   await prisma.$transaction(
     variants.map((variant, index) =>
       prisma.productVariant.update({

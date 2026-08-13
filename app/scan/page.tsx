@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 
-/** スキャンは商品機能配下 (/products/scan) へ移動した。ブックマーク互換のため転送する */
+/** スキャンは商品一覧ページ (/products) に埋め込んだ。ブックマーク互換のため転送する */
 export default function ScanRedirectPage() {
-  redirect("/products/scan");
+  redirect("/products");
 }

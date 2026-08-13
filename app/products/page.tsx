@@ -1,5 +1,7 @@
 import Link from "next/link";
 
+import { MasterChipManager } from "@/components/master-managers";
+import { ScanLookup } from "@/components/scan-lookup";
 import { Badge, Card, EmptyState, LinkButton, PageHeader, Table } from "@/components/ui";
 import { markdownRate, seasonPhase, SEASON_PHASE_LABEL } from "@/lib/apparel";
 import { getSessionUser } from "@/lib/auth";
@@ -15,9 +17,16 @@ export default async function ProductsPage({ searchParams }: { searchParams: Pro
   const isAdmin = (await getSessionUser())?.role === "ADMIN";
   const q = params.q?.trim() ?? "";
 
-  const [seasons, categories] = await Promise.all([
+  const [seasons, categories, brands] = await Promise.all([
     prisma.season.findMany({ orderBy: [{ year: "desc" }, { term: "asc" }] }),
-    prisma.category.findMany({ orderBy: { code: "asc" } }),
+    prisma.category.findMany({
+      orderBy: { code: "asc" },
+      include: { _count: { select: { products: true } } },
+    }),
+    prisma.brand.findMany({
+      orderBy: { code: "asc" },
+      include: { _count: { select: { products: true } } },
+    }),
   ]);
 
   const products = await prisma.product.findMany({
@@ -66,7 +75,6 @@ export default async function ProductsPage({ searchParams }: { searchParams: Pro
             <Badge tone="neutral">
               {products.length} 品番 / {products.reduce((s, p) => s + p.variants.length, 0)} SKU
             </Badge>
-            <LinkButton href="/products/scan">バーコードスキャン</LinkButton>
             {isAdmin && (
               <LinkButton href="/products/new" variant="primary">
                 商品を登録
@@ -75,6 +83,57 @@ export default async function ProductsPage({ searchParams }: { searchParams: Pro
           </div>
         }
       />
+
+      {/* バーコードスキャン照会 (商品画面に埋め込み。開くとカメラ / リーダーで照会できる) */}
+      <details className="mb-4 rounded-xl border border-ink-200 bg-white">
+        <summary className="cursor-pointer px-5 py-3.5 text-sm font-semibold text-ink-800 select-none hover:bg-ink-50">
+          📷 バーコードスキャン照会
+          <span className="ml-2 text-xs font-normal text-ink-400">
+            値札の JAN / SKU を読み取って商品情報と店舗別在庫を確認
+          </span>
+        </summary>
+        <div className="border-t border-ink-100 px-5 py-4">
+          <ScanLookup />
+        </div>
+      </details>
+
+      {/* 基本情報マスタ (ブランド / カテゴリ) の管理。ユーザーが任意に項目を作成できる */}
+      {isAdmin && (
+        <details className="mb-4 rounded-xl border border-ink-200 bg-white">
+          <summary className="cursor-pointer px-5 py-3.5 text-sm font-semibold text-ink-800 select-none hover:bg-ink-50">
+            🏷 ブランド / カテゴリの管理
+            <span className="ml-2 text-xs font-normal text-ink-400">
+              商品登録で選べる項目を追加・削除 (数字は使用商品数)
+            </span>
+          </summary>
+          <div className="grid gap-6 border-t border-ink-100 px-5 py-4 lg:grid-cols-2">
+            <div>
+              <p className="mb-2 text-xs font-medium text-ink-400">ブランド</p>
+              <MasterChipManager
+                kind="brand"
+                items={brands.map((brand) => ({
+                  id: brand.id,
+                  code: brand.code,
+                  name: brand.name,
+                  productCount: brand._count.products,
+                }))}
+              />
+            </div>
+            <div>
+              <p className="mb-2 text-xs font-medium text-ink-400">カテゴリ</p>
+              <MasterChipManager
+                kind="category"
+                items={categories.map((category) => ({
+                  id: category.id,
+                  code: category.code,
+                  name: category.name,
+                  productCount: category._count.products,
+                }))}
+              />
+            </div>
+          </div>
+        </details>
+      )}
 
       <Card className="mb-4">
         <form className="flex flex-wrap items-end gap-3" method="get">

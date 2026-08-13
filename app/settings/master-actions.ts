@@ -36,6 +36,7 @@ export async function addCategory(input: unknown): Promise<MasterActionState> {
   }
 
   await prisma.category.create({ data: { code, name: parsed.data.name } });
+  revalidatePath("/products");
   revalidatePath("/settings");
   return { status: "success", message: `カテゴリ「${parsed.data.name}」を追加しました` };
 }
@@ -64,8 +65,67 @@ export async function deleteCategory(id: string): Promise<MasterActionState> {
   }
 
   await prisma.category.delete({ where: { id } });
+  revalidatePath("/products");
   revalidatePath("/settings");
   return { status: "success", message: `カテゴリ「${category.name}」を削除しました` };
+}
+
+// ---------------------------------------------------------------------------
+// ブランド
+// ---------------------------------------------------------------------------
+
+const addBrandSchema = z.object({
+  code: z.string().trim().regex(/^[A-Za-z0-9_-]{1,20}$/),
+  name: z.string().trim().min(1).max(30),
+});
+
+export async function addBrand(input: unknown): Promise<MasterActionState> {
+  if (!(await requireAdmin())) {
+    return { status: "error", message: "管理者のみ実行できます" };
+  }
+  const parsed = addBrandSchema.safeParse(input);
+  if (!parsed.success) {
+    return {
+      status: "error",
+      message: "入力内容を確認してください (コードは20文字以内の半角英数字)",
+    };
+  }
+
+  const code = parsed.data.code.toUpperCase();
+  const exists = await prisma.brand.findUnique({ where: { code } });
+  if (exists) {
+    return { status: "error", message: `ブランドコード「${code}」は既にあります` };
+  }
+
+  await prisma.brand.create({ data: { code, name: parsed.data.name } });
+  revalidatePath("/products");
+  revalidatePath("/settings");
+  return { status: "success", message: `ブランド「${parsed.data.name}」を追加しました` };
+}
+
+export async function deleteBrand(id: string): Promise<MasterActionState> {
+  if (!(await requireAdmin())) {
+    return { status: "error", message: "管理者のみ実行できます" };
+  }
+
+  const brand = await prisma.brand.findUnique({
+    where: { id },
+    include: { _count: { select: { products: true } } },
+  });
+  if (!brand) {
+    return { status: "error", message: "ブランドが見つかりません" };
+  }
+  if (brand._count.products > 0) {
+    return {
+      status: "error",
+      message: `「${brand.name}」は ${brand._count.products} 件の商品で使われているため削除できません`,
+    };
+  }
+
+  await prisma.brand.delete({ where: { id } });
+  revalidatePath("/products");
+  revalidatePath("/settings");
+  return { status: "success", message: `ブランド「${brand.name}」を削除しました` };
 }
 
 // ---------------------------------------------------------------------------

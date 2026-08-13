@@ -40,6 +40,11 @@ export function ProductForm({
   const [colorCodes, setColorCodes] = useState<string[]>(["BLK"]);
   const [sizeCodes, setSizeCodes] = useState<string[]>(["S", "M", "L"]);
   const [generateBarcodes, setGenerateBarcodes] = useState(true);
+  // JAN 採番の年月 (490 + YYMM + 連番5桁 + チェックデジット)。既定は当月
+  const [janYearMonth, setJanYearMonth] = useState(() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  });
   const [initialStock, setInitialStock] = useState("0");
   const [safetyStock, setSafetyStock] = useState("2");
   const [storeIds, setStoreIds] = useState<string[]>(stores.map((store) => store.id));
@@ -87,6 +92,7 @@ export function ProductForm({
         })),
         sizes: selectedSizes.map((size) => ({ code: size.code, name: size.name })),
         generateBarcodes,
+        janYearMonth,
         initialStock: Number(initialStock) || 0,
         safetyStock: Number(safetyStock) || 0,
         storeIds,
@@ -333,15 +339,33 @@ export function ProductForm({
             })}
           </div>
 
-          <label className="mt-4 flex items-center gap-2 border-t border-ink-100 pt-3 text-sm text-ink-700">
-            <input
-              type="checkbox"
-              checked={generateBarcodes}
-              onChange={(event) => setGenerateBarcodes(event.target.checked)}
-              className="h-4 w-4 accent-ink-900"
-            />
-            SKU ごとに JAN コード (EAN-13) を自動採番する
-          </label>
+          <div className="mt-4 border-t border-ink-100 pt-3">
+            <label className="flex items-center gap-2 text-sm text-ink-700">
+              <input
+                type="checkbox"
+                checked={generateBarcodes}
+                onChange={(event) => setGenerateBarcodes(event.target.checked)}
+                className="h-4 w-4 accent-ink-900"
+              />
+              SKU ごとに JAN コード (EAN-13) を自動採番する
+            </label>
+            {generateBarcodes && (
+              <div className="mt-2 flex flex-wrap items-center gap-2 pl-6">
+                <label className="flex items-center gap-2 text-sm text-ink-600">
+                  採番年月
+                  <input
+                    type="month"
+                    value={janYearMonth}
+                    onChange={(event) => setJanYearMonth(event.target.value)}
+                    className="rounded-lg border border-ink-200 px-2 py-1 text-sm outline-none focus:border-ink-400"
+                  />
+                </label>
+                <span className="text-xs text-ink-400">
+                  コードは「年月 (YYMM) + 連番5桁」で自動採番されます
+                </span>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 

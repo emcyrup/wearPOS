@@ -30,6 +30,8 @@ export default async function RootLayout({ children }: { children: React.ReactNo
       href: feature.path,
       label: feature.label,
       exact: feature.path === "/",
+      // レジは会計中に他画面へ移動しないよう別タブで開く
+      newTab: feature.key === "register",
     }),
   );
 
