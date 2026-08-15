@@ -10,6 +10,7 @@ import {
   type FeatureKey,
 } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { getSignupPolicy, saveSignupPolicy } from "@/lib/signup-policy";
 
 export type UserActionState = { status: "idle" | "success" | "error"; message: string };
 
@@ -54,6 +55,49 @@ export async function createUser(input: unknown): Promise<UserActionState> {
 
   revalidatePath("/settings");
   return { status: "success", message: `${parsed.data.displayName} を追加しました` };
+}
+
+const signupPolicySchema = z.object({
+  mode: z.enum(["OPEN", "CODE", "OFF"]),
+  /** undefined なら変更しない。空文字なら合言葉を削除 */
+  code: z.string().max(100).optional(),
+});
+
+/** ログイン画面からの新規ユーザー作成の可否を切り替える (管理者のみ) */
+export async function updateSignupPolicy(input: unknown): Promise<UserActionState> {
+  if (!(await requireAdmin())) {
+    return { status: "error", message: "管理者のみ実行できます" };
+  }
+  const parsed = signupPolicySchema.safeParse(input);
+  if (!parsed.success) {
+    return { status: "error", message: "入力内容が不正です" };
+  }
+  const { mode, code } = parsed.data;
+
+  if (mode === "CODE") {
+    const current = await getSignupPolicy();
+    // 合言葉が未設定のまま「合言葉が必要」にすると誰も作成できなくなる
+    if (!current.hasCode && !code) {
+      return { status: "error", message: "合言葉を入力してください" };
+    }
+    if (code && code.length < 4) {
+      return { status: "error", message: "合言葉は4文字以上にしてください" };
+    }
+  }
+
+  await saveSignupPolicy(mode, code === undefined || code === "" ? undefined : code);
+
+  revalidatePath("/settings");
+  revalidatePath("/login");
+  return {
+    status: "success",
+    message:
+      mode === "OPEN"
+        ? "だれでも新規ユーザーを作成できるようにしました"
+        : mode === "CODE"
+          ? "合言葉を知っている人だけ作成できるようにしました"
+          : "新規ユーザーの作成を停止しました",
+  };
 }
 
 const updateUserSchema = z.object({

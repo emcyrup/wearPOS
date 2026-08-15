@@ -490,6 +490,13 @@ model AppUser {
   updatedAt    DateTime @updatedAt
 }
 
+/// アプリ全体の設定を key/value で持つ汎用テーブル (新規ユーザー作成の可否など)
+model AppSetting {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt
+}
+
 /// LINE 自動リマインドの店舗全体設定 (1ルール1行)
 model ReminderRule {
   /// PURCHASE_FOLLOW | REVISIT | DORMANT | BIRTHDAY

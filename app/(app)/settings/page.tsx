@@ -3,6 +3,7 @@ import { StaffManager } from "@/components/master-managers";
 import { ProductFieldSettings } from "@/components/product-field-settings";
 import { ReminderSettings } from "@/components/reminder-settings";
 import { RichMenuSetup } from "@/components/richmenu-setup";
+import { SignupPolicySettings } from "@/components/signup-policy-settings";
 import { UserManager } from "@/components/user-manager";
 import { ensureReminderRules } from "@/lib/reminders";
 import { RANK_RULES } from "@/lib/apparel";
@@ -12,6 +13,7 @@ import { prisma } from "@/lib/db";
 import { formatPercent, formatYen } from "@/lib/format";
 import { isLineConfigured, lineConfig } from "@/lib/line";
 import { ensureProductFields } from "@/lib/product-fields";
+import { getSignupPolicy } from "@/lib/signup-policy";
 
 export const dynamic = "force-dynamic";
 
@@ -47,6 +49,9 @@ export default async function SettingsPage() {
     }),
     isAdmin ? prisma.appUser.findMany({ orderBy: { createdAt: "asc" } }) : Promise.resolve([]),
   ]);
+
+  // ログイン画面からの新規ユーザー作成の可否 (管理者のみ設定できる)
+  const signupPolicy = await getSignupPolicy();
 
   // 商品の基本情報に表示する項目 (組み込み + カスタム) の設定
   const productFields = isAdmin
@@ -118,6 +123,18 @@ export default async function SettingsPage() {
             currentUserId={sessionUser.uid}
             defaultStaffFeatures={DEFAULT_STAFF_FEATURES}
           />
+        </Card>
+      )}
+
+      {isAdmin && (
+        <Card title="ログイン画面での新規ユーザー作成" className="mb-4">
+          <p className="mb-3 text-sm text-ink-600">
+            ログイン画面から、スタッフが自分でユーザーを作ってそのままログインできます。
+            作成されるのは<span className="font-medium">スタッフ権限</span>（レジ・商品・在庫）で、
+            顧客情報・取引履歴・設定にはアクセスできません。権限を広げるときは上の
+            「ユーザーと権限」から変更してください。
+          </p>
+          <SignupPolicySettings mode={signupPolicy.mode} hasCode={signupPolicy.hasCode} />
         </Card>
       )}
 
