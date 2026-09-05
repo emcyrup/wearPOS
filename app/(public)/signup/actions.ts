@@ -10,7 +10,7 @@ import { signMemberCardToken, verifySignupToken } from "@/lib/session";
 
 const signupSchema = z.object({
   token: z.string().min(1),
-  lastName: z.string().trim().min(1, "姓を入力してください").max(30),
+  lastName: z.string().trim().min(1, "お名前を入力してください").max(30),
   firstName: z.string().trim().max(30).default(""),
   lastNameKana: z.string().trim().max(30).default(""),
   firstNameKana: z.string().trim().max(30).default(""),
@@ -27,6 +27,8 @@ const signupSchema = z.object({
     .or(z.literal(""))
     .default(""),
   gender: z.enum(["FEMALE", "MALE", "OTHER", "UNKNOWN"]).default("UNKNOWN"),
+  /** 設定で住所を集めるときのみ入力される */
+  address: z.string().trim().max(200).default(""),
 });
 
 export type SignupResult =
@@ -78,6 +80,7 @@ export async function submitSignup(input: unknown): Promise<SignupResult> {
       email: parsed.data.email,
       birthday: parsed.data.birthday || undefined,
       gender: parsed.data.gender,
+      address: parsed.data.address,
     },
     profile,
   );

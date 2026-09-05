@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 
 import { submitSignup, type SignupResult } from "@/app/(public)/signup/actions";
+import type { CustomerFieldPolicy } from "@/lib/customer-fields";
 
 const inputClass =
   "w-full rounded-lg border border-ink-200 px-3 py-2 text-sm outline-none focus:border-ink-400";
@@ -11,7 +12,14 @@ const inputClass =
  * LINE から開く会員登録フォーム。
  * 送信すると顧客が作成され、その LINE アカウントと自動で連携される。
  */
-export function SignupForm({ token }: { token: string }) {
+export function SignupForm({
+  token,
+  policy,
+}: {
+  token: string;
+  /** 設定 (顧客登録の項目) に従って、集める項目を出し分ける */
+  policy: CustomerFieldPolicy;
+}) {
   const [lastName, setLastName] = useState("");
   const [firstName, setFirstName] = useState("");
   const [lastNameKana, setLastNameKana] = useState("");
@@ -20,6 +28,7 @@ export function SignupForm({ token }: { token: string }) {
   const [email, setEmail] = useState("");
   const [birthday, setBirthday] = useState("");
   const [gender, setGender] = useState("UNKNOWN");
+  const [address, setAddress] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<(SignupResult & { ok: true }) | null>(null);
   const [pending, startTransition] = useTransition();
@@ -37,6 +46,7 @@ export function SignupForm({ token }: { token: string }) {
         email,
         birthday,
         gender,
+        address,
       });
       if (result.ok) {
         setDone(result);
@@ -75,94 +85,152 @@ export function SignupForm({ token }: { token: string }) {
         submit();
       }}
     >
-      <div className="grid grid-cols-2 gap-3">
+      {policy.nameMode === "NICKNAME" ? (
         <label className="block">
           <span className="mb-1 block text-xs text-ink-500">
-            姓 <span className="text-rose-600">*</span>
+            お名前 (ニックネーム可){policy.nameRequired && <span className="text-rose-600"> *</span>}
           </span>
           <input
             value={lastName}
             onChange={(event) => setLastName(event.target.value)}
-            required
-            placeholder="山田"
+            required={policy.nameRequired}
+            placeholder="やまちゃん"
             className={inputClass}
           />
         </label>
-        <label className="block">
-          <span className="mb-1 block text-xs text-ink-500">名</span>
-          <input
-            value={firstName}
-            onChange={(event) => setFirstName(event.target.value)}
-            placeholder="花子"
-            className={inputClass}
-          />
-        </label>
-        <label className="block">
-          <span className="mb-1 block text-xs text-ink-500">セイ</span>
-          <input
-            value={lastNameKana}
-            onChange={(event) => setLastNameKana(event.target.value)}
-            placeholder="ヤマダ"
-            className={inputClass}
-          />
-        </label>
-        <label className="block">
-          <span className="mb-1 block text-xs text-ink-500">メイ</span>
-          <input
-            value={firstNameKana}
-            onChange={(event) => setFirstNameKana(event.target.value)}
-            placeholder="ハナコ"
-            className={inputClass}
-          />
-        </label>
-      </div>
+      ) : (
+        <div className="grid grid-cols-2 gap-3">
+          <label className="block">
+            <span className="mb-1 block text-xs text-ink-500">
+              姓{policy.nameRequired && <span className="text-rose-600"> *</span>}
+            </span>
+            <input
+              value={lastName}
+              onChange={(event) => setLastName(event.target.value)}
+              required={policy.nameRequired}
+              placeholder="山田"
+              className={inputClass}
+            />
+          </label>
+          <label className="block">
+            <span className="mb-1 block text-xs text-ink-500">名</span>
+            <input
+              value={firstName}
+              onChange={(event) => setFirstName(event.target.value)}
+              placeholder="花子"
+              className={inputClass}
+            />
+          </label>
+        </div>
+      )}
 
-      <label className="block">
-        <span className="mb-1 block text-xs text-ink-500">電話番号</span>
-        <input
-          type="tel"
-          value={phone}
-          onChange={(event) => setPhone(event.target.value)}
-          placeholder="090-1234-5678"
-          className={inputClass}
-        />
-      </label>
+      {policy.kana !== "HIDDEN" && (
+        <div className="grid grid-cols-2 gap-3">
+          <label className="block">
+            <span className="mb-1 block text-xs text-ink-500">
+              セイ{policy.kana === "REQUIRED" && <span className="text-rose-600"> *</span>}
+            </span>
+            <input
+              value={lastNameKana}
+              onChange={(event) => setLastNameKana(event.target.value)}
+              required={policy.kana === "REQUIRED"}
+              placeholder="ヤマダ"
+              className={inputClass}
+            />
+          </label>
+          <label className="block">
+            <span className="mb-1 block text-xs text-ink-500">メイ</span>
+            <input
+              value={firstNameKana}
+              onChange={(event) => setFirstNameKana(event.target.value)}
+              placeholder="ハナコ"
+              className={inputClass}
+            />
+          </label>
+        </div>
+      )}
 
-      <label className="block">
-        <span className="mb-1 block text-xs text-ink-500">メールアドレス</span>
-        <input
-          type="email"
-          value={email}
-          onChange={(event) => setEmail(event.target.value)}
-          placeholder="hanako@example.com"
-          className={inputClass}
-        />
-      </label>
-
-      <div className="grid grid-cols-2 gap-3">
+      {policy.phone !== "HIDDEN" && (
         <label className="block">
-          <span className="mb-1 block text-xs text-ink-500">誕生日</span>
+          <span className="mb-1 block text-xs text-ink-500">
+            電話番号{policy.phone === "REQUIRED" && <span className="text-rose-600"> *</span>}
+          </span>
           <input
-            type="date"
-            value={birthday}
-            onChange={(event) => setBirthday(event.target.value)}
+            type="tel"
+            value={phone}
+            onChange={(event) => setPhone(event.target.value)}
+            required={policy.phone === "REQUIRED"}
+            placeholder="090-1234-5678"
             className={inputClass}
           />
         </label>
+      )}
+
+      {policy.email !== "HIDDEN" && (
         <label className="block">
-          <span className="mb-1 block text-xs text-ink-500">性別</span>
-          <select
-            value={gender}
-            onChange={(event) => setGender(event.target.value)}
-            className={`${inputClass} bg-white`}
-          >
-            <option value="UNKNOWN">回答しない</option>
-            <option value="FEMALE">女性</option>
-            <option value="MALE">男性</option>
-            <option value="OTHER">その他</option>
-          </select>
+          <span className="mb-1 block text-xs text-ink-500">
+            メールアドレス{policy.email === "REQUIRED" && <span className="text-rose-600"> *</span>}
+          </span>
+          <input
+            type="email"
+            value={email}
+            onChange={(event) => setEmail(event.target.value)}
+            required={policy.email === "REQUIRED"}
+            placeholder="hanako@example.com"
+            className={inputClass}
+          />
         </label>
-      </div>
+      )}
+
+      {policy.address !== "HIDDEN" && (
+        <label className="block">
+          <span className="mb-1 block text-xs text-ink-500">
+            {policy.addressCityOnly ? "市区町村" : "住所"}
+            {policy.address === "REQUIRED" && <span className="text-rose-600"> *</span>}
+          </span>
+          <input
+            value={address}
+            onChange={(event) => setAddress(event.target.value)}
+            required={policy.address === "REQUIRED"}
+            placeholder={policy.addressCityOnly ? "渋谷区" : "東京都渋谷区..."}
+            className={inputClass}
+          />
+        </label>
+      )}
+
+      {(policy.birthday !== "HIDDEN" || policy.gender !== "HIDDEN") && (
+        <div className="grid grid-cols-2 gap-3">
+          {policy.birthday !== "HIDDEN" && (
+            <label className="block">
+              <span className="mb-1 block text-xs text-ink-500">
+                誕生日{policy.birthday === "REQUIRED" && <span className="text-rose-600"> *</span>}
+              </span>
+              <input
+                type="date"
+                value={birthday}
+                onChange={(event) => setBirthday(event.target.value)}
+                required={policy.birthday === "REQUIRED"}
+                className={inputClass}
+              />
+            </label>
+          )}
+          {policy.gender !== "HIDDEN" && (
+            <label className="block">
+              <span className="mb-1 block text-xs text-ink-500">性別</span>
+              <select
+                value={gender}
+                onChange={(event) => setGender(event.target.value)}
+                className={`${inputClass} bg-white`}
+              >
+                <option value="UNKNOWN">回答しない</option>
+                <option value="FEMALE">女性</option>
+                <option value="MALE">男性</option>
+                <option value="OTHER">その他</option>
+              </select>
+            </label>
+          )}
+        </div>
+      )}
 
       {error && <p className="text-sm text-rose-700">{error}</p>}
 

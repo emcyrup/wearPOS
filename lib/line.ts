@@ -266,6 +266,8 @@ export type SignupInput = {
   /** YYYY-MM-DD */
   birthday?: string;
   gender?: "FEMALE" | "MALE" | "OTHER" | "UNKNOWN";
+  /** 設定で住所を集める場合のみ届く (市区町村までの運用もある) */
+  address?: string;
 };
 
 /**
@@ -293,6 +295,7 @@ export async function registerCustomerFromLine(
             email: input.email || null,
             birthday: birthday && !Number.isNaN(birthday.getTime()) ? birthday : null,
             gender: input.gender ?? null,
+            address: input.address || null,
           },
         });
         await tx.lineAccount.create({

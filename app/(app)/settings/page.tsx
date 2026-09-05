@@ -2,6 +2,8 @@ import { Badge, Card, LinkButton, PageHeader, Table } from "@/components/ui";
 import { StaffManager } from "@/components/master-managers";
 import { ProductFieldSettings } from "@/components/product-field-settings";
 import { ReminderSettings } from "@/components/reminder-settings";
+import { AiSettings } from "@/components/ai-settings";
+import { CustomerFieldSettings } from "@/components/customer-field-settings";
 import { PaymentMethodSettings } from "@/components/payment-method-settings";
 import { RichMenuSetup } from "@/components/richmenu-setup";
 import { SignupPolicySettings } from "@/components/signup-policy-settings";
@@ -12,6 +14,9 @@ import { DEFAULT_STAFF_FEATURES, FEATURES, getSessionUser } from "@/lib/auth";
 import { MULTI_STORE } from "@/lib/config";
 import { prisma } from "@/lib/db";
 import { formatPercent, formatYen } from "@/lib/format";
+import { getCustomerFieldPolicy } from "@/app/(app)/settings/customer-field-actions";
+import { isChatGptConfigured } from "@/lib/chatgpt";
+import { isChatGptEnabled } from "@/lib/insight-policy";
 import { isLineConfigured, lineConfig } from "@/lib/line";
 import { ensurePaymentMethods } from "@/lib/payment-methods";
 import { ensureProductFields } from "@/lib/product-fields";
@@ -54,6 +59,11 @@ export default async function SettingsPage() {
 
   // ログイン画面からの新規ユーザー作成の可否 (管理者のみ設定できる)
   const signupPolicy = await getSignupPolicy();
+
+  // AI考察の送信設定 (ChatGPT への送信可否)
+  const chatGptEnabled = await isChatGptEnabled();
+  // 顧客登録で集める項目
+  const customerFieldPolicy = await getCustomerFieldPolicy();
 
   // レジの支払方法 (組み込み + 店舗が追加したもの)。使用中の件数も出す
   const paymentMethods = await ensurePaymentMethods();
@@ -255,6 +265,26 @@ export default async function SettingsPage() {
               name: season.name,
               productCount: season._count.products,
             }))}
+          />
+        </Card>
+      )}
+
+      {isAdmin && (
+        <Card title="顧客登録の項目" className="mb-4">
+          <p className="mb-3 text-sm text-ink-600">
+            会員登録で集める項目を選べます。集めない項目は店頭の登録画面と LINE
+            の登録フォームの両方から消えるため、個人情報をお預かりする範囲をお店の方針にあわせて最小限にできます。
+          </p>
+          <CustomerFieldSettings policy={customerFieldPolicy} />
+        </Card>
+      )}
+
+      {isAdmin && (
+        <Card title="AI考察と個人情報の取り扱い" className="mb-4">
+          <AiSettings
+            chatGptEnabled={chatGptEnabled}
+            chatGptConfigured={isChatGptConfigured()}
+            anthropicConfigured={Boolean(process.env.ANTHROPIC_API_KEY)}
           />
         </Card>
       )}

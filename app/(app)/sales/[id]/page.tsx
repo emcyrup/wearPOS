@@ -196,6 +196,9 @@ export default async function SaleDetailPage({ params }: { params: Promise<{ id:
                             (預り {formatYen(payment.tendered)} / 釣 {formatYen(payment.change ?? 0)})
                           </span>
                         )}
+                        {payment.note && (
+                          <span className="ml-1 text-xs text-ink-400">No. {payment.note}</span>
+                        )}
                       </dd>
                       <dd className="tabular">{formatYen(payment.amount)}</dd>
                     </div>
@@ -204,10 +207,15 @@ export default async function SaleDetailPage({ params }: { params: Promise<{ id:
               ) : (
                 <div className="flex justify-between pt-1">
                   <dt className="text-ink-400">支払方法</dt>
-                  <dd>
+                  <dd className="text-right">
                     {paymentLabels[sale.paymentMethod] ??
                       PAYMENT_METHOD_LABEL[sale.paymentMethod] ??
                       sale.paymentMethod}
+                    {sale.payments[0]?.note && (
+                      <span className="block text-xs text-ink-400">
+                        No. {sale.payments[0].note}
+                      </span>
+                    )}
                   </dd>
                 </div>
               )}

@@ -253,6 +253,9 @@ const createCustomerSchema = z.object({
   /** YYYY-MM-DD。空文字なら未登録 */
   birthday: z.string().trim(),
   gender: z.enum(["", "FEMALE", "MALE", "OTHER", "UNKNOWN"]),
+  /** 郵便番号・住所。設定で「集めない」にしていれば空で届く */
+  postalCode: z.string().trim().max(10).default(""),
+  address: z.string().trim().max(200).default(""),
   /** 担当店舗。空文字なら未設定 */
   storeId: z.string().trim(),
 });
@@ -265,7 +268,7 @@ export type CreateCustomerResult =
 export async function createCustomer(input: unknown): Promise<CreateCustomerResult> {
   const parsed = createCustomerSchema.safeParse(input);
   if (!parsed.success) {
-    return { ok: false, error: "入力内容を確認してください (姓は必須です)" };
+    return { ok: false, error: "入力内容を確認してください (お名前は必須です)" };
   }
   if (parsed.data.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(parsed.data.email)) {
     return { ok: false, error: "メールアドレスの形式が正しくありません" };
@@ -294,6 +297,8 @@ export async function createCustomer(input: unknown): Promise<CreateCustomerResu
             email: parsed.data.email || null,
             birthday,
             gender: parsed.data.gender || null,
+            postalCode: parsed.data.postalCode || null,
+            address: parsed.data.address || null,
             storeId: parsed.data.storeId || null,
           },
         }),

@@ -2,15 +2,16 @@ import Link from "next/link";
 
 import { CustomerNewForm } from "@/components/customer-new-form";
 import { PageHeader } from "@/components/ui";
+import { getCustomerFieldPolicy } from "@/app/(app)/settings/customer-field-actions";
 import { prisma } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
 
 export default async function CustomerNewPage() {
-  const stores = await prisma.store.findMany({
-    where: { isActive: true },
-    orderBy: { code: "asc" },
-  });
+  const [stores, policy] = await Promise.all([
+    prisma.store.findMany({ where: { isActive: true }, orderBy: { code: "asc" } }),
+    getCustomerFieldPolicy(),
+  ]);
 
   return (
     <>
@@ -23,7 +24,10 @@ export default async function CustomerNewPage() {
         title="顧客の新規登録"
         description="店頭やお電話で伺った情報から顧客を登録します。LINE からの自己登録 (会員登録フォーム) とも同じ台帳に入ります"
       />
-      <CustomerNewForm stores={stores.map((store) => ({ id: store.id, name: store.name }))} />
+      <CustomerNewForm
+        stores={stores.map((store) => ({ id: store.id, name: store.name }))}
+        policy={policy}
+      />
     </>
   );
 }

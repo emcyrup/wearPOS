@@ -50,6 +50,8 @@ const checkoutSchema = z.object({
         method: z.string().min(1).max(20),
         amount: z.number().int().positive(),
         tendered: z.number().int().nonnegative().optional(),
+        /** 決済端末の承認番号・伝票番号などのメモ */
+        note: z.string().trim().max(100).optional(),
       }),
     )
     .max(10)

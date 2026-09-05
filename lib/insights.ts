@@ -13,9 +13,21 @@ import {
 import { lowStockItems } from "@/lib/analytics";
 
 /**
+ * スタッフの氏名は外部の AI へ送らず、「スタッフA / B / C」に置き換えて渡す。
+ * 画面に出すときは、この対応表を使って実名へ戻す (分析の実用性を落とさないため)。
+ */
+export type StaffAlias = { alias: string; name: string };
+
+const ALIAS_LETTERS = "ABCDEFGHIJ";
+
+/**
  * AI 考察に渡す期間データを組み立てる。
- * ダッシュボードと同じ集計関数を使い、モデルには集計済みの数値だけを渡す
- * (顧客の氏名・連絡先などの個人情報は含めない)。
+ * ダッシュボードと同じ集計関数を使い、モデルには集計済みの数値だけを渡す。
+ *
+ * 外部に送らないもの:
+ * - 顧客の氏名・カナ・電話番号・メール・住所・誕生日・個別の購入履歴
+ *   (顧客は「会員数・新規数・リピート率・休眠数・LINE連携数・ランク分布」の統計だけ)
+ * - スタッフの氏名 (「スタッフA」などの記号に置換して送る)
  */
 export async function buildInsightData(range: DateRange) {
   const prev = previousRange(range);
@@ -34,7 +46,14 @@ export async function buildInsightData(range: DateRange) {
       lowStockItems(10),
     ]);
 
-  return {
+  const topStaff = staff.slice(0, 5);
+  // 「スタッフA」→ 実名 の対応表。画面表示のときだけ使う
+  const staffAliases: StaffAlias[] = topStaff.map((s, index) => ({
+    alias: `スタッフ${ALIAS_LETTERS[index] ?? index + 1}`,
+    name: s.staffName,
+  }));
+
+  const data = {
     期間: {
       開始日: range.from.toISOString().slice(0, 10),
       終了日: range.to.toISOString().slice(0, 10),
@@ -57,8 +76,9 @@ export async function buildInsightData(range: DateRange) {
     },
     日別推移: trend.map((d) => ({ 日付: d.date, 売上: d.sales, 客数: d.orders })),
     店舗別: stores.map((s) => ({ 店舗: s.storeName, 売上: s.sales, 客数: s.orders })),
-    スタッフ別上位: staff.slice(0, 5).map((s) => ({
-      名前: s.staffName,
+    スタッフ別上位: topStaff.map((s, index) => ({
+      // 氏名は送らない。画面表示時に実名へ戻す
+      名前: `スタッフ${ALIAS_LETTERS[index] ?? index + 1}`,
       売上: s.sales,
       客数: s.orders,
       客単価: s.averageOrderValue,
@@ -96,6 +116,8 @@ export async function buildInsightData(range: DateRange) {
       発注点: i.safetyStock,
     })),
   };
+
+  return { data, staffAliases };
 }
 
 export const INSIGHT_SYSTEM_PROMPT = `あなたはアパレル小売に精通した経営分析のパートナーです。店長やスーパーバイザーの壁打ち相手として、POS データに基づく考察と実行可能な打ち手を日本語で返します。

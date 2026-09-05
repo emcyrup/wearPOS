@@ -4,6 +4,7 @@ import { z } from "zod";
 
 import { endOfDay, startOfDay } from "@/lib/analytics";
 import { chatGptGenerate, isChatGptConfigured } from "@/lib/chatgpt";
+import { isChatGptEnabled } from "@/lib/insight-policy";
 import { buildInsightData, INSIGHT_SYSTEM_PROMPT } from "@/lib/insights";
 
 export const dynamic = "force-dynamic";
@@ -72,7 +73,8 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "期間の指定が不正です" }, { status: 400 });
   }
 
-  const data = await buildInsightData(range);
+  const { data, staffAliases } = await buildInsightData(range);
+  // スタッフ氏名は data に含まれない (「スタッフA」等に置換済み)。対応表は送らない
   const dataText = `対象期間の POS 集計データ (JSON):\n${JSON.stringify(data)}`;
   const client = new Anthropic();
   const encoder = new TextEncoder();
@@ -81,6 +83,11 @@ export async function POST(request: Request) {
     async start(controller) {
       const emit = (event: Record<string, unknown>) =>
         controller.enqueue(encoder.encode(`${JSON.stringify(event)}\n`));
+
+      // 「スタッフA」→ 実名 の対応表。AI には送らず、画面表示のときだけ使う
+      if (staffAliases.length > 0) {
+        emit({ e: "aliases", aliases: staffAliases });
+      }
 
       /** Claude の1発言をストリーミングで流し、全文を返す */
       const claudeTurn = async (
@@ -138,7 +145,8 @@ export async function POST(request: Request) {
           );
         } else {
           // ---- 討論モード ----
-          const chatGptAvailable = isChatGptConfigured();
+          // 設定で ChatGPT への送信を止めている場合は Claude 単独で考察する
+          const chatGptAvailable = isChatGptConfigured() && (await isChatGptEnabled());
 
           // 1. Claude の考察
           const opening =
@@ -153,7 +161,9 @@ export async function POST(request: Request) {
           if (!chatGptAvailable) {
             emit({
               e: "note",
-              t: "OPENAI_API_KEY が未設定のため、Claude 単独の考察を表示しています。設定すると Claude × ChatGPT の討論になります。",
+              t: isChatGptConfigured()
+                ? "設定で ChatGPT への送信をオフにしているため、Claude 単独の考察を表示しています。"
+                : "OPENAI_API_KEY が未設定のため、Claude 単独の考察を表示しています。設定すると Claude × ChatGPT の討論になります。",
             });
             controller.close();
             return;
@@ -195,11 +205,15 @@ export async function POST(request: Request) {
           );
         }
       } catch (error) {
-        const message =
+        // 原因の切り分けができるよう、エラーの本文をそのまま見せてログにも残す
+        console.error("AI考察の生成に失敗しました", error);
+        const detail =
           error instanceof Anthropic.APIError
-            ? `AI との通信でエラーが発生しました (${error.status})`
-            : "AI との通信でエラーが発生しました";
-        emit({ e: "note", t: message });
+            ? `${error.status}: ${error.message}`
+            : error instanceof Error
+              ? error.message
+              : String(error);
+        emit({ e: "note", t: `AI との通信でエラーが発生しました (${detail})` });
       } finally {
         controller.close();
       }

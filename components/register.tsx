@@ -36,6 +36,8 @@ type SplitRow = {
   method: string;
   amount: string;
   tendered: string;
+  /** 決済端末の承認番号など、照合用のメモ */
+  note: string;
 };
 
 /** 設定で管理する支払方法 (設定 → レジの支払方法) */
@@ -118,6 +120,8 @@ export function Register({
   /** 分割決済の入力行 (支払方法・金額・預かり金) */
   const [splitRows, setSplitRows] = useState<SplitRow[]>([]);
   const [tendered, setTendered] = useState("");
+  /** 単独決済のときの承認番号メモ (外部端末との照合用) */
+  const [paymentNote, setPaymentNote] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   /** 現金以外で決済完了を確認するダイアログ */
@@ -358,6 +362,7 @@ export function Register({
             method: row.method,
             amount,
             tendered: tendered > 0 ? tendered : undefined,
+            note: row.note.trim() || undefined,
           };
         })
         .filter((payment) => payment.amount > 0);
@@ -368,7 +373,21 @@ export function Register({
         memberCode: member?.memberCode,
         // 分割時の主たる支払方法はサーバー側 (最大金額の手段) で決める
         paymentMethod: splitMode ? (splitPayments[0]?.method ?? paymentMethod) : paymentMethod,
-        payments: splitMode && splitPayments.length > 0 ? splitPayments : undefined,
+        payments: splitMode
+          ? splitPayments.length > 0
+            ? splitPayments
+            : undefined
+          : // 単独決済でも、承認番号のメモがあるときは内訳として1行残す
+            paymentNote.trim() && totals.payable > 0
+            ? [
+                {
+                  method: paymentMethod,
+                  amount: totals.payable,
+                  tendered: isCash && Number(tendered) > 0 ? Number(tendered) : undefined,
+                  note: paymentNote.trim(),
+                },
+              ]
+            : undefined,
         discount: totals.voucherDiscount,
         pointsUsed,
         lines: lines.map((line) => ({
@@ -428,6 +447,7 @@ export function Register({
     setPaymentMethod(paymentMethods[0]?.code ?? "CASH");
     setSplitMode(false);
     setSplitRows([]);
+    setPaymentNote("");
     setUnknownCode(null);
     setError(null);
     setDone(null);
@@ -971,6 +991,23 @@ export function Register({
                         </button>
                       </div>
 
+                      {/* 決済端末で処理する手段は、承認番号などを残せるようにする */}
+                      {method && !method.allowChange && (
+                        <input
+                          value={row.note}
+                          onChange={(event) =>
+                            setSplitRows((prev) =>
+                              prev.map((r) =>
+                                r.key === row.key ? { ...r, note: event.target.value } : r,
+                              ),
+                            )
+                          }
+                          placeholder="承認番号・伝票番号 (任意)"
+                          aria-label={`支払${index + 1} のメモ`}
+                          className="mt-1.5 w-full rounded-lg border border-ink-200 px-2 py-1 text-xs outline-none focus:border-ink-400"
+                        />
+                      )}
+
                       {/* お釣りを出せる手段では預かり金も受け取れる */}
                       {method?.allowChange && (
                         <div className="mt-1.5 flex items-center justify-between gap-2 pl-0.5">
@@ -1022,6 +1059,7 @@ export function Register({
                           method: method.code,
                           amount: String(Math.max(0, splitRemaining)),
                           tendered: "",
+                          note: "",
                         },
                       ])
                     }
@@ -1057,13 +1095,30 @@ export function Register({
                 // いま選んでいる手段を1行目にして、残額の入力から始められるようにする
                 const first = splitMethods.find((m) => m.code === paymentMethod) ?? splitMethods[0];
                 setSplitRows([
-                  { key: `${first.code}-${Date.now()}`, method: first.code, amount: "", tendered: "" },
+                  {
+                    key: `${first.code}-${Date.now()}`,
+                    method: first.code,
+                    amount: "",
+                    tendered: "",
+                    note: "",
+                  },
                 ]);
               }}
               className="mt-2 w-full rounded-lg border border-ink-200 bg-white px-3 py-1.5 text-sm font-medium text-ink-600 hover:bg-ink-50"
             >
               {splitMode ? "分割をやめる (1つの支払方法に戻す)" : "🧾 支払方法を分けて支払う"}
             </button>
+          )}
+
+          {/* 単独決済でも、クレジット等は承認番号を残せる */}
+          {!splitMode && !isCash && totals.payable > 0 && (
+            <input
+              value={paymentNote}
+              onChange={(event) => setPaymentNote(event.target.value)}
+              placeholder="承認番号・伝票番号 (任意)"
+              aria-label="決済メモ"
+              className="mt-2 w-full rounded-lg border border-ink-200 px-2.5 py-1.5 text-sm outline-none focus:border-ink-400"
+            />
           )}
 
           {!splitMode && isCash && totals.payable > 0 && (

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
 import { SignupForm } from "@/components/signup-form";
+import { getCustomerFieldPolicy } from "@/app/(app)/settings/customer-field-actions";
 import { prisma } from "@/lib/db";
 import { fullName } from "@/lib/format";
 import { signMemberCardToken, verifySignupToken } from "@/lib/session";
@@ -56,7 +57,7 @@ export default async function SignupPage({ params }: { params: Promise<{ token: 
           </a>
         </div>
       ) : (
-        <SignupForm token={decodeURIComponent(token)} />
+        <SignupForm token={decodeURIComponent(token)} policy={await getCustomerFieldPolicy()} />
       )}
     </div>
   );

@@ -4,13 +4,21 @@ import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 
 import { createCustomer } from "@/app/(app)/customers/actions";
+import type { CustomerFieldPolicy } from "@/lib/customer-fields";
 import { MULTI_STORE } from "@/lib/config";
 
 const inputClass =
   "rounded-lg border border-ink-200 px-3 py-2 text-sm outline-none focus:border-ink-400";
 
 /** 店頭・電話で聞き取った情報から顧客を登録するフォーム。会員番号は自動採番 */
-export function CustomerNewForm({ stores }: { stores: { id: string; name: string }[] }) {
+export function CustomerNewForm({
+  stores,
+  policy,
+}: {
+  stores: { id: string; name: string }[];
+  /** 設定 (顧客登録の項目) に従って、集める項目を出し分ける */
+  policy: CustomerFieldPolicy;
+}) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
@@ -26,6 +34,8 @@ export function CustomerNewForm({ stores }: { stores: { id: string; name: string
         phone: String(formData.get("phone") ?? ""),
         email: String(formData.get("email") ?? ""),
         birthday: String(formData.get("birthday") ?? ""),
+        postalCode: String(formData.get("postalCode") ?? ""),
+        address: String(formData.get("address") ?? ""),
         gender: String(formData.get("gender") ?? "") as
           | ""
           | "FEMALE"
@@ -45,46 +55,130 @@ export function CustomerNewForm({ stores }: { stores: { id: string; name: string
   return (
     <form action={submit} className="max-w-xl rounded-xl border border-ink-200 bg-white p-5">
       <div className="grid grid-cols-2 gap-3">
-        <label className="flex flex-col gap-1">
-          <span className="text-xs text-ink-400">
-            姓 <span className="text-rose-600">*</span>
-          </span>
-          <input name="lastName" required placeholder="山田" className={inputClass} />
-        </label>
-        <label className="flex flex-col gap-1">
-          <span className="text-xs text-ink-400">名</span>
-          <input name="firstName" placeholder="花子" className={inputClass} />
-        </label>
-        <label className="flex flex-col gap-1">
-          <span className="text-xs text-ink-400">セイ (カナ)</span>
-          <input name="lastNameKana" placeholder="ヤマダ" className={inputClass} />
-        </label>
-        <label className="flex flex-col gap-1">
-          <span className="text-xs text-ink-400">メイ (カナ)</span>
-          <input name="firstNameKana" placeholder="ハナコ" className={inputClass} />
-        </label>
-        <label className="flex flex-col gap-1">
-          <span className="text-xs text-ink-400">電話番号</span>
-          <input name="phone" type="tel" placeholder="090-1234-5678" className={inputClass} />
-        </label>
-        <label className="flex flex-col gap-1">
-          <span className="text-xs text-ink-400">メールアドレス</span>
-          <input name="email" type="email" placeholder="hanako@example.com" className={inputClass} />
-        </label>
-        <label className="flex flex-col gap-1">
-          <span className="text-xs text-ink-400">誕生日</span>
-          <input name="birthday" type="date" className={inputClass} />
-        </label>
-        <label className="flex flex-col gap-1">
-          <span className="text-xs text-ink-400">性別</span>
-          <select name="gender" defaultValue="" className={inputClass}>
-            <option value="">未設定</option>
-            <option value="FEMALE">女性</option>
-            <option value="MALE">男性</option>
-            <option value="OTHER">その他</option>
-            <option value="UNKNOWN">回答しない</option>
-          </select>
-        </label>
+        {policy.nameMode === "NICKNAME" ? (
+          <label className="col-span-2 flex flex-col gap-1">
+            <span className="text-xs text-ink-400">
+              お名前 (ニックネーム可){policy.nameRequired && <span className="text-rose-600"> *</span>}
+            </span>
+            <input
+              name="lastName"
+              required={policy.nameRequired}
+              placeholder="やまちゃん"
+              className={inputClass}
+            />
+          </label>
+        ) : (
+          <>
+            <label className="flex flex-col gap-1">
+              <span className="text-xs text-ink-400">
+                姓{policy.nameRequired && <span className="text-rose-600"> *</span>}
+              </span>
+              <input
+                name="lastName"
+                required={policy.nameRequired}
+                placeholder="山田"
+                className={inputClass}
+              />
+            </label>
+            <label className="flex flex-col gap-1">
+              <span className="text-xs text-ink-400">名</span>
+              <input name="firstName" placeholder="花子" className={inputClass} />
+            </label>
+          </>
+        )}
+        {policy.kana !== "HIDDEN" && (
+          <>
+            <label className="flex flex-col gap-1">
+              <span className="text-xs text-ink-400">
+                セイ (カナ){policy.kana === "REQUIRED" && <span className="text-rose-600"> *</span>}
+              </span>
+              <input
+                name="lastNameKana"
+                required={policy.kana === "REQUIRED"}
+                placeholder="ヤマダ"
+                className={inputClass}
+              />
+            </label>
+            <label className="flex flex-col gap-1">
+              <span className="text-xs text-ink-400">メイ (カナ)</span>
+              <input name="firstNameKana" placeholder="ハナコ" className={inputClass} />
+            </label>
+          </>
+        )}
+        {policy.phone !== "HIDDEN" && (
+          <label className="flex flex-col gap-1">
+            <span className="text-xs text-ink-400">
+              電話番号{policy.phone === "REQUIRED" && <span className="text-rose-600"> *</span>}
+            </span>
+            <input
+              name="phone"
+              type="tel"
+              required={policy.phone === "REQUIRED"}
+              placeholder="090-1234-5678"
+              className={inputClass}
+            />
+          </label>
+        )}
+        {policy.email !== "HIDDEN" && (
+          <label className="flex flex-col gap-1">
+            <span className="text-xs text-ink-400">
+              メールアドレス{policy.email === "REQUIRED" && <span className="text-rose-600"> *</span>}
+            </span>
+            <input
+              name="email"
+              type="email"
+              required={policy.email === "REQUIRED"}
+              placeholder="hanako@example.com"
+              className={inputClass}
+            />
+          </label>
+        )}
+        {policy.birthday !== "HIDDEN" && (
+          <label className="flex flex-col gap-1">
+            <span className="text-xs text-ink-400">
+              誕生日{policy.birthday === "REQUIRED" && <span className="text-rose-600"> *</span>}
+            </span>
+            <input
+              name="birthday"
+              type="date"
+              required={policy.birthday === "REQUIRED"}
+              className={inputClass}
+            />
+          </label>
+        )}
+        {policy.gender !== "HIDDEN" && (
+          <label className="flex flex-col gap-1">
+            <span className="text-xs text-ink-400">
+              性別{policy.gender === "REQUIRED" && <span className="text-rose-600"> *</span>}
+            </span>
+            <select
+              name="gender"
+              defaultValue=""
+              required={policy.gender === "REQUIRED"}
+              className={inputClass}
+            >
+              <option value="">未設定</option>
+              <option value="FEMALE">女性</option>
+              <option value="MALE">男性</option>
+              <option value="OTHER">その他</option>
+              <option value="UNKNOWN">回答しない</option>
+            </select>
+          </label>
+        )}
+        {policy.address !== "HIDDEN" && (
+          <label className="col-span-2 flex flex-col gap-1">
+            <span className="text-xs text-ink-400">
+              {policy.addressCityOnly ? "市区町村" : "住所"}
+              {policy.address === "REQUIRED" && <span className="text-rose-600"> *</span>}
+            </span>
+            <input
+              name="address"
+              required={policy.address === "REQUIRED"}
+              placeholder={policy.addressCityOnly ? "渋谷区" : "東京都渋谷区..."}
+              className={inputClass}
+            />
+          </label>
+        )}
         {/* 単店舗運用では担当店舗の選択を出さない */}
         {MULTI_STORE && (
           <label className="col-span-2 flex flex-col gap-1">

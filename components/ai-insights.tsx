@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 type Speaker = "claude" | "chatgpt" | "user" | "note";
+/** 「スタッフA」→ 実名 の対応表 (AI には氏名を送らず、画面で戻す) */
+type StaffAlias = { alias: string; name: string };
 type DebateMessage = { speaker: Speaker; content: string; final?: boolean };
 type ApiMessage = { role: "user" | "assistant"; content: string };
 
@@ -24,6 +26,11 @@ export function AiInsights({ from, to }: { from: string; to: string }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [question, setQuestion] = useState("");
+  /** AI に送るときに伏せたスタッフ名を、画面表示で元に戻すための対応表 */
+  const [aliases, setAliases] = useState<StaffAlias[]>([]);
+  /** 「AIに送るデータ」のプレビュー (個人情報が含まれないことを画面で確認できる) */
+  const [preview, setPreview] = useState<string | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
   const bottomRef = useRef<HTMLDivElement | null>(null);
 
@@ -82,13 +89,21 @@ export function AiInsights({ from, to }: { from: string; to: string }) {
 
         const handleLine = (line: string) => {
           if (!line.trim()) return;
-          let event: { e: string; s?: string; t?: string; final?: boolean };
+          let event: {
+            e: string;
+            s?: string;
+            t?: string;
+            final?: boolean;
+            aliases?: StaffAlias[];
+          };
           try {
             event = JSON.parse(line);
           } catch {
             return;
           }
-          if (event.e === "start") {
+          if (event.e === "aliases") {
+            setAliases(event.aliases ?? []);
+          } else if (event.e === "start") {
             current = {
               speaker: event.s === "chatgpt" ? "chatgpt" : "claude",
               content: "",
@@ -179,6 +194,13 @@ export function AiInsights({ from, to }: { from: string; to: string }) {
     (m) => m.speaker === "user" || m.speaker === "note",
   );
 
+  /**
+   * AI から返ってきた「スタッフA」を実名に戻す。
+   * 送信時に伏せているだけなので、画面では従来どおり誰のことか分かる。
+   */
+  const withRealNames = (text: string) =>
+    aliases.reduce((acc, entry) => acc.split(entry.alias).join(entry.name), text);
+
   /** 「考察(結論): 〜 / 打ち手: 〜 / 提案: 〜」の行を拾って構造化する */
   const parseConclusion = (text: string) => {
     const lines = text.split("\n").map((line) => line.trim()).filter(Boolean);
@@ -224,9 +246,10 @@ export function AiInsights({ from, to }: { from: string; to: string }) {
     }
     const meta = SPEAKER_META[message.speaker];
     // 「考察: / 提案:」形式の回答は【考察】【提案】のセクションに分けて表示する
-    const { summary, actions, proposals } = parseConclusion(message.content);
+    const shownContent = withRealNames(message.content);
+    const { summary, actions, proposals } = parseConclusion(shownContent);
     const structured =
-      message.speaker === "claude" && summary !== message.content.trim() && summary !== "";
+      message.speaker === "claude" && summary !== shownContent.trim() && summary !== "";
     return (
       <div key={index}>
         <span
@@ -264,7 +287,7 @@ export function AiInsights({ from, to }: { from: string; to: string }) {
           </div>
         ) : (
           <div className="whitespace-pre-wrap text-sm leading-relaxed text-ink-800">
-            {message.content}
+            {shownContent}
           </div>
         )}
       </div>
@@ -280,19 +303,60 @@ export function AiInsights({ from, to }: { from: string; to: string }) {
             {from.replaceAll("-", "/")} 〜 {to.replaceAll("-", "/")} の実績を2つのAIが討論して考察します
           </p>
         </div>
-        <button
-          type="button"
-          onClick={() => void start()}
-          disabled={loading}
-          className="rounded-lg bg-ink-900 px-4 py-1.5 text-sm font-medium text-white hover:bg-ink-800 disabled:opacity-50"
-        >
-          {loading && messages.length === 0
-            ? "討論中..."
-            : started
-              ? "討論をやり直す"
-              : "討論を開始"}
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          {/* 何が外部に送られるかを、実物のデータで確認できるようにする */}
+          <button
+            type="button"
+            onClick={() => {
+              if (preview) {
+                setPreview(null);
+                return;
+              }
+              setPreviewLoading(true);
+              void fetch(`/api/insights/preview?from=${from}&to=${to}`)
+                .then(async (response) => {
+                  const json = (await response.json()) as { data?: unknown; error?: string };
+                  setPreview(
+                    json.data ? JSON.stringify(json.data, null, 2) : (json.error ?? "取得できませんでした"),
+                  );
+                })
+                .catch(() => setPreview("取得できませんでした"))
+                .finally(() => setPreviewLoading(false));
+            }}
+            className="rounded-lg border border-ink-200 bg-white px-3 py-1.5 text-sm whitespace-nowrap text-ink-600 hover:bg-ink-50"
+          >
+            {previewLoading ? "読み込み中..." : preview ? "送信データを閉じる" : "🔍 AIに送るデータを見る"}
+          </button>
+          <button
+            type="button"
+            onClick={() => void start()}
+            disabled={loading}
+            className="rounded-lg bg-ink-900 px-4 py-1.5 text-sm font-medium whitespace-nowrap text-white hover:bg-ink-800 disabled:opacity-50"
+          >
+            {loading && messages.length === 0
+              ? "討論中..."
+              : started
+                ? "討論をやり直す"
+                : "討論を開始"}
+          </button>
+        </div>
       </header>
+
+      {/* 送信データのプレビュー */}
+      {preview && (
+        <div className="border-b border-ink-100 bg-ink-50/60 px-5 py-4">
+          <p className="text-xs text-ink-600">
+            下記が AI に送っている内容のすべてです。
+            <span className="font-medium">
+              顧客の氏名・カナ・電話番号・メール・住所・誕生日・個別の購入履歴は含まれません
+            </span>
+            （顧客は会員数などの統計のみ）。スタッフ名も「スタッフA」等に置き換えて送っています。
+          </p>
+          <pre className="mt-2 max-h-72 overflow-auto rounded-lg bg-white p-3 text-[11px] leading-relaxed text-ink-700">
+            {preview}
+          </pre>
+        </div>
+      )}
 
       <div className="px-5 py-4">
         {!started && !error && (
@@ -308,7 +372,7 @@ export function AiInsights({ from, to }: { from: string; to: string }) {
 
         {/* 結論を【考察】と【提案】に分けて主役として表示する */}
         {conclusion && (() => {
-          const { summary, actions, proposals } = parseConclusion(conclusion.content);
+          const { summary, actions, proposals } = parseConclusion(withRealNames(conclusion.content));
           return (
             <div className="rounded-xl border border-ink-200 bg-ink-50/60 p-4">
               <SectionLabel>【考察】</SectionLabel>
@@ -379,7 +443,7 @@ export function AiInsights({ from, to }: { from: string; to: string }) {
               {streaming.final && <span className="ml-1 font-normal">· まとめ</span>}
             </span>
             <div className="whitespace-pre-wrap text-sm leading-relaxed text-ink-800">
-              {streaming.content}
+              {withRealNames(streaming.content)}
               <span className="ml-0.5 inline-block h-4 w-1.5 animate-pulse bg-ink-400 align-text-bottom" />
             </div>
           </div>
