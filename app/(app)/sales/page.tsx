@@ -51,13 +51,14 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
 
   const page = Math.max(1, Number(params.page) || 1);
 
-  const [sales, aggregate, byPayment] = await Promise.all([
+  const [sales, aggregate, byType, bySalePayment, byReturnPayment] = await Promise.all([
     prisma.sale.findMany({
       where,
       include: {
         store: true,
         staff: true,
         customer: true,
+        payments: { orderBy: { sortOrder: "asc" }, select: { method: true, amount: true } },
         lines: {
           select: {
             quantity: true,
@@ -72,10 +73,18 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
       take: PAGE_SIZE,
     }),
     prisma.sale.aggregate({ where, _sum: { total: true }, _count: { _all: true } }),
-    prisma.sale.groupBy({
-      by: ["paymentMethod", "type"],
-      where,
-      _sum: { total: true },
+    prisma.sale.groupBy({ by: ["type"], where, _sum: { total: true }, _count: { _all: true } }),
+    // 分割決済に対応するため、支払方法別の集計は支払明細 (SalePayment) から取る
+    prisma.salePayment.groupBy({
+      by: ["method"],
+      where: { sale: { ...where, type: { not: "RETURN" } } },
+      _sum: { amount: true },
+      _count: { _all: true },
+    }),
+    prisma.salePayment.groupBy({
+      by: ["method"],
+      where: { sale: { ...where, type: "RETURN" } },
+      _sum: { amount: true },
       _count: { _all: true },
     }),
   ]);
@@ -85,41 +94,40 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
   const methodMaster = await ensurePaymentMethods();
   const methodOrder = [
     ...methodMaster.map((row) => row.code),
-    ...byPayment
-      .map((row) => row.paymentMethod)
+    ...[...bySalePayment, ...byReturnPayment]
+      .map((row) => row.method)
       .filter((code) => !methodMaster.some((row) => row.code === code)),
   ].filter((code, index, list) => list.indexOf(code) === index);
   const methodLabels = new Map(methodMaster.map((row) => [row.code, row.label]));
 
-  // 支払方法別の集計。返品は売上から差し引いた正味額で見せる
+  // 支払方法別の集計。返品は売上から差し引いた正味額で見せる。
+  // 分割決済では1伝票が複数の手段にまたがるため、件数は「その手段が使われた回数」
   const paymentStats = methodOrder.map((method, methodIndex) => {
-    const rows = byPayment.filter((row) => row.paymentMethod === method);
-    const saleTotal = rows
-      .filter((row) => row.type !== "RETURN")
-      .reduce((sum, row) => sum + (row._sum.total ?? 0), 0);
-    const returnTotal = rows
-      .filter((row) => row.type === "RETURN")
-      .reduce((sum, row) => sum + (row._sum.total ?? 0), 0);
+    const sold = bySalePayment.find((row) => row.method === method);
+    const returned = byReturnPayment.find((row) => row.method === method);
     return {
       method,
       label: methodLabels.get(method) ?? PAYMENT_METHOD_LABEL[method] ?? method,
       color:
         PAYMENT_COLORS[method] ??
         EXTRA_PAYMENT_COLORS[methodIndex % EXTRA_PAYMENT_COLORS.length],
-      net: saleTotal - returnTotal,
-      count: rows.reduce((sum, row) => sum + row._count._all, 0),
-      returnCount: rows
-        .filter((row) => row.type === "RETURN")
-        .reduce((sum, row) => sum + row._count._all, 0),
+      net: (sold?._sum.amount ?? 0) - (returned?._sum.amount ?? 0),
+      count: (sold?._count._all ?? 0) + (returned?._count._all ?? 0),
+      returnCount: returned?._count._all ?? 0,
     };
   }).filter((stat) => stat.count > 0);
 
-  const netTotal = paymentStats.reduce((sum, stat) => sum + stat.net, 0);
-  const shareBase = paymentStats.reduce((sum, stat) => sum + Math.max(0, stat.net), 0);
-  const saleCount = byPayment
-    .filter((row) => row.type !== "RETURN")
-    .reduce((sum, row) => sum + row._count._all, 0);
-  const returnCount = aggregate._count._all - saleCount;
+  // 売上サマリーは伝票の総額ベース (ポイント利用分も売上に含める)
+  const soldRows = byType.filter((row) => row.type !== "RETURN");
+  const returnedRows = byType.filter((row) => row.type === "RETURN");
+  const sum = (rows: typeof byType) => rows.reduce((acc, row) => acc + (row._sum.total ?? 0), 0);
+  const countOf = (rows: typeof byType) => rows.reduce((acc, row) => acc + row._count._all, 0);
+
+  const netTotal = sum(soldRows) - sum(returnedRows);
+  const saleCount = countOf(soldRows);
+  const returnCount = countOf(returnedRows);
+  // 内訳の構成比は、実際に受け取った支払額どうしで比べる
+  const shareBase = paymentStats.reduce((acc, stat) => acc + Math.max(0, stat.net), 0);
   const averageOrder = saleCount > 0 ? Math.round(netTotal / saleCount) : 0;
 
   return (
@@ -368,9 +376,19 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
                   {sale.lines.reduce((sum, line) => sum + line.quantity, 0)}
                 </td>
                 <td className="px-2 py-2.5 text-xs whitespace-nowrap text-ink-400">
-                  {methodLabels.get(sale.paymentMethod) ??
-                    PAYMENT_METHOD_LABEL[sale.paymentMethod] ??
-                    sale.paymentMethod}
+                  {/* 分割決済は使った手段をすべて出す */}
+                  {sale.payments.length > 1
+                    ? sale.payments
+                        .map(
+                          (payment) =>
+                            methodLabels.get(payment.method) ??
+                            PAYMENT_METHOD_LABEL[payment.method] ??
+                            payment.method,
+                        )
+                        .join(" + ")
+                    : (methodLabels.get(sale.paymentMethod) ??
+                      PAYMENT_METHOD_LABEL[sale.paymentMethod] ??
+                      sale.paymentMethod)}
                 </td>
                 <td className="tabular px-2 py-2.5 text-right font-medium">{formatYen(sale.total)}</td>
                 <td className="px-2 py-2.5 text-xs whitespace-nowrap text-ink-400">

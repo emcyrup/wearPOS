@@ -373,7 +373,8 @@ model Sale {
   /// ポイント利用による充当額
   pointsUsed Int      @default(0)
   pointsEarned Int    @default(0)
-  paymentMethod String @default("CASH") // CASH | CREDIT | E_MONEY | QR | OTHER
+  /// 主たる支払方法 (分割時は最も金額の大きい手段)。内訳は SalePayment を参照
+  paymentMethod String @default("CASH")
   /// SALE(通常) | RETURN(返品)
   type       String   @default("SALE")
   /// 返品元の取引
@@ -386,11 +387,35 @@ model Sale {
   staff    Staff?     @relation(fields: [staffId], references: [id])
   customer Customer?  @relation(fields: [customerId], references: [id])
   lines    SaleLine[]
+  payments SalePayment[]
   pointEvents PointEvent[]
 
   @@index([storeId, soldAt])
   @@index([customerId, soldAt])
   @@index([soldAt])
+}
+
+/// 支払の内訳。1会計で複数の支払方法を併用 (分割決済) できるようにするための明細
+model SalePayment {
+  id     String @id @default(cuid())
+  saleId String
+  /// PaymentMethod.code (現金・クレジット・ギフト券など)
+  method String
+  /// この手段で支払った額 (税込)。合計はポイント利用を除いた支払額と一致する
+  amount Int
+  /// 現金など、お釣りが出る手段での預かり金
+  tendered Int?
+  /// お釣り (tendered - amount)
+  change   Int?
+  /// 決済端末の承認番号など、照合用のメモ
+  note   String?
+  /// レシートに印字する並び順
+  sortOrder Int @default(0)
+
+  sale Sale @relation(fields: [saleId], references: [id], onDelete: Cascade)
+
+  @@index([saleId])
+  @@index([method])
 }
 
 model SaleLine {

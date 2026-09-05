@@ -22,6 +22,7 @@ export default async function SaleDetailPage({ params }: { params: Promise<{ id:
       staff: true,
       customer: true,
       pointEvents: true,
+      payments: { orderBy: { sortOrder: "asc" } },
       lines: {
         include: { variant: { include: { product: { include: { season: true, brand: true } } } } },
       },
@@ -180,10 +181,36 @@ export default async function SaleDetailPage({ params }: { params: Promise<{ id:
                 <dt>合計 (税込)</dt>
                 <dd className="tabular">{formatYen(sale.total)}</dd>
               </div>
-              <div className="flex justify-between pt-1">
-                <dt className="text-ink-400">支払方法</dt>
-                <dd>{paymentLabels[sale.paymentMethod] ?? PAYMENT_METHOD_LABEL[sale.paymentMethod] ?? sale.paymentMethod}</dd>
-              </div>
+              {/* 分割決済のときは内訳を1行ずつ出す */}
+              {sale.payments.length > 1 ? (
+                <div className="border-t border-ink-100 pt-2.5">
+                  <dt className="mb-1.5 text-ink-400">支払方法 (分割)</dt>
+                  {sale.payments.map((payment) => (
+                    <div key={payment.id} className="flex justify-between py-0.5">
+                      <dd className="text-ink-600">
+                        {paymentLabels[payment.method] ??
+                          PAYMENT_METHOD_LABEL[payment.method] ??
+                          payment.method}
+                        {payment.tendered != null && (
+                          <span className="ml-1 text-xs text-ink-400">
+                            (預り {formatYen(payment.tendered)} / 釣 {formatYen(payment.change ?? 0)})
+                          </span>
+                        )}
+                      </dd>
+                      <dd className="tabular">{formatYen(payment.amount)}</dd>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="flex justify-between pt-1">
+                  <dt className="text-ink-400">支払方法</dt>
+                  <dd>
+                    {paymentLabels[sale.paymentMethod] ??
+                      PAYMENT_METHOD_LABEL[sale.paymentMethod] ??
+                      sale.paymentMethod}
+                  </dd>
+                </div>
+              )}
               <div className="flex justify-between">
                 <dt className="text-ink-400">点数</dt>
                 <dd className="tabular">{itemCount} 点</dd>

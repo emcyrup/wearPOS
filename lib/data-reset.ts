@@ -38,6 +38,13 @@ export type ResetCounts = Record<ResetTargetKey, number>;
 /** 確認フレーズ。これを一字一句入力しないと実行できない */
 export const RESET_CONFIRM_PHRASE = "データを削除します";
 
+/**
+ * データの初期化は **既定で無効**。
+ * 誤操作でデータを失わないよう、使うときだけ管理者が明示的に有効化し、
+ * 1回実行すると自動的に無効へ戻る (毎回わざと有効にしないと消せない)。
+ */
+export const DATA_RESET_ENABLED_KEY = "dataReset.enabled";
+
 /** 商品を消すと、その SKU に紐づく在庫・取引明細も必ず消える */
 export function expandTargets(targets: ResetTargetKey[]): Set<ResetTargetKey> {
   const wants = new Set<ResetTargetKey>(targets);

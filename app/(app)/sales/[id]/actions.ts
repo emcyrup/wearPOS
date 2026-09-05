@@ -24,7 +24,7 @@ export async function returnSale(saleId: string): Promise<ReturnSaleResult> {
 
   const sale = await prisma.sale.findUnique({
     where: { id: saleId },
-    include: { lines: true },
+    include: { lines: true, payments: { orderBy: { sortOrder: "asc" } } },
   });
   if (!sale) return { ok: false, error: "取引が見つかりません" };
   if (sale.type !== "SALE") return { ok: false, error: "返品伝票はさらに返品できません" };
@@ -54,6 +54,14 @@ export async function returnSale(saleId: string): Promise<ReturnSaleResult> {
           paymentMethod: sale.paymentMethod,
           type: "RETURN",
           note: `伝票 ${sale.receiptNo} の返品`,
+          // 支払方法別の集計から正しく差し引けるよう、元伝票の内訳をそのまま引き継ぐ
+          payments: {
+            create: sale.payments.map((payment) => ({
+              method: payment.method,
+              amount: payment.amount,
+              sortOrder: payment.sortOrder,
+            })),
+          },
           lines: {
             create: sale.lines.map((line) => ({
               variantId: line.variantId,

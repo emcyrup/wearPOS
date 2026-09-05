@@ -2,7 +2,11 @@
 
 import { useState, useTransition } from "react";
 
-import { resetData, type DataResetState } from "@/app/(app)/settings/data-reset-actions";
+import {
+  resetData,
+  setDataResetEnabled,
+  type DataResetState,
+} from "@/app/(app)/settings/data-reset-actions";
 import {
   expandTargets,
   RESET_CONFIRM_PHRASE,
@@ -13,9 +17,10 @@ import {
 
 /**
  * テストデータの一括削除。
- * 取り消せないので、対象の選択 → 件数の確認 → 確認フレーズの入力、の順に進ませる。
+ * 既定では無効 (グレーアウト) で、使うときだけ管理者が有効化する。
+ * 取り消せないので、有効化 → 対象の選択 → 件数の確認 → 確認フレーズの入力、の順に進ませる。
  */
-export function DataReset({ counts }: { counts: ResetCounts }) {
+export function DataReset({ counts, enabled }: { counts: ResetCounts; enabled: boolean }) {
   const [selected, setSelected] = useState<ResetTargetKey[]>([]);
   const [confirmText, setConfirmText] = useState("");
   const [state, setState] = useState<DataResetState>({ status: "idle", message: "" });
@@ -40,23 +45,68 @@ export function DataReset({ counts }: { counts: ResetCounts }) {
     });
   };
 
+  const setEnabled = (next: boolean) =>
+    startTransition(async () => {
+      const result = await setDataResetEnabled(next);
+      setState(result);
+      if (!next) {
+        setSelected([]);
+        setConfirmText("");
+      }
+    });
+
   return (
     <div>
-      <div className="space-y-2">
+      {/* 既定は無効。ここを開けないと削除の操作自体ができない */}
+      <div
+        className={`mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border p-3 ${
+          enabled ? "border-rose-300 bg-rose-50" : "border-ink-200 bg-ink-50"
+        }`}
+      >
+        <span className="min-w-0">
+          <span className="block text-sm font-medium text-ink-800">
+            {enabled ? "データの初期化: 有効" : "データの初期化: 無効"}
+          </span>
+          <span className="mt-0.5 block text-xs text-ink-500">
+            {enabled
+              ? "削除を実行できる状態です。1回実行すると自動的に無効へ戻ります"
+              : "誤操作を防ぐため、既定では無効です。削除するときだけ有効にしてください"}
+          </span>
+        </span>
+        <button
+          type="button"
+          onClick={() => {
+            if (!enabled && !window.confirm("データの初期化を有効にします。よろしいですか？")) return;
+            setEnabled(!enabled);
+          }}
+          disabled={pending}
+          className={`shrink-0 rounded-lg px-4 py-1.5 text-sm font-medium whitespace-nowrap disabled:opacity-40 ${
+            enabled
+              ? "border border-ink-200 bg-white text-ink-600 hover:bg-ink-50"
+              : "bg-ink-900 text-white hover:bg-ink-800"
+          }`}
+        >
+          {enabled ? "無効に戻す" : "有効にする"}
+        </button>
+      </div>
+
+      <div className={`space-y-2 ${enabled ? "" : "pointer-events-none opacity-50"}`}>
         {RESET_TARGETS.map((target) => {
           const checked = selected.includes(target.key);
           const auto = !checked && effective.has(target.key);
           return (
             <label
               key={target.key}
-              className={`flex cursor-pointer gap-2.5 rounded-lg border p-3 transition-colors ${
+              className={`flex gap-2.5 rounded-lg border p-3 transition-colors ${
+                enabled ? "cursor-pointer" : "cursor-not-allowed"
+              } ${
                 checked || auto ? "border-rose-300 bg-rose-50/60" : "border-ink-200 hover:bg-ink-50"
               }`}
             >
               <input
                 type="checkbox"
                 checked={checked || auto}
-                disabled={auto}
+                disabled={auto || !enabled}
                 onChange={() => toggle(target.key)}
                 aria-label={`${target.label} を削除する`}
                 className="mt-0.5 h-4 w-4 shrink-0 accent-rose-600"
@@ -76,7 +126,7 @@ export function DataReset({ counts }: { counts: ResetCounts }) {
         })}
       </div>
 
-      {selected.length > 0 && (
+      {enabled && selected.length > 0 && (
         <div className="mt-3 rounded-lg border border-rose-200 bg-rose-50 p-3">
           <p className="text-sm font-medium text-rose-800">
             この操作は取り消せません。実行前にバックアップを確認してください。

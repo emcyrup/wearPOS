@@ -30,12 +30,22 @@ type CartLine = {
   discountPct: number;
 };
 
+/** 分割決済の1行。金額・預かり金は入力途中を保つため文字列で持つ */
+type SplitRow = {
+  key: string;
+  method: string;
+  amount: string;
+  tendered: string;
+};
+
 /** 設定で管理する支払方法 (設定 → レジの支払方法) */
 export type PaymentMethodOption = {
   code: string;
   label: string;
   /** お釣りを出せる支払方法か。true なら預かり金の入力を求める */
   allowChange: boolean;
+  /** 分割決済 (複数手段の併用) で使えるか */
+  allowSplit: boolean;
 };
 
 const RANK_LABEL: Record<string, string> = {
@@ -103,6 +113,10 @@ export function Register({
   const [discountOpen, setDiscountOpen] = useState<Record<string, boolean>>({});
   const [pointsUsed, setPointsUsed] = useState(0);
   const [paymentMethod, setPaymentMethod] = useState(paymentMethods[0]?.code ?? "CASH");
+  /** 分割決済モード。複数の支払方法を組み合わせて支払うときに使う */
+  const [splitMode, setSplitMode] = useState(false);
+  /** 分割決済の入力行 (支払方法・金額・預かり金) */
+  const [splitRows, setSplitRows] = useState<SplitRow[]>([]);
   const [tendered, setTendered] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -300,20 +314,61 @@ export function Register({
   const shortage = tenderedEntered ? Math.max(0, totals.payable - tenderedValue) : totals.payable;
   // 預かり金が要る支払方法では入力が必須。ポイントで全額充当された場合 (支払0円) は不要
   const cashReady = !isCash || totals.payable === 0 || (tenderedEntered && shortage === 0);
+
+  // ---- 分割決済 (複数の支払方法の併用) ----
+  const splitMethods = paymentMethods.filter((method) => method.allowSplit);
+  const splitAssigned = splitRows.reduce((sum, row) => sum + (Number(row.amount) || 0), 0);
+  const splitRemaining = totals.payable - splitAssigned;
+  /** 現金行などの預かり金から計算したお釣り */
+  const splitChange = splitRows.reduce((sum, row) => {
+    const method = paymentMethods.find((m) => m.code === row.method);
+    if (!method?.allowChange) return sum;
+    const tendered = Number(row.tendered) || 0;
+    return sum + Math.max(0, tendered - (Number(row.amount) || 0));
+  }, 0);
+  // 分割時は「合計が支払額とぴったり一致」かつ「現金行の預かりが不足していない」こと
+  const splitReady =
+    splitMode &&
+    splitRows.length > 0 &&
+    splitRemaining === 0 &&
+    splitRows.every((row) => {
+      const amount = Number(row.amount) || 0;
+      if (amount <= 0) return false;
+      const method = paymentMethods.find((m) => m.code === row.method);
+      if (!method?.allowChange) return true;
+      // 預かり金は未入力ならちょうど受け取ったものとして扱う
+      return row.tendered.trim() === "" || (Number(row.tendered) || 0) >= amount;
+    });
+
   // 担当者が未選択のままでは会計できない (誰の売上か分からなくなるのを防ぐ)
   const staffReady = staffCode !== "";
-  const canCheckout = lines.length > 0 && !busy && cashReady && staffReady;
+  const paymentReady = splitMode ? splitReady : cashReady;
+  const canCheckout = lines.length > 0 && !busy && paymentReady && staffReady;
 
   const submit = async () => {
     if (lines.length === 0 || busy) return;
     setBusy(true);
     setError(null);
     try {
+      const splitPayments = splitRows
+        .map((row) => {
+          const amount = Number(row.amount) || 0;
+          const tendered = Number(row.tendered) || 0;
+          return {
+            method: row.method,
+            amount,
+            tendered: tendered > 0 ? tendered : undefined,
+          };
+        })
+        .filter((payment) => payment.amount > 0);
+
       const result = await checkout({
         storeCode,
         staffCode: staffCode || undefined,
         memberCode: member?.memberCode,
-        paymentMethod,
+        // 分割時の主たる支払方法はサーバー側 (最大金額の手段) で決める
+        paymentMethod: splitMode ? (splitPayments[0]?.method ?? paymentMethod) : paymentMethod,
+        payments: splitMode && splitPayments.length > 0 ? splitPayments : undefined,
         discount: totals.voucherDiscount,
         pointsUsed,
         lines: lines.map((line) => ({
@@ -328,12 +383,16 @@ export function Register({
         setError(result.error);
         return;
       }
-      const tenderedValue = isCash ? Number(tendered) || 0 : null;
-      const change =
-        tenderedValue !== null && tenderedValue >= result.total - result.pointsUsed
-          ? tenderedValue - (result.total - result.pointsUsed)
-          : null;
-      setDone({ ...result, change });
+      if (splitMode) {
+        setDone({ ...result, change: splitChange > 0 ? splitChange : null });
+      } else {
+        const tenderedValue = isCash ? Number(tendered) || 0 : null;
+        const change =
+          tenderedValue !== null && tenderedValue >= result.total - result.pointsUsed
+            ? tenderedValue - (result.total - result.pointsUsed)
+            : null;
+        setDone({ ...result, change });
+      }
     } finally {
       setBusy(false);
       setConfirmingPayment(false);
@@ -342,11 +401,16 @@ export function Register({
 
   /**
    * 会計ボタン。
-   * 現金はそのまま会計、それ以外は決済端末での処理が済んだかを確認してから会計する。
+   * 現金 (お釣りが出る手段) のみならそのまま会計、
+   * それ以外は決済端末での処理が済んだかを確認してから会計する。
    */
   const requestCheckout = () => {
     if (!canCheckout) return;
-    if (isCash) {
+    // 分割時は、現金以外の手段が含まれていれば確認をはさむ
+    const needsConfirm = splitMode
+      ? splitRows.some((row) => !paymentMethods.find((m) => m.code === row.method)?.allowChange)
+      : !isCash;
+    if (!needsConfirm) {
       void submit();
       return;
     }
@@ -361,7 +425,10 @@ export function Register({
     setDiscountOpen({});
     setPointsUsed(0);
     setTendered("");
-    setPaymentMethod("CASH");
+    setPaymentMethod(paymentMethods[0]?.code ?? "CASH");
+    setSplitMode(false);
+    setSplitRows([]);
+    setUnknownCode(null);
     setError(null);
     setDone(null);
   };
@@ -810,24 +877,196 @@ export function Register({
           </dl>
 
           {/* 支払方法は設定 (レジの支払方法) で追加・削除できる */}
-          <div className="mt-3 grid grid-cols-2 gap-1.5">
-            {paymentMethods.map((method) => (
-              <button
-                key={method.code}
-                type="button"
-                onClick={() => setPaymentMethod(method.code)}
-                className={`rounded-lg border px-2 py-1.5 text-sm font-medium transition-colors ${
-                  paymentMethod === method.code
-                    ? "border-ink-900 bg-ink-900 text-white"
-                    : "border-ink-200 bg-white text-ink-600 hover:bg-ink-50"
-                }`}
-              >
-                {method.label}
-              </button>
-            ))}
-          </div>
+          {!splitMode && (
+            <div className="mt-3 grid grid-cols-2 gap-1.5">
+              {paymentMethods.map((method) => (
+                <button
+                  key={method.code}
+                  type="button"
+                  onClick={() => setPaymentMethod(method.code)}
+                  className={`rounded-lg border px-2 py-1.5 text-sm font-medium transition-colors ${
+                    paymentMethod === method.code
+                      ? "border-ink-900 bg-ink-900 text-white"
+                      : "border-ink-200 bg-white text-ink-600 hover:bg-ink-50"
+                  }`}
+                >
+                  {method.label}
+                </button>
+              ))}
+            </div>
+          )}
 
-          {isCash && totals.payable > 0 && (
+          {/* 分割決済: 現金1万円 + 電子マネーで残額、のような支払い方に対応する */}
+          {splitMode && (
+            <div className="mt-3 rounded-lg border border-ink-200 bg-ink-50/60 p-2.5">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-xs font-medium text-ink-500">支払の内訳</span>
+                <span
+                  className={`tabular text-sm font-semibold ${
+                    splitRemaining === 0
+                      ? "text-emerald-700"
+                      : splitRemaining < 0
+                        ? "text-rose-700"
+                        : "text-ink-800"
+                  }`}
+                >
+                  {splitRemaining === 0
+                    ? "残額なし"
+                    : splitRemaining > 0
+                      ? `残り ${yen.format(splitRemaining)}`
+                      : `${yen.format(-splitRemaining)} 超過`}
+                </span>
+              </div>
+
+              <div className="mt-2 space-y-2">
+                {splitRows.map((row, index) => {
+                  const method = paymentMethods.find((m) => m.code === row.method);
+                  const amount = Number(row.amount) || 0;
+                  const rowTendered = Number(row.tendered) || 0;
+                  const rowShort = method?.allowChange && row.tendered.trim() !== "" && rowTendered < amount;
+                  return (
+                    <div key={row.key} className="rounded-lg border border-ink-200 bg-white p-2">
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <select
+                          value={row.method}
+                          onChange={(event) =>
+                            setSplitRows((prev) =>
+                              prev.map((r) =>
+                                r.key === row.key ? { ...r, method: event.target.value } : r,
+                              ),
+                            )
+                          }
+                          aria-label={`支払${index + 1} の方法`}
+                          className="min-w-0 flex-1 rounded-lg border border-ink-200 bg-white px-2 py-1 text-sm outline-none focus:border-ink-400"
+                        >
+                          {splitMethods.map((m) => (
+                            <option key={m.code} value={m.code}>
+                              {m.label}
+                            </option>
+                          ))}
+                        </select>
+                        <input
+                          type="number"
+                          min={0}
+                          value={row.amount}
+                          onChange={(event) =>
+                            setSplitRows((prev) =>
+                              prev.map((r) =>
+                                r.key === row.key ? { ...r, amount: event.target.value } : r,
+                              ),
+                            )
+                          }
+                          aria-label={`支払${index + 1} の金額`}
+                          className="tabular w-24 rounded-lg border border-ink-200 px-2 py-1 text-right text-sm outline-none focus:border-ink-400"
+                        />
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setSplitRows((prev) => prev.filter((r) => r.key !== row.key))
+                          }
+                          aria-label={`支払${index + 1} を削除`}
+                          className="rounded px-1.5 py-1 text-xs text-ink-400 hover:bg-ink-100 hover:text-rose-700"
+                        >
+                          ✕
+                        </button>
+                      </div>
+
+                      {/* お釣りを出せる手段では預かり金も受け取れる */}
+                      {method?.allowChange && (
+                        <div className="mt-1.5 flex items-center justify-between gap-2 pl-0.5">
+                          <span className="text-xs text-ink-400">お預かり (任意)</span>
+                          <span className="flex items-center gap-2">
+                            <input
+                              type="number"
+                              min={0}
+                              value={row.tendered}
+                              onChange={(event) =>
+                                setSplitRows((prev) =>
+                                  prev.map((r) =>
+                                    r.key === row.key ? { ...r, tendered: event.target.value } : r,
+                                  ),
+                                )
+                              }
+                              placeholder={String(amount)}
+                              aria-label={`支払${index + 1} のお預かり金額`}
+                              className={`tabular w-24 rounded-lg border px-2 py-1 text-right text-sm outline-none ${
+                                rowShort ? "border-rose-400" : "border-ink-200 focus:border-ink-400"
+                              }`}
+                            />
+                            <span className="tabular w-20 text-right text-xs text-ink-500">
+                              {rowShort
+                                ? `${yen.format(amount - rowTendered)} 不足`
+                                : rowTendered > amount
+                                  ? `釣 ${yen.format(rowTendered - amount)}`
+                                  : ""}
+                            </span>
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* 残額をそのまま次の手段に充てる。よくある「現金 → 残りをカード」の操作 */}
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {splitMethods.map((method) => (
+                  <button
+                    key={method.code}
+                    type="button"
+                    onClick={() =>
+                      setSplitRows((prev) => [
+                        ...prev,
+                        {
+                          key: `${method.code}-${Date.now()}`,
+                          method: method.code,
+                          amount: String(Math.max(0, splitRemaining)),
+                          tendered: "",
+                        },
+                      ])
+                    }
+                    className="rounded-lg border border-ink-200 bg-white px-2.5 py-1 text-xs font-medium text-ink-600 hover:bg-ink-50"
+                  >
+                    + {method.label}
+                    {splitRemaining > 0 && splitRows.length > 0 && (
+                      <span className="ml-1 text-ink-400">残額</span>
+                    )}
+                  </button>
+                ))}
+              </div>
+
+              {splitChange > 0 && (
+                <p className="tabular mt-2 text-right text-sm text-ink-600">
+                  お釣り合計 {yen.format(splitChange)}
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* 分割決済の開始 / 解除 */}
+          {totals.payable > 0 && splitMethods.length > 1 && (
+            <button
+              type="button"
+              onClick={() => {
+                if (splitMode) {
+                  setSplitMode(false);
+                  setSplitRows([]);
+                  return;
+                }
+                setSplitMode(true);
+                // いま選んでいる手段を1行目にして、残額の入力から始められるようにする
+                const first = splitMethods.find((m) => m.code === paymentMethod) ?? splitMethods[0];
+                setSplitRows([
+                  { key: `${first.code}-${Date.now()}`, method: first.code, amount: "", tendered: "" },
+                ]);
+              }}
+              className="mt-2 w-full rounded-lg border border-ink-200 bg-white px-3 py-1.5 text-sm font-medium text-ink-600 hover:bg-ink-50"
+            >
+              {splitMode ? "分割をやめる (1つの支払方法に戻す)" : "🧾 支払方法を分けて支払う"}
+            </button>
+          )}
+
+          {!splitMode && isCash && totals.payable > 0 && (
             <>
               <label className="mt-3 flex items-center justify-between gap-3">
                 <span className="text-xs text-ink-400">
@@ -870,9 +1109,11 @@ export function Register({
             title={
               !staffReady
                 ? "担当スタッフを選択してください"
-                : !cashReady
-                  ? "お預かり金額を入力してください"
-                  : undefined
+                : splitMode && !splitReady
+                  ? "支払の内訳を支払額とぴったり合わせてください"
+                  : !paymentReady
+                    ? "お預かり金額を入力してください"
+                    : undefined
             }
             className="mt-4 w-full rounded-lg bg-ink-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-ink-800 disabled:opacity-40"
           >

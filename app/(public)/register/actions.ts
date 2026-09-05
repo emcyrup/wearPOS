@@ -43,6 +43,17 @@ const checkoutSchema = z.object({
   memberCode: z.string().min(1).optional(),
   /** 支払方法のコード。設定で追加できるため固定の一覧では検証しない (下で有効性を確認) */
   paymentMethod: z.string().min(1).max(20),
+  /** 分割決済の内訳。1手段のみの会計では省略できる */
+  payments: z
+    .array(
+      z.object({
+        method: z.string().min(1).max(20),
+        amount: z.number().int().positive(),
+        tendered: z.number().int().nonnegative().optional(),
+      }),
+    )
+    .max(10)
+    .optional(),
   /** 伝票値引き (税抜) */
   discount: z.number().int().nonnegative(),
   pointsUsed: z.number().int().nonnegative(),
@@ -95,8 +106,22 @@ export async function checkout(input: unknown): Promise<CheckoutResult> {
 
   // レジに表示されている支払方法だけを受け付ける
   const methods = await activePaymentMethods();
-  if (!methods.some((method) => method.code === parsed.data.paymentMethod)) {
-    return { ok: false, error: "この支払方法は使えません。画面を再読み込みしてください。" };
+  const used = parsed.data.payments?.length
+    ? parsed.data.payments.map((payment) => payment.method)
+    : [parsed.data.paymentMethod];
+
+  for (const code of used) {
+    const method = methods.find((row) => row.code === code);
+    if (!method) {
+      return { ok: false, error: "この支払方法は使えません。画面を再読み込みしてください。" };
+    }
+    // 分割決済で使えるのは、設定で許可した支払方法だけ
+    if (used.length > 1 && !method.allowSplit) {
+      return {
+        ok: false,
+        error: `${method.label} は分割決済に使えません。設定で「分割決済に使える」を有効にしてください。`,
+      };
+    }
   }
 
   try {

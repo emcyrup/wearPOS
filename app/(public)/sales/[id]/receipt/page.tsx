@@ -24,6 +24,7 @@ export default async function ReceiptPage({ params }: { params: Promise<{ id: st
       staff: true,
       customer: true,
       lines: { include: { variant: { include: { product: true } } } },
+      payments: { orderBy: { sortOrder: "asc" } },
     },
   });
 
@@ -96,10 +97,47 @@ export default async function ReceiptPage({ params }: { params: Promise<{ id: st
               <dd>-{formatYen(sale.pointsUsed)}</dd>
             </div>
           )}
-          <div className="flex justify-between text-[11px] text-ink-600">
-            <dt>お支払い ({paymentLabels[sale.paymentMethod] ?? PAYMENT_METHOD_LABEL[sale.paymentMethod] ?? sale.paymentMethod})</dt>
-            <dd>{formatYen(payable)}</dd>
-          </div>
+          {/* 分割決済のときは支払方法ごとに1行ずつ印字する */}
+          {sale.payments.length > 0 ? (
+            sale.payments.map((payment) => (
+              <div key={payment.id} className="flex justify-between text-[11px] text-ink-600">
+                <dt>
+                  お支払い (
+                  {paymentLabels[payment.method] ??
+                    PAYMENT_METHOD_LABEL[payment.method] ??
+                    payment.method}
+                  )
+                </dt>
+                <dd>{formatYen(payment.amount)}</dd>
+              </div>
+            ))
+          ) : (
+            <div className="flex justify-between text-[11px] text-ink-600">
+              <dt>
+                お支払い (
+                {paymentLabels[sale.paymentMethod] ??
+                  PAYMENT_METHOD_LABEL[sale.paymentMethod] ??
+                  sale.paymentMethod}
+                )
+              </dt>
+              <dd>{formatYen(payable)}</dd>
+            </div>
+          )}
+          {/* 預かり金とお釣り (現金など) */}
+          {sale.payments
+            .filter((payment) => payment.tendered != null)
+            .map((payment) => (
+              <div key={`t-${payment.id}`} className="text-[11px] text-ink-600">
+                <div className="flex justify-between">
+                  <dt>お預かり</dt>
+                  <dd>{formatYen(payment.tendered ?? 0)}</dd>
+                </div>
+                <div className="flex justify-between">
+                  <dt>お釣り</dt>
+                  <dd>{formatYen(payment.change ?? 0)}</dd>
+                </div>
+              </div>
+            ))}
           {sale.pointsEarned > 0 && (
             <div className="flex justify-between text-[11px] text-ink-600">
               <dt>獲得ポイント</dt>

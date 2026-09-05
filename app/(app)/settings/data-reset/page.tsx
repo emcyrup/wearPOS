@@ -1,7 +1,11 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
-import { countResetTargets, recentDataResets } from "@/app/(app)/settings/data-reset-actions";
+import {
+  countResetTargets,
+  isDataResetEnabled,
+  recentDataResets,
+} from "@/app/(app)/settings/data-reset-actions";
 import { DataReset } from "@/components/data-reset";
 import { Card, EmptyState, PageHeader, Table } from "@/components/ui";
 import { getSessionUser } from "@/lib/auth";
@@ -14,7 +18,11 @@ export default async function DataResetPage() {
   const user = await getSessionUser();
   if (user?.role !== "ADMIN") notFound();
 
-  const [counts, history] = await Promise.all([countResetTargets(), recentDataResets()]);
+  const [counts, history, enabled] = await Promise.all([
+    countResetTargets(),
+    recentDataResets(),
+    isDataResetEnabled(),
+  ]);
   if (!counts) notFound();
 
   return (
@@ -36,7 +44,7 @@ export default async function DataResetPage() {
           元に戻すことはできません。棚卸や本番開始のタイミングで、テストデータだけを消す用途を想定しています。
           店舗・スタッフ・商品の項目設定・ユーザーなどのマスタは消えません。
         </p>
-        <DataReset counts={counts} />
+        <DataReset counts={counts} enabled={enabled} />
       </Card>
 
       <Card title="実行履歴">

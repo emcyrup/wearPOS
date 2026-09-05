@@ -5,6 +5,7 @@ import { z } from "zod";
 
 import { getSessionUser, requireAdmin } from "@/lib/auth";
 import {
+  DATA_RESET_ENABLED_KEY,
   expandTargets,
   RESET_CONFIRM_PHRASE,
   RESET_TARGETS,
@@ -25,6 +26,38 @@ import { prisma } from "@/lib/db";
  * の4段構えにしている。
  */
 
+export type DataResetState = {
+  status: "idle" | "success" | "error";
+  message: string;
+};
+
+/** データの初期化が有効になっているか (既定は無効) */
+export async function isDataResetEnabled(): Promise<boolean> {
+  const row = await prisma.appSetting.findUnique({ where: { key: DATA_RESET_ENABLED_KEY } });
+  return row?.value === "true";
+}
+
+/** 管理者が明示的に有効化 / 無効化する。実行後は自動で無効へ戻す */
+export async function setDataResetEnabled(enabled: boolean): Promise<DataResetState> {
+  if (!(await requireAdmin())) {
+    return { status: "error", message: "管理者のみ実行できます" };
+  }
+  const value = enabled ? "true" : "false";
+  await prisma.appSetting.upsert({
+    where: { key: DATA_RESET_ENABLED_KEY },
+    update: { value },
+    create: { key: DATA_RESET_ENABLED_KEY, value },
+  });
+  revalidatePath("/settings");
+  revalidatePath("/settings/data-reset");
+  return {
+    status: "success",
+    message: enabled
+      ? "データの初期化を有効にしました。作業が終わったら無効に戻してください"
+      : "データの初期化を無効にしました",
+  };
+}
+
 /** 削除対象の件数。画面のプレビューに使う */
 export async function countResetTargets(): Promise<ResetCounts | null> {
   if (!(await requireAdmin())) return null;
@@ -40,11 +73,6 @@ export async function countResetTargets(): Promise<ResetCounts | null> {
   return { sales, inventory, products, customers, lineLogs };
 }
 
-export type DataResetState = {
-  status: "idle" | "success" | "error";
-  message: string;
-};
-
 const resetSchema = z.object({
   targets: z.array(z.enum(RESET_TARGETS.map((t) => t.key) as [ResetTargetKey, ...ResetTargetKey[]])).min(1),
   confirmText: z.string(),
@@ -55,6 +83,14 @@ export async function resetData(input: unknown): Promise<DataResetState> {
   if (!admin) {
     return { status: "error", message: "管理者のみ実行できます" };
   }
+  // 既定では無効。使うときだけ管理者が有効化する運用
+  if (!(await isDataResetEnabled())) {
+    return {
+      status: "error",
+      message: "データの初期化は無効になっています。実行するには先に有効化してください",
+    };
+  }
+
   const parsed = resetSchema.safeParse(input);
   if (!parsed.success) {
     return { status: "error", message: "削除する対象を1つ以上選んでください" };
@@ -142,7 +178,14 @@ export async function resetData(input: unknown): Promise<DataResetState> {
     };
   }
 
-  for (const path of ["/", "/sales", "/products", "/inventory", "/customers", "/settings"]) {
+  // 実行できるのは1回だけ。続けて消したいときは、もう一度有効化してもらう
+  await prisma.appSetting.upsert({
+    where: { key: DATA_RESET_ENABLED_KEY },
+    update: { value: "false" },
+    create: { key: DATA_RESET_ENABLED_KEY, value: "false" },
+  });
+
+  for (const path of ["/", "/sales", "/products", "/inventory", "/customers", "/settings", "/settings/data-reset"]) {
     revalidatePath(path);
   }
 

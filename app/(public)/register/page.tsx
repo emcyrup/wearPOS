@@ -37,6 +37,7 @@ export default async function RegisterPage() {
           code: method.code,
           label: method.label,
           allowChange: method.allowChange,
+          allowSplit: method.allowSplit,
         }))}
       />
     </div>

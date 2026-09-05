@@ -41,6 +41,24 @@ export const posSaleSchema = z.object({
   type: z.enum(["SALE", "RETURN"]).default("SALE"),
   /** 支払方法のコード。設定で追加できるため固定の一覧では検証しない */
   paymentMethod: z.string().min(1).max(20).default("CASH"),
+  /**
+   * 分割決済の内訳。複数の支払方法を併用したときに指定する。
+   * 省略時は paymentMethod ひとつで支払ったものとして 1 行だけ作る。
+   * 金額の合計はポイント利用を除いた支払額と一致していること。
+   */
+  payments: z
+    .array(
+      z.object({
+        method: z.string().min(1).max(20),
+        amount: z.number().int().positive(),
+        /** 現金など、お釣りが出る手段での預かり金 */
+        tendered: z.number().int().nonnegative().optional(),
+        /** 決済端末の承認番号などのメモ */
+        note: z.string().trim().max(100).optional(),
+      }),
+    )
+    .max(10)
+    .optional(),
   /** 伝票値引き(税抜) */
   discount: z.number().int().nonnegative().default(0),
   /** ポイント利用による充当額(円) */
@@ -151,6 +169,24 @@ export async function ingestPosSale(input: PosSaleInput): Promise<IngestResult> 
   const soldAt = new Date(input.soldAt);
   const receiptNo = input.receiptNo ?? `${store.code}-${input.externalId}`;
 
+  // 支払の内訳。未指定なら「1手段で全額」として 1 行だけ作る
+  const payments =
+    input.payments && input.payments.length > 0
+      ? input.payments
+      : [{ method: input.paymentMethod, amount: netPaid, tendered: undefined, note: undefined }];
+
+  const paidTotal = payments.reduce((sum, payment) => sum + payment.amount, 0);
+  // 支払額が0円 (ポイントで全額充当) のときだけ、内訳なしを許す
+  if (netPaid > 0 && paidTotal !== netPaid) {
+    throw new SaleIngestError(
+      `支払の内訳 (${paidTotal}円) が支払額 (${netPaid}円) と一致しません`,
+    );
+  }
+  // 主たる支払方法 = 最も金額の大きい手段。既存の集計・表示との互換のために持つ
+  const primaryMethod =
+    payments.reduce((max, payment) => (payment.amount > max.amount ? payment : max), payments[0])
+      ?.method ?? input.paymentMethod;
+
   const result = await prisma.$transaction(async (tx) => {
     const sale = await tx.sale.create({
       data: {
@@ -167,9 +203,22 @@ export async function ingestPosSale(input: PosSaleInput): Promise<IngestResult> 
         total,
         pointsUsed: input.pointsUsed,
         pointsEarned,
-        paymentMethod: input.paymentMethod,
+        paymentMethod: primaryMethod,
         type: input.type,
         note: input.note,
+        payments: {
+          create: payments
+            .filter((payment) => payment.amount > 0)
+            .map((payment, index) => ({
+              method: payment.method,
+              amount: payment.amount,
+              tendered: payment.tendered ?? null,
+              change:
+                payment.tendered != null ? Math.max(0, payment.tendered - payment.amount) : null,
+              note: payment.note ?? null,
+              sortOrder: index,
+            })),
+        },
         lines: {
           create: resolved.map(({ line, variant, lineTotal }) => ({
             variantId: variant?.id ?? null,
