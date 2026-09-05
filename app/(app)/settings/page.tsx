@@ -2,6 +2,7 @@ import { Badge, Card, LinkButton, PageHeader, Table } from "@/components/ui";
 import { StaffManager } from "@/components/master-managers";
 import { ProductFieldSettings } from "@/components/product-field-settings";
 import { ReminderSettings } from "@/components/reminder-settings";
+import { PaymentMethodSettings } from "@/components/payment-method-settings";
 import { RichMenuSetup } from "@/components/richmenu-setup";
 import { SignupPolicySettings } from "@/components/signup-policy-settings";
 import { UserManager } from "@/components/user-manager";
@@ -12,6 +13,7 @@ import { MULTI_STORE } from "@/lib/config";
 import { prisma } from "@/lib/db";
 import { formatPercent, formatYen } from "@/lib/format";
 import { isLineConfigured, lineConfig } from "@/lib/line";
+import { ensurePaymentMethods } from "@/lib/payment-methods";
 import { ensureProductFields } from "@/lib/product-fields";
 import { getSignupPolicy } from "@/lib/signup-policy";
 
@@ -52,6 +54,14 @@ export default async function SettingsPage() {
 
   // ログイン画面からの新規ユーザー作成の可否 (管理者のみ設定できる)
   const signupPolicy = await getSignupPolicy();
+
+  // レジの支払方法 (組み込み + 店舗が追加したもの)。使用中の件数も出す
+  const paymentMethods = await ensurePaymentMethods();
+  const paymentUsage = await prisma.sale.groupBy({
+    by: ["paymentMethod"],
+    _count: { _all: true },
+  });
+  const usageByCode = new Map(paymentUsage.map((row) => [row.paymentMethod, row._count._all]));
 
   // 商品の基本情報に表示する項目 (組み込み + カスタム) の設定
   const productFields = isAdmin
@@ -122,6 +132,28 @@ export default async function SettingsPage() {
             features={FEATURES.map((f) => ({ key: f.key, label: f.label }))}
             currentUserId={sessionUser.uid}
             defaultStaffFeatures={DEFAULT_STAFF_FEATURES}
+          />
+        </Card>
+      )}
+
+      {isAdmin && (
+        <Card title="レジの支払方法" className="mb-4">
+          <p className="mb-3 text-sm text-ink-600">
+            レジで選べる支払方法を管理します。ギフト券・商品券・モール共通ポイントなど、
+            店舗で使うものを自由に追加できます。
+            <span className="font-medium">分割決済に使える</span>のチェックは、
+            1回の会計で複数の支払方法を併用するときに、その手段を使ってよいかの設定です。
+          </p>
+          <PaymentMethodSettings
+            methods={paymentMethods.map((method) => ({
+              code: method.code,
+              label: method.label,
+              allowSplit: method.allowSplit,
+              allowChange: method.allowChange,
+              isBuiltin: method.isBuiltin,
+              isActive: method.isActive,
+              usedCount: usageByCode.get(method.code) ?? 0,
+            }))}
           />
         </Card>
       )}
@@ -224,6 +256,20 @@ export default async function SettingsPage() {
               productCount: season._count.products,
             }))}
           />
+        </Card>
+      )}
+
+      {isAdmin && (
+        <Card
+          title="データの初期化"
+          className="mb-4"
+          action={<LinkButton href="/settings/data-reset">初期化画面を開く</LinkButton>}
+        >
+          <p className="text-sm text-ink-600">
+            動作確認用に入れた取引・在庫・商品・顧客のデータをまとめて削除できます。
+            本番運用を始める前や、棚卸のタイミングでお使いください。
+            取り消せない操作のため、確認フレーズの入力と実行履歴の記録を行います。
+          </p>
         </Card>
       )}
 

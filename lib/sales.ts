@@ -39,7 +39,8 @@ export const posSaleSchema = z.object({
   memberCode: z.string().min(1).optional(),
   soldAt: z.string().datetime({ offset: true }).or(z.string().datetime()),
   type: z.enum(["SALE", "RETURN"]).default("SALE"),
-  paymentMethod: z.enum(["CASH", "CREDIT", "E_MONEY", "QR", "OTHER"]).default("CASH"),
+  /** 支払方法のコード。設定で追加できるため固定の一覧では検証しない */
+  paymentMethod: z.string().min(1).max(20).default("CASH"),
   /** 伝票値引き(税抜) */
   discount: z.number().int().nonnegative().default(0),
   /** ポイント利用による充当額(円) */

@@ -166,6 +166,56 @@ export async function updateProductInfo(input: unknown): Promise<UpdateProductRe
 // SKU コードの変更
 // ---------------------------------------------------------------------------
 
+const updateBarcodeSchema = z.object({
+  variantId: z.string().min(1),
+  /** 空文字ならバーコードを未設定に戻す */
+  barcode: z
+    .string()
+    .trim()
+    .max(64)
+    .regex(/^[A-Za-z0-9._-]*$/),
+});
+
+/**
+ * SKU のバーコードを個別に設定する。
+ * メーカー値札や自店の旧ラベルをそのまま登録する用途を想定し、
+ * JAN (13桁) 以外のコードも受け付ける。重複だけは許さない。
+ */
+export async function updateVariantBarcode(input: unknown): Promise<UpdateProductResult> {
+  if (!(await requireAdmin())) {
+    return { ok: false, error: "管理者のみ変更できます" };
+  }
+  const parsed = updateBarcodeSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, error: "バーコードは英数字・ハイフンで64文字以内で入力してください" };
+  }
+  const { variantId } = parsed.data;
+  const barcode = parsed.data.barcode.trim();
+
+  const variant = await prisma.productVariant.findUnique({ where: { id: variantId } });
+  if (!variant) return { ok: false, error: "SKU が見つかりません" };
+  if ((variant.barcode ?? "") === barcode) return { ok: true };
+
+  if (barcode) {
+    const duplicate = await prisma.productVariant.findFirst({
+      where: { barcode, NOT: { id: variantId } },
+      select: { sku: true },
+    });
+    if (duplicate) {
+      return { ok: false, error: `バーコード「${barcode}」は既に ${duplicate.sku} で使われています` };
+    }
+  }
+
+  await prisma.productVariant.update({
+    where: { id: variantId },
+    data: { barcode: barcode || null },
+  });
+
+  revalidatePath(`/products/${variant.productId}`);
+  revalidatePath(`/products/${variant.productId}/labels`);
+  return { ok: true };
+}
+
 const updateSkuSchema = z.object({
   variantId: z.string().min(1),
   sku: z

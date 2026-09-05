@@ -45,8 +45,27 @@ const createSchema = z.object({
     .array(z.object({ code: z.string().trim().min(1).max(10), name: z.string().trim().min(1).max(20) }))
     .min(1, "サイズを1つ以上選択してください")
     .max(20),
-  /** SKU ごとに JAN コードを自動採番するか */
-  generateBarcodes: z.boolean().default(true),
+  /**
+   * バーコードの付け方。
+   * AUTO   = 自店ルールで自動採番 (490 + 年月 + 連番)
+   * MANUAL = メーカー値札や自店の既存バーコードをそのまま登録
+   * NONE   = あとで設定する
+   */
+  barcodeMode: z.enum(["AUTO", "MANUAL", "NONE"]).default("AUTO"),
+  /** MANUAL のときの SKU ごとのバーコード。空文字の SKU は未設定として扱う */
+  manualBarcodes: z
+    .array(
+      z.object({
+        sku: z.string().min(1),
+        barcode: z
+          .string()
+          .trim()
+          .max(64)
+          .regex(/^[A-Za-z0-9._-]*$/, "バーコードは英数字・ハイフンで入力してください"),
+      }),
+    )
+    .max(400)
+    .default([]),
   /** JAN の採番年月 (YYYY-MM)。コードは 490 + 年月(YYMM) + 連番5桁 + チェックデジット */
   janYearMonth: z
     .string()
@@ -105,16 +124,40 @@ export async function createProduct(input: unknown): Promise<CreateProductResult
     return { ok: false, error: `SKU が重複しています: ${existingSkus[0].sku}` };
   }
 
-  let barcodes: string[] = [];
-  try {
-    if (data.generateBarcodes) {
+  let barcodes: (string | null)[] = [];
+  if (data.barcodeMode === "AUTO") {
+    try {
       barcodes = await reserveSequentialJan(data.janYearMonth ?? currentYearMonth(), variants.length);
+    } catch (error) {
+      return {
+        ok: false,
+        error: error instanceof Error ? error.message : "JAN コードの採番に失敗しました",
+      };
     }
-  } catch (error) {
-    return {
-      ok: false,
-      error: error instanceof Error ? error.message : "JAN コードの採番に失敗しました",
-    };
+  } else if (data.barcodeMode === "MANUAL") {
+    // 既存のバーコード (メーカー値札 / 自店の旧ラベル) をそのまま登録する
+    const bySku = new Map(
+      data.manualBarcodes.map((entry) => [entry.sku, entry.barcode.trim()]),
+    );
+    barcodes = variants.map((variant) => bySku.get(variant.sku)?.trim() || null);
+
+    const entered = barcodes.filter((code): code is string => Boolean(code));
+    const duplicatedInInput = entered.find((code, index) => entered.indexOf(code) !== index);
+    if (duplicatedInInput) {
+      return { ok: false, error: `同じバーコードが複数の SKU に入力されています: ${duplicatedInInput}` };
+    }
+    if (entered.length > 0) {
+      const used = await prisma.productVariant.findFirst({
+        where: { barcode: { in: entered } },
+        select: { barcode: true, sku: true },
+      });
+      if (used) {
+        return {
+          ok: false,
+          error: `バーコード ${used.barcode} は既に ${used.sku} で使われています`,
+        };
+      }
+    }
   }
 
   try {
@@ -203,7 +246,7 @@ export async function createProduct(input: unknown): Promise<CreateProductResult
       productId: product.id,
       styleCode,
       variantCount: variants.length,
-      barcodeCount: barcodes.length,
+      barcodeCount: barcodes.filter(Boolean).length,
     };
   } catch (error) {
     console.error("商品登録に失敗しました", error);

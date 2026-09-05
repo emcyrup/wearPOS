@@ -5,6 +5,7 @@ import { CloseWindowButton, PrintButton } from "@/components/print-button";
 import { PAYMENT_METHOD_LABEL } from "@/lib/apparel";
 import { prisma } from "@/lib/db";
 import { formatDateTime, formatYen, fullName } from "@/lib/format";
+import { paymentMethodLabels } from "@/lib/payment-methods";
 
 export const dynamic = "force-dynamic";
 
@@ -30,6 +31,8 @@ export default async function ReceiptPage({ params }: { params: Promise<{ id: st
 
   const itemCount = sale.lines.reduce((sum, line) => sum + line.quantity, 0);
   const payable = Math.max(0, sale.total - sale.pointsUsed);
+  // 支払方法の表示名は設定のマスタから引く
+  const paymentLabels = await paymentMethodLabels();
 
   return (
     <>
@@ -94,7 +97,7 @@ export default async function ReceiptPage({ params }: { params: Promise<{ id: st
             </div>
           )}
           <div className="flex justify-between text-[11px] text-ink-600">
-            <dt>お支払い ({PAYMENT_METHOD_LABEL[sale.paymentMethod] ?? sale.paymentMethod})</dt>
+            <dt>お支払い ({paymentLabels[sale.paymentMethod] ?? PAYMENT_METHOD_LABEL[sale.paymentMethod] ?? sale.paymentMethod})</dt>
             <dd>{formatYen(payable)}</dd>
           </div>
           {sale.pointsEarned > 0 && (

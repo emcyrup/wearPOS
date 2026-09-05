@@ -1,17 +1,19 @@
 import { Register } from "@/components/register";
 import { PageHeader } from "@/components/ui";
 import { prisma } from "@/lib/db";
+import { activePaymentMethods } from "@/lib/payment-methods";
 
 export const dynamic = "force-dynamic";
 
 export default async function RegisterPage() {
-  const [stores, staff] = await Promise.all([
+  const [stores, staff, paymentMethods] = await Promise.all([
     prisma.store.findMany({ where: { isActive: true }, orderBy: { code: "asc" } }),
     prisma.staff.findMany({
       where: { isActive: true },
       include: { store: true },
       orderBy: { code: "asc" },
     }),
+    activePaymentMethods(),
   ]);
 
   return (
@@ -30,6 +32,11 @@ export default async function RegisterPage() {
           code: s.code,
           name: s.name,
           storeCode: s.store?.code ?? null,
+        }))}
+        paymentMethods={paymentMethods.map((method) => ({
+          code: method.code,
+          label: method.label,
+          allowChange: method.allowChange,
         }))}
       />
     </div>

@@ -497,6 +497,38 @@ model AppSetting {
   updatedAt DateTime @updatedAt
 }
 
+/// レジで選べる支払方法。店舗ごとに追加・削除できる
+model PaymentMethod {
+  /// 伝票に記録するコード (CASH / CREDIT / GIFT_CERT など)。Sale.paymentMethod と対応する
+  code        String   @id
+  label       String
+  /// 分割決済 (複数手段の併用) で使えるか
+  allowSplit  Boolean  @default(true)
+  /// お釣りを出せるか。ギフト券・商品券は通常 false
+  allowChange Boolean  @default(false)
+  /// 組み込みの支払方法。削除できない (無効化のみ)
+  isBuiltin   Boolean  @default(false)
+  isActive    Boolean  @default(true)
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+/// 管理者操作の監査ログ (データ一括削除など、取り消せない操作を記録する)
+model AuditLog {
+  id        String   @id @default(cuid())
+  /// 操作した AppUser の id と表示名 (ユーザーが消えても誰の操作か残す)
+  actorId   String?
+  actorName String
+  /// DATA_RESET など
+  action    String
+  /// 操作の詳細 (対象・件数などの JSON 文字列)
+  detail    String
+  createdAt DateTime @default(now())
+
+  @@index([action, createdAt])
+}
+
 /// LINE 自動リマインドの店舗全体設定 (1ルール1行)
 model ReminderRule {
   /// PURCHASE_FOLLOW | REVISIT | DORMANT | BIRTHDAY

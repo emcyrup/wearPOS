@@ -6,13 +6,14 @@ import { LinkRow } from "@/components/link-row";
 import { MULTI_STORE } from "@/lib/config";
 import { prisma } from "@/lib/db";
 import { formatDateTime, formatNumber, formatYen, fullName } from "@/lib/format";
+import { ensurePaymentMethods } from "@/lib/payment-methods";
 
 export const dynamic = "force-dynamic";
 
 type Search = { store?: string; q?: string; type?: string; from?: string; to?: string; page?: string };
 
 /** 支払方法の表示順と、内訳グラフの色 */
-const PAYMENT_METHOD_ORDER = ["CASH", "CREDIT", "E_MONEY", "QR", "OTHER"] as const;
+/** 組み込みの支払方法の色。設定で追加されたものには順番に予備色を割り当てる */
 const PAYMENT_COLORS: Record<string, string> = {
   CASH: "#059669",
   CREDIT: "#0284c7",
@@ -20,6 +21,7 @@ const PAYMENT_COLORS: Record<string, string> = {
   QR: "#d97706",
   OTHER: "#64748b",
 };
+const EXTRA_PAYMENT_COLORS = ["#be185d", "#0f766e", "#4338ca", "#a16207", "#9333ea"];
 
 export default async function SalesPage({ searchParams }: { searchParams: Promise<Search> }) {
   const params = await searchParams;
@@ -78,8 +80,19 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
     }),
   ]);
 
+  // 支払方法は設定で追加・削除できるため、マスタの表示順で並べる。
+  // マスタから消えた過去の支払方法も、伝票に残っていれば末尾に出す
+  const methodMaster = await ensurePaymentMethods();
+  const methodOrder = [
+    ...methodMaster.map((row) => row.code),
+    ...byPayment
+      .map((row) => row.paymentMethod)
+      .filter((code) => !methodMaster.some((row) => row.code === code)),
+  ].filter((code, index, list) => list.indexOf(code) === index);
+  const methodLabels = new Map(methodMaster.map((row) => [row.code, row.label]));
+
   // 支払方法別の集計。返品は売上から差し引いた正味額で見せる
-  const paymentStats = PAYMENT_METHOD_ORDER.map((method) => {
+  const paymentStats = methodOrder.map((method, methodIndex) => {
     const rows = byPayment.filter((row) => row.paymentMethod === method);
     const saleTotal = rows
       .filter((row) => row.type !== "RETURN")
@@ -89,8 +102,10 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
       .reduce((sum, row) => sum + (row._sum.total ?? 0), 0);
     return {
       method,
-      label: PAYMENT_METHOD_LABEL[method] ?? method,
-      color: PAYMENT_COLORS[method] ?? "#64748b",
+      label: methodLabels.get(method) ?? PAYMENT_METHOD_LABEL[method] ?? method,
+      color:
+        PAYMENT_COLORS[method] ??
+        EXTRA_PAYMENT_COLORS[methodIndex % EXTRA_PAYMENT_COLORS.length],
       net: saleTotal - returnTotal,
       count: rows.reduce((sum, row) => sum + row._count._all, 0),
       returnCount: rows
@@ -353,7 +368,9 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
                   {sale.lines.reduce((sum, line) => sum + line.quantity, 0)}
                 </td>
                 <td className="px-2 py-2.5 text-xs whitespace-nowrap text-ink-400">
-                  {PAYMENT_METHOD_LABEL[sale.paymentMethod] ?? sale.paymentMethod}
+                  {methodLabels.get(sale.paymentMethod) ??
+                    PAYMENT_METHOD_LABEL[sale.paymentMethod] ??
+                    sale.paymentMethod}
                 </td>
                 <td className="tabular px-2 py-2.5 text-right font-medium">{formatYen(sale.total)}</td>
                 <td className="px-2 py-2.5 text-xs whitespace-nowrap text-ink-400">

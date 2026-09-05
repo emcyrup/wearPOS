@@ -14,6 +14,7 @@ import { DORMANT_DAYS, parseTags, PAYMENT_METHOD_LABEL, pointRateForRank, rankLa
 import { MULTI_STORE } from "@/lib/config";
 import { prisma } from "@/lib/db";
 import { ensureReminderRules } from "@/lib/reminders";
+import { paymentMethodLabels } from "@/lib/payment-methods";
 import { signMemberCardToken } from "@/lib/session";
 import {
   daysSince,
@@ -51,6 +52,10 @@ export default async function CustomerDetailPage({ params }: { params: Promise<{
   });
 
   if (!customer) notFound();
+
+  // 支払方法の表示名は設定のマスタから引く
+  const paymentLabels = await paymentMethodLabels();
+
 
   // 購買履歴から好みのサイズ・カラー・カテゴリを推定する
   const purchasedLines = customer.sales
@@ -386,7 +391,7 @@ export default async function CustomerDetailPage({ params }: { params: Promise<{
                   <div className="tabular text-sm font-semibold">
                     {formatYen(sale.total)}
                     <span className="ml-2 text-xs font-normal text-ink-400">
-                      {PAYMENT_METHOD_LABEL[sale.paymentMethod] ?? sale.paymentMethod}
+                      {paymentLabels[sale.paymentMethod] ?? PAYMENT_METHOD_LABEL[sale.paymentMethod] ?? sale.paymentMethod}
                     </span>
                   </div>
                 </div>

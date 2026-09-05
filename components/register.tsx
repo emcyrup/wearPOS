@@ -30,12 +30,13 @@ type CartLine = {
   discountPct: number;
 };
 
-const PAYMENT_METHODS = [
-  { value: "CASH", label: "現金" },
-  { value: "CREDIT", label: "クレジット" },
-  { value: "E_MONEY", label: "電子マネー" },
-  { value: "QR", label: "QR決済" },
-] as const;
+/** 設定で管理する支払方法 (設定 → レジの支払方法) */
+export type PaymentMethodOption = {
+  code: string;
+  label: string;
+  /** お釣りを出せる支払方法か。true なら預かり金の入力を求める */
+  allowChange: boolean;
+};
 
 const RANK_LABEL: Record<string, string> = {
   REGULAR: "レギュラー",
@@ -75,13 +76,23 @@ function lineDiscountOf(line: CartLine): number {
  * 会計は POS 連携 API と同じロジック (在庫減算・ポイント・LINE通知) を通る。
  * ログインなしでも使えるため、担当者はスタッフバーコードの読み取りでも選べる。
  */
-export function Register({ stores, staff }: { stores: StoreOption[]; staff: StaffOption[] }) {
+export function Register({
+  stores,
+  staff,
+  paymentMethods,
+}: {
+  stores: StoreOption[];
+  staff: StaffOption[];
+  paymentMethods: PaymentMethodOption[];
+}) {
   const [storeCode, setStoreCode] = useState(stores[0]?.code ?? "");
   const [staffCode, setStaffCode] = useState("");
   const [staffError, setStaffError] = useState<string | null>(null);
   const [lines, setLines] = useState<CartLine[]>([]);
   const [codeInput, setCodeInput] = useState("");
   const [adding, setAdding] = useState(false);
+  /** スキャンしたが商品が見つからなかったバーコード (商品登録への導線に使う) */
+  const [unknownCode, setUnknownCode] = useState<string | null>(null);
   const [member, setMember] = useState<MemberSummary | null>(null);
   const [memberInput, setMemberInput] = useState("");
   const [memberError, setMemberError] = useState<string | null>(null);
@@ -91,7 +102,7 @@ export function Register({ stores, staff }: { stores: StoreOption[]; staff: Staf
   /** 明細値引きの入力欄を開いている行 */
   const [discountOpen, setDiscountOpen] = useState<Record<string, boolean>>({});
   const [pointsUsed, setPointsUsed] = useState(0);
-  const [paymentMethod, setPaymentMethod] = useState<(typeof PAYMENT_METHODS)[number]["value"]>("CASH");
+  const [paymentMethod, setPaymentMethod] = useState(paymentMethods[0]?.code ?? "CASH");
   const [tendered, setTendered] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -147,8 +158,11 @@ export function Register({ stores, staff }: { stores: StoreOption[]; staff: Staf
         const response = await fetch(`/api/barcode-lookup?code=${encodeURIComponent(code)}`);
         if (!response.ok) {
           setError(`商品が見つかりません: ${code}`);
+          // 未登録のバーコードは、商品登録画面へそのまま持ち込めるようにする
+          setUnknownCode(code);
           return;
         }
+        setUnknownCode(null);
         const item = (await response.json()) as {
           sku: string;
           productName: string;
@@ -277,11 +291,14 @@ export function Register({ stores, staff }: { stores: StoreOption[]; staff: Staf
   const maxPoints = Math.min(member?.points ?? 0, totals.total);
 
   // ---- 会計前のチェック ----
-  const isCash = paymentMethod === "CASH";
+  const selectedMethod = paymentMethods.find((method) => method.code === paymentMethod) ?? null;
+  const methodLabel = selectedMethod?.label ?? paymentMethod;
+  // お釣りを出せる支払方法 (現金・商品券など) は預かり金を入力してもらう
+  const isCash = selectedMethod?.allowChange ?? false;
   const tenderedValue = Number(tendered);
   const tenderedEntered = tendered.trim() !== "" && Number.isFinite(tenderedValue);
   const shortage = tenderedEntered ? Math.max(0, totals.payable - tenderedValue) : totals.payable;
-  // 現金は預かり金の入力が必須。ポイントで全額充当された場合 (支払0円) は不要
+  // 預かり金が要る支払方法では入力が必須。ポイントで全額充当された場合 (支払0円) は不要
   const cashReady = !isCash || totals.payable === 0 || (tenderedEntered && shortage === 0);
   // 担当者が未選択のままでは会計できない (誰の売上か分からなくなるのを防ぐ)
   const staffReady = staffCode !== "";
@@ -311,7 +328,7 @@ export function Register({ stores, staff }: { stores: StoreOption[]; staff: Staf
         setError(result.error);
         return;
       }
-      const tenderedValue = paymentMethod === "CASH" ? Number(tendered) || 0 : null;
+      const tenderedValue = isCash ? Number(tendered) || 0 : null;
       const change =
         tenderedValue !== null && tenderedValue >= result.total - result.pointsUsed
           ? tenderedValue - (result.total - result.pointsUsed)
@@ -467,6 +484,22 @@ export function Register({ stores, staff }: { stores: StoreOption[]; staff: Staf
             </button>
           </div>
           {error && <p className="mt-2 text-sm text-rose-700">{error}</p>}
+          {/* 未登録のバーコード: 手入力で会計するか、商品として登録するかを選べる */}
+          {unknownCode && (
+            <p className="mt-1.5 text-xs text-ink-500">
+              値札のバーコードが未登録です。このまま会計するなら
+              <span className="font-medium">「未登録商品を手入力」</span>、商品として登録するなら
+              <a
+                href={`/products/new?barcode=${encodeURIComponent(unknownCode)}`}
+                target="_blank"
+                rel="noreferrer"
+                className="ml-1 font-medium text-accent underline underline-offset-2"
+              >
+                商品登録画面を開く
+              </a>
+              （管理者のみ）
+            </p>
+          )}
         </div>
 
         <div className="rounded-xl border border-ink-200 bg-white">
@@ -776,14 +809,15 @@ export function Register({ stores, staff }: { stores: StoreOption[]; staff: Staf
             </div>
           </dl>
 
+          {/* 支払方法は設定 (レジの支払方法) で追加・削除できる */}
           <div className="mt-3 grid grid-cols-2 gap-1.5">
-            {PAYMENT_METHODS.map((method) => (
+            {paymentMethods.map((method) => (
               <button
-                key={method.value}
+                key={method.code}
                 type="button"
-                onClick={() => setPaymentMethod(method.value)}
+                onClick={() => setPaymentMethod(method.code)}
                 className={`rounded-lg border px-2 py-1.5 text-sm font-medium transition-colors ${
-                  paymentMethod === method.value
+                  paymentMethod === method.code
                     ? "border-ink-900 bg-ink-900 text-white"
                     : "border-ink-200 bg-white text-ink-600 hover:bg-ink-50"
                 }`}
@@ -948,14 +982,12 @@ export function Register({ stores, staff }: { stores: StoreOption[]; staff: Staf
           <div className="w-full max-w-sm rounded-xl bg-white p-6 shadow-xl">
             <h2 className="text-base font-semibold text-ink-900">決済は完了しましたか？</h2>
             <p className="mt-2 text-sm leading-relaxed text-ink-600">
-              {`${PAYMENT_METHODS.find((method) => method.value === paymentMethod)?.label}でのお支払いが決済端末で完了したことを確認してから、会計を確定してください。`}
+              {`${methodLabel}でのお支払いが完了したことを確認してから、会計を確定してください。`}
             </p>
             <dl className="mt-4 space-y-1.5 rounded-lg bg-ink-50 px-4 py-3 text-sm">
               <div className="flex justify-between">
                 <dt className="text-ink-400">支払方法</dt>
-                <dd className="font-medium text-ink-800">
-                  {PAYMENT_METHODS.find((method) => method.value === paymentMethod)?.label}
-                </dd>
+                <dd className="font-medium text-ink-800">{methodLabel}</dd>
               </div>
               <div className="flex justify-between">
                 <dt className="text-ink-400">お支払い金額</dt>

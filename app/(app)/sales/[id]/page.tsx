@@ -8,6 +8,7 @@ import { markdownRate, PAYMENT_METHOD_LABEL, rankLabel } from "@/lib/apparel";
 import { MULTI_STORE } from "@/lib/config";
 import { prisma } from "@/lib/db";
 import { formatDateTime, formatPercent, formatYen, fullName } from "@/lib/format";
+import { paymentMethodLabels } from "@/lib/payment-methods";
 
 export const dynamic = "force-dynamic";
 
@@ -28,6 +29,10 @@ export default async function SaleDetailPage({ params }: { params: Promise<{ id:
   });
 
   if (!sale) notFound();
+
+  // 支払方法の表示名は設定のマスタから引く (追加された支払方法にも対応)
+  const paymentLabels = await paymentMethodLabels();
+
 
   const itemCount = sale.lines.reduce((sum, line) => sum + line.quantity, 0);
 
@@ -177,7 +182,7 @@ export default async function SaleDetailPage({ params }: { params: Promise<{ id:
               </div>
               <div className="flex justify-between pt-1">
                 <dt className="text-ink-400">支払方法</dt>
-                <dd>{PAYMENT_METHOD_LABEL[sale.paymentMethod] ?? sale.paymentMethod}</dd>
+                <dd>{paymentLabels[sale.paymentMethod] ?? PAYMENT_METHOD_LABEL[sale.paymentMethod] ?? sale.paymentMethod}</dd>
               </div>
               <div className="flex justify-between">
                 <dt className="text-ink-400">点数</dt>

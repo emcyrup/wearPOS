@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { AssignBarcodesButton } from "@/components/assign-barcodes-button";
-import { Barcode } from "@/components/barcode";
+import { BarcodeEditor } from "@/components/barcode-editor";
 import { Badge, Card, EmptyState, LinkButton, PageHeader, StockCell, Table } from "@/components/ui";
 import {
   markdownRate,
@@ -329,11 +329,12 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
                 </td>
                 <td className="px-2 py-2">{variant.sizeName}</td>
                 <td className="px-2 py-2">
-                  {variant.barcode ? (
-                    <Barcode code={variant.barcode} moduleWidth={1.2} height={28} />
-                  ) : (
-                    <span className="text-xs text-ink-400">—</span>
-                  )}
+                  <BarcodeEditor
+                    variantId={variant.id}
+                    sku={variant.sku}
+                    barcode={variant.barcode}
+                    canEdit={isAdmin}
+                  />
                 </td>
                 <td className="px-2 py-2">
                   <StockCell quantity={cell?.onHand ?? 0} />

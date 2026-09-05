@@ -5,6 +5,7 @@ import { randomUUID } from "node:crypto";
 import { z } from "zod";
 
 import { prisma } from "@/lib/db";
+import { activePaymentMethods } from "@/lib/payment-methods";
 import {
   ingestPosSale,
   SaleIngestError,
@@ -40,7 +41,8 @@ const checkoutSchema = z.object({
   storeCode: z.string().min(1),
   staffCode: z.string().min(1).optional(),
   memberCode: z.string().min(1).optional(),
-  paymentMethod: z.enum(["CASH", "CREDIT", "E_MONEY", "QR", "OTHER"]),
+  /** 支払方法のコード。設定で追加できるため固定の一覧では検証しない (下で有効性を確認) */
+  paymentMethod: z.string().min(1).max(20),
   /** 伝票値引き (税抜) */
   discount: z.number().int().nonnegative(),
   pointsUsed: z.number().int().nonnegative(),
@@ -89,6 +91,12 @@ export async function checkout(input: unknown): Promise<CheckoutResult> {
   const parsed = checkoutSchema.safeParse(input);
   if (!parsed.success) {
     return { ok: false, error: "会計内容が不正です。カートを確認してください。" };
+  }
+
+  // レジに表示されている支払方法だけを受け付ける
+  const methods = await activePaymentMethods();
+  if (!methods.some((method) => method.code === parsed.data.paymentMethod)) {
+    return { ok: false, error: "この支払方法は使えません。画面を再読み込みしてください。" };
   }
 
   try {

@@ -1,9 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 
 import { createProduct, type CreateProductResult } from "@/app/(app)/products/new/actions";
+import { ScanButton } from "@/components/barcode-scanner";
 import { JanMonthInput } from "@/components/jan-month-input";
 import { buildSku, STANDARD_COLORS, STANDARD_SIZES } from "@/lib/apparel";
 import { MULTI_STORE } from "@/lib/config";
@@ -71,12 +72,15 @@ export function ProductForm({
   seasons,
   stores,
   fields,
+  initialBarcode,
 }: {
   brands: Option[];
   categories: Option[];
   seasons: Option[];
   stores: Option[];
   fields: FieldOption[];
+  /** レジで読み取った未登録バーコード。指定時は「既存バーコード」モードで開く */
+  initialBarcode?: string;
 }) {
   // フォームには設定 (商品の基本情報 項目) で表示にした項目が、設定した並び順で出る。
   // 非表示の組み込み項目は既定値で登録される
@@ -96,7 +100,12 @@ export function ProductForm({
   const [customValues, setCustomValues] = useState<Record<string, string>>({});
   const [colorCodes, setColorCodes] = useState<string[]>(["BLK"]);
   const [sizeCodes, setSizeCodes] = useState<string[]>(["S", "M", "L"]);
-  const [generateBarcodes, setGenerateBarcodes] = useState(true);
+  /** バーコードの付け方: 自動採番 / 既存バーコードを読み取り / あとで設定 */
+  const [barcodeMode, setBarcodeMode] = useState<"AUTO" | "MANUAL" | "NONE">(
+    initialBarcode ? "MANUAL" : "AUTO",
+  );
+  /** MANUAL のときの SKU ごとのバーコード (sku → コード) */
+  const [manualBarcodes, setManualBarcodes] = useState<Record<string, string>>({});
   // JAN 採番の年月 "YYYY-MM" (490 + YYMM + 連番5桁 + チェックデジット)。既定は当月。
   // 入力欄では数字6桁 (YYYYMM) で受け、正規化できないあいだは null
   const [janYearMonth, setJanYearMonth] = useState<string | null>(() => {
@@ -124,6 +133,14 @@ export function ProductForm({
       })),
     );
   }, [styleCode, selectedColors, selectedSizes]);
+
+  // レジから持ち込んだバーコードは、SKU が決まった時点で先頭の SKU に入れておく
+  const prefilled = useRef(false);
+  useEffect(() => {
+    if (!initialBarcode || prefilled.current || skus.length === 0) return;
+    prefilled.current = true;
+    setManualBarcodes((prev) => ({ [skus[0].sku]: initialBarcode, ...prev }));
+  }, [initialBarcode, skus]);
 
   const toggle = (list: string[], value: string, setter: (next: string[]) => void) =>
     setter(list.includes(value) ? list.filter((item) => item !== value) : [...list, value]);
@@ -153,7 +170,11 @@ export function ProductForm({
           hex: color.hex,
         })),
         sizes: selectedSizes.map((size) => ({ code: size.code, name: size.name })),
-        generateBarcodes,
+        barcodeMode,
+        manualBarcodes:
+          barcodeMode === "MANUAL"
+            ? skus.map((item) => ({ sku: item.sku, barcode: manualBarcodes[item.sku] ?? "" }))
+            : [],
         janYearMonth: janYearMonth ?? undefined,
         initialStock: Number(initialStock) || 0,
         safetyStock: Number(safetyStock) || 0,
@@ -247,19 +268,46 @@ export function ProductForm({
             </label>
           </div>
 
-          {/* JAN コード採番 (品番のすぐ下) */}
+          {/* バーコード (品番のすぐ下)。自動採番と既存バーコードの読み取りを選べる */}
           <div className="mt-3 rounded-lg bg-ink-50 px-3.5 py-3">
-            <label className="flex items-center gap-2 text-sm text-ink-700">
-              <input
-                type="checkbox"
-                checked={generateBarcodes}
-                onChange={(event) => setGenerateBarcodes(event.target.checked)}
-                className="h-4 w-4 accent-ink-900"
-              />
-              SKU ごとに JAN コード (EAN-13) を自動採番する
-            </label>
-            {generateBarcodes && (
-              <div className="mt-2 flex flex-wrap items-center gap-2 pl-6">
+            <p className="mb-2 text-xs font-medium text-ink-500">バーコード</p>
+            <div className="space-y-1.5">
+              {(
+                [
+                  { value: "AUTO", label: "自店で自動採番する", hint: "JAN (EAN-13) を「年月 + 連番5桁」で発行します" },
+                  {
+                    value: "MANUAL",
+                    label: "既存のバーコードを読み取って登録する",
+                    hint: "メーカーの値札や自店の旧ラベルをそのまま使えます (値札の付け替え不要)",
+                  },
+                  { value: "NONE", label: "あとで設定する", hint: "商品詳細の SKU 一覧からいつでも登録できます" },
+                ] as const
+              ).map((option) => (
+                <label
+                  key={option.value}
+                  className={`flex cursor-pointer gap-2.5 rounded-lg border p-2.5 transition-colors ${
+                    barcodeMode === option.value
+                      ? "border-ink-900 bg-white"
+                      : "border-ink-200 bg-white/60 hover:bg-white"
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="barcodeMode"
+                    checked={barcodeMode === option.value}
+                    onChange={() => setBarcodeMode(option.value)}
+                    className="mt-0.5 h-4 w-4 shrink-0 accent-ink-900"
+                  />
+                  <span className="min-w-0">
+                    <span className="block text-sm font-medium text-ink-800">{option.label}</span>
+                    <span className="mt-0.5 block text-xs text-ink-400">{option.hint}</span>
+                  </span>
+                </label>
+              ))}
+            </div>
+
+            {barcodeMode === "AUTO" && (
+              <div className="mt-2.5 flex flex-wrap items-center gap-2">
                 <span className="flex items-center gap-2 text-sm text-ink-600">
                   採番年月
                   <JanMonthInput
@@ -273,6 +321,58 @@ export function ProductForm({
                 <span className="text-xs text-ink-400">
                   数字6桁 (例: 202608)。「年月 + 連番5桁」で自動採番されます
                 </span>
+              </div>
+            )}
+
+            {barcodeMode === "MANUAL" && (
+              <div className="mt-2.5">
+                {initialBarcode && (
+                  <p className="mb-2 rounded-lg bg-white px-3 py-2 text-xs text-ink-600">
+                    レジで読み取ったバーコード
+                    <span className="tabular ml-1 font-medium text-ink-900">{initialBarcode}</span>
+                    を、最初の SKU に設定します
+                  </p>
+                )}
+                {skus.length === 0 ? (
+                  <p className="text-xs text-ink-400">
+                    品番とカラー・サイズを指定すると、SKU ごとの入力欄が出ます
+                  </p>
+                ) : (
+                  <>
+                    <p className="mb-2 text-xs text-ink-400">
+                      値札のバーコードを1つずつ読み取ってください。空欄のままにした SKU は
+                      あとから登録できます
+                    </p>
+                    <div className="space-y-1.5">
+                      {skus.map((item) => (
+                        <div key={item.sku} className="flex flex-wrap items-center gap-2">
+                          <span className="tabular w-full text-xs text-ink-500 sm:w-56">
+                            {item.sku}
+                          </span>
+                          <span className="flex min-w-0 flex-1 gap-1.5">
+                            <input
+                              value={manualBarcodes[item.sku] ?? ""}
+                              onChange={(event) =>
+                                setManualBarcodes((prev) => ({
+                                  ...prev,
+                                  [item.sku]: event.target.value.trim(),
+                                }))
+                              }
+                              placeholder="値札のバーコードをスキャン"
+                              aria-label={`${item.sku} のバーコード`}
+                              className={`${inputClass} tabular min-w-0 flex-1`}
+                            />
+                            <ScanButton
+                              onDetect={(value) =>
+                                setManualBarcodes((prev) => ({ ...prev, [item.sku]: value }))
+                              }
+                            />
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                )}
               </div>
             )}
           </div>
@@ -566,8 +666,8 @@ export function ProductForm({
               skus.length === 0 ||
               !name.trim() ||
               !listPrice ||
-              // 採番する場合は年月 (数字6桁) が正しく入力されていること
-              (generateBarcodes && !janYearMonth)
+              // 自動採番する場合は年月 (数字6桁) が正しく入力されていること
+              (barcodeMode === "AUTO" && !janYearMonth)
             }
             className="w-full rounded-lg bg-ink-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-ink-800 disabled:opacity-40"
           >
