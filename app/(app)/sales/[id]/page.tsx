@@ -1,14 +1,14 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
-import { Badge, Card, PageHeader, Table } from "@/components/ui";
+import { Badge, Card, LinkButton, PageHeader, Table } from "@/components/ui";
 import { ReceiptWindowButton } from "@/components/print-button";
-import { ReturnSaleButton } from "@/components/return-sale-button";
 import { markdownRate, PAYMENT_METHOD_LABEL, rankLabel } from "@/lib/apparel";
 import { MULTI_STORE } from "@/lib/config";
 import { prisma } from "@/lib/db";
 import { formatDateTime, formatPercent, formatYen, fullName } from "@/lib/format";
 import { paymentMethodLabels } from "@/lib/payment-methods";
+import { summarizeReturns } from "@/lib/returns";
 
 export const dynamic = "force-dynamic";
 
@@ -31,24 +31,34 @@ export default async function SaleDetailPage({ params }: { params: Promise<{ id:
 
   if (!sale) notFound();
 
+  // この伝票に対する返品状況 (明細ごとの残数と、これまでの返品累計)
+  const returnState = sale.type === "SALE" ? await summarizeReturns(sale) : null;
+
   // 支払方法の表示名は設定のマスタから引く (追加された支払方法にも対応)
   const paymentLabels = await paymentMethodLabels();
 
 
   const itemCount = sale.lines.reduce((sum, line) => sum + line.quantity, 0);
 
-  // 返品状態: この伝票に対する返品伝票 (externalId=RETURN-<id>) があるか
-  const returnRecord =
+  // 返品状態: この伝票に対する返品伝票 (複数回の一部返品がありうる)
+  const returnRecords =
     sale.type === "SALE"
-      ? await prisma.sale.findUnique({
-          where: { externalId: `RETURN-${sale.id}` },
-          select: { id: true, receiptNo: true, soldAt: true },
+      ? await prisma.sale.findMany({
+          where: { originalSaleId: sale.id, type: "RETURN" },
+          select: { id: true, receiptNo: true, soldAt: true, total: true },
+          orderBy: { soldAt: "asc" },
         })
-      : null;
+      : [];
+  const fullyReturned = Boolean(returnState) && !returnState!.hasReturnable;
+  const partiallyReturned = returnRecords.length > 0 && !fullyReturned;
+
   // 返品伝票の場合は元伝票へのリンクを出す
   const originalSaleId =
-    sale.type === "RETURN" && sale.externalId?.startsWith("RETURN-")
-      ? sale.externalId.slice("RETURN-".length)
+    sale.type === "RETURN"
+      ? (sale.originalSaleId ??
+        (sale.externalId?.startsWith("RETURN-")
+          ? sale.externalId.slice("RETURN-".length).split("-")[0]
+          : null))
       : null;
 
   return (
@@ -70,10 +80,11 @@ export default async function SaleDetailPage({ params }: { params: Promise<{ id:
             <Badge tone={sale.type === "RETURN" ? "danger" : "success"}>
               {sale.type === "RETURN" ? "返品" : "販売"}
             </Badge>
-            {returnRecord && <Badge tone="danger">返品済み</Badge>}
+            {fullyReturned && <Badge tone="danger">返品済み</Badge>}
+            {partiallyReturned && <Badge tone="danger">一部返品</Badge>}
             <Badge tone="neutral">{sale.source}</Badge>
-            {sale.type === "SALE" && !returnRecord && (
-              <ReturnSaleButton saleId={sale.id} receiptNo={sale.receiptNo} />
+            {sale.type === "SALE" && returnState?.hasReturnable && (
+              <LinkButton href={`/sales/${sale.id}/return`}>返品する</LinkButton>
             )}
             <ReceiptWindowButton saleId={sale.id} />
           </div>
@@ -81,13 +92,24 @@ export default async function SaleDetailPage({ params }: { params: Promise<{ id:
       />
 
       {/* 返品済み / 返品伝票の案内 */}
-      {returnRecord && (
-        <p className="mb-4 rounded-lg bg-rose-50 px-4 py-2.5 text-sm text-rose-800">
-          この取引は {formatDateTime(returnRecord.soldAt)} に返品されました。
-          <Link href={`/sales/${returnRecord.id}`} className="ml-1 font-medium underline">
-            返品伝票 {returnRecord.receiptNo} を見る
-          </Link>
-        </p>
+      {returnRecords.length > 0 && (
+        <div className="mb-4 rounded-lg bg-rose-50 px-4 py-2.5 text-sm text-rose-800">
+          <p>
+            {fullyReturned
+              ? "この取引は返品されました。"
+              : "この取引は一部の商品が返品されています。残りは引き続き返品できます。"}
+          </p>
+          <ul className="mt-1 space-y-0.5">
+            {returnRecords.map((record) => (
+              <li key={record.id}>
+                {formatDateTime(record.soldAt)} · {formatYen(record.total)}
+                <Link href={`/sales/${record.id}`} className="ml-1 font-medium underline">
+                  返品伝票 {record.receiptNo} を見る
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </div>
       )}
       {originalSaleId && (
         <p className="mb-4 rounded-lg bg-ink-50 px-4 py-2.5 text-sm text-ink-600">
@@ -103,6 +125,8 @@ export default async function SaleDetailPage({ params }: { params: Promise<{ id:
           <Table head={["商品", "SKU", "カラー / サイズ", "単価", "数量", "値引", "小計"]}>
             {sale.lines.map((line) => {
               const discountRate = markdownRate(line.listPriceAtSale, line.unitPrice);
+              const returnedQuantity =
+                returnState?.lines.find((row) => row.lineId === line.id)?.returnedQuantity ?? 0;
               return (
                 <tr key={line.id} className="border-b border-ink-100 last:border-0">
                   <td className="px-2 py-2.5">
@@ -149,7 +173,14 @@ export default async function SaleDetailPage({ params }: { params: Promise<{ id:
                     )}
                   </td>
                   <td className="tabular px-2 py-2.5">{formatYen(line.unitPrice)}</td>
-                  <td className="tabular px-2 py-2.5">{line.quantity}</td>
+                  <td className="tabular px-2 py-2.5 whitespace-nowrap">
+                    {line.quantity}
+                    {returnedQuantity > 0 && (
+                      <span className="ml-1 text-xs text-rose-700">
+                        (返品 {returnedQuantity})
+                      </span>
+                    )}
+                  </td>
                   <td className="tabular px-2 py-2.5 text-ink-400">
                     {line.discount ? `-${formatYen(line.discount)}` : "—"}
                   </td>

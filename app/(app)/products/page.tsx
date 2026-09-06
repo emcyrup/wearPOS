@@ -76,6 +76,7 @@ export default async function ProductsPage({ searchParams }: { searchParams: Pro
             <Badge tone="neutral">
               {products.length} 品番 / {products.reduce((s, p) => s + p.variants.length, 0)} SKU
             </Badge>
+            {isAdmin && <LinkButton href="/products/import">CSV 一括取込</LinkButton>}
             {isAdmin && (
               <LinkButton href="/products/new" variant="primary">
                 商品を登録
