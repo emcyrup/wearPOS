@@ -6,7 +6,13 @@ import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { createProduct, type CreateProductResult } from "@/app/(app)/products/new/actions";
 import { BarcodeScanner, ScanButton } from "@/components/barcode-scanner";
 import { JanMonthInput } from "@/components/jan-month-input";
-import { buildSku, STANDARD_COLORS, STANDARD_SIZES } from "@/lib/apparel";
+import {
+  autoStyleCodeExample,
+  buildSku,
+  NO_COLOR,
+  STANDARD_COLORS,
+  STANDARD_SIZES,
+} from "@/lib/apparel";
 import { MULTI_STORE } from "@/lib/config";
 
 type Option = { id: string; name: string; code?: string };
@@ -121,13 +127,26 @@ export function ProductForm({
 
   const selectedColors = STANDARD_COLORS.filter((color) => colorCodes.includes(color.code));
   const selectedSizes = STANDARD_SIZES.filter((size) => sizeCodes.includes(size.code));
+  /** 品番を空欄にしたときに採番される形の見本 */
+  const autoStyleExample = useMemo(() => autoStyleCodeExample(), []);
 
-  // 生成される SKU のプレビュー
+  // 生成される SKU のプレビュー。
+  // 品番とカラーは任意なので、未入力・未選択でも組み合わせは決まる
+  // (品番は登録時に自動採番、カラーは「指定なし」1つとして扱う)
   const skus = useMemo(() => {
-    if (!styleCode.trim()) return [];
-    return selectedColors.flatMap((color) =>
+    const style = styleCode.trim();
+    const colors: { code: string; name: string; hex?: string; skuPart: string }[] =
+      selectedColors.length > 0
+        ? selectedColors.map((color) => ({ ...color, skuPart: color.code }))
+        : [{ code: NO_COLOR.code, name: NO_COLOR.name, skuPart: "" }];
+
+    return colors.flatMap((color) =>
       selectedSizes.map((size) => ({
-        sku: buildSku(styleCode, color.code, size.code),
+        // 入力欄の対応づけに使うキー。品番が決まっていなくても変わらない
+        key: `${color.code}-${size.code}`,
+        // 画面に出す SKU。品番が空のあいだは組み合わせだけを見せる
+        sku: style ? buildSku(style, color.skuPart, size.code) : "",
+        label: `${color.name} / ${size.name}`,
         color,
         size,
       })),
@@ -141,17 +160,17 @@ export function ProductForm({
   /** カラー・サイズの選択セクション (未選択のときにここへ案内する) */
   const skuSectionRef = useRef<HTMLDivElement>(null);
 
-  const scannedCount = skus.filter((item) => (manualBarcodes[item.sku] ?? "").trim()).length;
+  const scannedCount = skus.filter((item) => (manualBarcodes[item.key] ?? "").trim()).length;
   /** これから読み取る SKU (上から順に空いているもの) */
-  const nextEmptySku =
-    skus.find((item) => !(manualBarcodes[item.sku] ?? "").trim())?.sku ?? null;
+  const nextEmpty = skus.find((item) => !(manualBarcodes[item.key] ?? "").trim()) ?? null;
+  const nextEmptyLabel = nextEmpty ? nextEmpty.sku || nextEmpty.label : null;
 
   /** 同じ値札を二度読みしていないか (登録前に画面で気づけるようにする) */
   const duplicatedBarcodes = useMemo(() => {
     const seen = new Set<string>();
     const duplicated = new Set<string>();
     for (const item of skus) {
-      const value = (manualBarcodes[item.sku] ?? "").trim();
+      const value = (manualBarcodes[item.key] ?? "").trim();
       if (!value) continue;
       if (seen.has(value)) duplicated.add(value);
       else seen.add(value);
@@ -164,7 +183,7 @@ export function ProductForm({
   useEffect(() => {
     if (!initialBarcode || prefilled.current || skus.length === 0) return;
     prefilled.current = true;
-    setManualBarcodes((prev) => ({ [skus[0].sku]: initialBarcode, ...prev }));
+    setManualBarcodes((prev) => ({ [skus[0].key]: initialBarcode, ...prev }));
   }, [initialBarcode, skus]);
 
   const toggle = (list: string[], value: string, setter: (next: string[]) => void) =>
@@ -198,7 +217,12 @@ export function ProductForm({
         barcodeMode,
         manualBarcodes:
           barcodeMode === "MANUAL"
-            ? skus.map((item) => ({ sku: item.sku, barcode: manualBarcodes[item.sku] ?? "" }))
+            ? // 並び順 (カラー × サイズ) でサーバー側の SKU と突き合わせる。
+              // 品番を自動採番するときは、この時点では SKU 名が決まっていない
+              skus.map((item) => ({
+                sku: item.sku || item.key,
+                barcode: manualBarcodes[item.key] ?? "",
+              }))
             : [],
         janYearMonth: janYearMonth ?? undefined,
         initialStock: Number(initialStock) || 0,
@@ -268,16 +292,16 @@ export function ProductForm({
           <h2 className="mb-3 text-sm font-semibold text-ink-800">基本情報</h2>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <label className="block">
-              <span className={labelClass}>
-                品番 <span className="text-rose-600">*</span>
-              </span>
+              <span className={labelClass}>品番 (任意)</span>
               <input
                 value={styleCode}
                 onChange={(event) => setStyleCode(event.target.value.toUpperCase())}
                 placeholder="26AW-CT-010"
-                required
                 className={`${inputClass} tabular`}
               />
+              <span className="mt-1 block text-xs text-ink-400">
+                空欄なら自動で採番します (例: {autoStyleExample})
+              </span>
             </label>
             <label className="block">
               <span className={labelClass}>
@@ -361,9 +385,8 @@ export function ProductForm({
                 {skus.length === 0 ? (
                   <div className="rounded-lg border border-dashed border-ink-300 bg-white px-3 py-3">
                     <p className="text-xs text-ink-600">
-                      先に<span className="font-medium">品番</span>と
-                      <span className="font-medium">カラー・サイズ</span>を決めてください。
-                      SKU が決まると、読み取り用の入力欄が出ます
+                      先に<span className="font-medium">サイズ</span>を選んでください。
+                      読み取り用の入力欄が出ます
                     </p>
                     <button
                       type="button"
@@ -391,7 +414,7 @@ export function ProductForm({
                         <button
                           type="button"
                           onClick={() => setBulkScanOpen(true)}
-                          disabled={nextEmptySku === null}
+                          disabled={nextEmpty === null}
                           className="shrink-0 rounded-lg bg-ink-900 px-3.5 py-1.5 text-sm font-medium whitespace-nowrap text-white hover:bg-ink-800 disabled:opacity-40"
                         >
                           📷 まとめて読み取る
@@ -399,8 +422,8 @@ export function ProductForm({
                       </div>
                       <p className="mt-2 text-xs text-ink-500">
                         {scannedCount} / {skus.length} 読み取り済み
-                        {nextEmptySku && (
-                          <span className="ml-1 text-ink-400">（次: {nextEmptySku}）</span>
+                        {nextEmptyLabel && (
+                          <span className="ml-1 text-ink-400">（次: {nextEmptyLabel}）</span>
                         )}
                       </p>
                       <p className="mt-1 text-xs text-ink-400">
@@ -414,23 +437,25 @@ export function ProductForm({
                     </p>
                     <div className="space-y-1.5">
                       {skus.map((item, index) => {
-                        const value = manualBarcodes[item.sku] ?? "";
+                        const value = manualBarcodes[item.key] ?? "";
                         const duplicated = value !== "" && duplicatedBarcodes.has(value);
+                        // 品番を入れる前は SKU 名が決まらないので、カラー / サイズで見分ける
+                        const rowName = item.sku || item.label;
                         return (
-                          <div key={item.sku} className="flex flex-wrap items-center gap-2">
+                          <div key={item.key} className="flex flex-wrap items-center gap-2">
                             <span className="tabular w-full text-xs text-ink-500 sm:w-56">
-                              {item.sku}
+                              {rowName}
                             </span>
                             <span className="flex min-w-0 flex-1 gap-1.5">
                               <input
                                 ref={(element) => {
-                                  barcodeInputs.current[item.sku] = element;
+                                  barcodeInputs.current[item.key] = element;
                                 }}
                                 value={value}
                                 onChange={(event) =>
                                   setManualBarcodes((prev) => ({
                                     ...prev,
-                                    [item.sku]: event.target.value.trim(),
+                                    [item.key]: event.target.value.trim(),
                                   }))
                                 }
                                 onKeyDown={(event) => {
@@ -440,19 +465,19 @@ export function ProductForm({
                                   event.preventDefault();
                                   const next = skus
                                     .slice(index + 1)
-                                    .find((row) => !(manualBarcodes[row.sku] ?? "").trim());
-                                  if (next) barcodeInputs.current[next.sku]?.focus();
+                                    .find((row) => !(manualBarcodes[row.key] ?? "").trim());
+                                  if (next) barcodeInputs.current[next.key]?.focus();
                                   else event.currentTarget.blur();
                                 }}
                                 placeholder="値札のバーコードをスキャン"
-                                aria-label={`${item.sku} のバーコード`}
+                                aria-label={`${rowName} のバーコード`}
                                 className={`${inputClass} tabular min-w-0 flex-1 ${
                                   duplicated ? "border-rose-400" : ""
                                 }`}
                               />
                               <ScanButton
                                 onDetect={(scanned) =>
-                                  setManualBarcodes((prev) => ({ ...prev, [item.sku]: scanned }))
+                                  setManualBarcodes((prev) => ({ ...prev, [item.key]: scanned }))
                                 }
                               />
                             </span>
@@ -590,7 +615,7 @@ export function ProductForm({
               選んだカラーとサイズの全組み合わせが SKU として作られます
             </p>
 
-            <p className={labelClass}>カラー</p>
+            <p className={labelClass}>カラー (任意)</p>
             <div className="flex flex-wrap gap-1.5">
               {STANDARD_COLORS.map((color) => {
                 const on = colorCodes.includes(color.code);
@@ -613,7 +638,16 @@ export function ProductForm({
               })}
             </div>
 
-            <p className={`${labelClass} mt-4`}>サイズ</p>
+            {selectedColors.length === 0 && (
+              <p className="mt-1.5 text-xs text-ink-500">
+                カラーを選ばない場合は「{NO_COLOR.name}」1つとして、サイズごとの SKU を作ります
+                (小物・雑貨などカラー展開のない商品向け)
+              </p>
+            )}
+
+            <p className={`${labelClass} mt-4`}>
+              サイズ <span className="text-rose-600">*</span>
+            </p>
             <div className="flex flex-wrap gap-1.5">
               {STANDARD_SIZES.map((size) => {
                 const on = sizeCodes.includes(size.code);
@@ -685,18 +719,18 @@ export function ProductForm({
           <p className="tabular mb-3 text-2xl font-semibold text-ink-900">
             {skus.length}
             <span className="ml-1 text-sm font-normal text-ink-400">
-              件 ({selectedColors.length} 色 × {selectedSizes.length} サイズ)
+              件 ({selectedColors.length || 1} 色 × {selectedSizes.length} サイズ)
             </span>
           </p>
           {skus.length === 0 ? (
             <p className="text-xs text-ink-400">
-              品番とカラー・サイズを指定すると、ここに SKU が表示されます
+              サイズを選ぶと、ここに SKU が表示されます
             </p>
           ) : (
             <ul className="max-h-56 space-y-1 overflow-y-auto rounded-lg bg-ink-50 p-2">
               {skus.slice(0, 40).map((item) => (
-                <li key={item.sku} className="tabular text-xs text-ink-600">
-                  {item.sku}
+                <li key={item.key} className="tabular text-xs text-ink-600">
+                  {item.sku || `（品番は自動採番）${item.label}`}
                 </li>
               ))}
               {skus.length > 40 && (
@@ -779,16 +813,16 @@ export function ProductForm({
           continuous
           title="値札をまとめて読み取る"
           hint={
-            nextEmptySku
-              ? `${scannedCount} / ${skus.length} 読み取り済み — 次: ${nextEmptySku}`
+            nextEmptyLabel
+              ? `${scannedCount} / ${skus.length} 読み取り済み — 次: ${nextEmptyLabel}`
               : `${skus.length} 件すべて読み取りました`
           }
           onDetect={(code) => {
             setManualBarcodes((prev) => {
               // 直前の状態から空いている SKU を探す (連続読み取りで取りこぼさないため)
-              const target = skus.find((item) => !(prev[item.sku] ?? "").trim());
+              const target = skus.find((item) => !(prev[item.key] ?? "").trim());
               if (!target) return prev;
-              return { ...prev, [target.sku]: code };
+              return { ...prev, [target.key]: code };
             });
           }}
           onClose={() => setBulkScanOpen(false)}

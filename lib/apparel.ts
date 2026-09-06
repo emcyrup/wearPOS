@@ -34,11 +34,36 @@ export function sizeOrderOf(sizeCode: string): number {
   return 9999;
 }
 
-/** SKU コードを組み立てる: 品番-カラー-サイズ */
+/**
+ * SKU コードを組み立てる: 品番-カラー-サイズ。
+ * カラーを指定しない商品もあるため、空の部分は詰める (例: 品番-サイズ)
+ */
 export function buildSku(styleCode: string, colorCode: string, sizeCode: string): string {
   return [styleCode, colorCode, sizeCode]
     .map((part) => part.trim().toUpperCase().replace(/\s+/g, ""))
+    .filter((part) => part !== "")
     .join("-");
+}
+
+/**
+ * カラーを分けない商品 (小物・雑貨など) の置き換え値。
+ * SKU にはカラーの部分を入れず、画面には「指定なし」と表示する
+ */
+export const NO_COLOR = { code: "NA", name: "指定なし" } as const;
+
+/**
+ * 品番を空欄で登録したときに自動採番する形式。
+ * `P` + 年月 (YYMM) + `-` + 連番3桁 (例: P2609-001)。
+ * 実際の払い出しは lib/style-code.ts で行う
+ */
+export const AUTO_STYLE_PREFIX = "P";
+
+/** 自動採番される品番の見本 (画面の案内に使う) */
+export function autoStyleCodeExample(now = new Date()): string {
+  const yymm = `${String(now.getFullYear() % 100).padStart(2, "0")}${String(
+    now.getMonth() + 1,
+  ).padStart(2, "0")}`;
+  return `${AUTO_STYLE_PREFIX}${yymm}-001`;
 }
 
 export const SEASON_TERMS = ["SS", "AW", "ALL"] as const;

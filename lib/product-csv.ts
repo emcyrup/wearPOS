@@ -1,4 +1,4 @@
-import { STANDARD_COLORS } from "@/lib/apparel";
+import { NO_COLOR, STANDARD_COLORS } from "@/lib/apparel";
 
 /**
  * 商品 CSV の解析。
@@ -52,14 +52,11 @@ export const CSV_COLUMN_LABEL: Record<CsvColumnKey, string> = {
   originCountry: "原産国",
 };
 
-/** 取込に最低限必要な列 */
-export const REQUIRED_COLUMNS: CsvColumnKey[] = [
-  "styleCode",
-  "name",
-  "listPrice",
-  "colorName",
-  "sizeCode",
-];
+/**
+ * 取込に最低限必要な列。
+ * 品番とカラーは任意 (品番は自動採番、カラーは「指定なし」として扱う)
+ */
+export const REQUIRED_COLUMNS: CsvColumnKey[] = ["name", "listPrice", "sizeCode"];
 
 export type CsvRow = {
   /** CSV の行番号 (見出しを 1 行目とした実際の行番号) */
@@ -74,6 +71,8 @@ export type CsvRow = {
   costPrice: number | null;
   colorCode: string;
   colorName: string;
+  /** SKU に入れるカラーの部分。カラーを分けない商品では空 */
+  colorSkuPart: string;
   colorHex: string;
   sizeCode: string;
   sizeName: string;
@@ -210,9 +209,16 @@ export function parseProductCsv(text: string): ParseResult {
       listPrice: parseNumber(listPriceRaw),
       currentPrice: parseNumber(currentPriceRaw),
       costPrice: parseNumber(costPriceRaw),
-      // カラーコードが無ければカラー名から作る (標準カラーは商品登録画面と同じコード)
-      colorCode: (cell(cells, "colorCode") || defaultColorCode(colorName)).toUpperCase(),
-      colorName,
+      // カラーコードが無ければカラー名から作る (標準カラーは商品登録画面と同じコード)。
+      // カラー自体が無い商品 (小物・雑貨など) は「指定なし」1つとして扱う
+      colorCode: (
+        cell(cells, "colorCode") ||
+        (colorName ? defaultColorCode(colorName) : NO_COLOR.code)
+      ).toUpperCase(),
+      colorName: colorName || NO_COLOR.name,
+      colorSkuPart: colorName
+        ? (cell(cells, "colorCode") || defaultColorCode(colorName)).toUpperCase()
+        : "",
       colorHex: cell(cells, "colorHex"),
       sizeCode: sizeCode.toUpperCase(),
       sizeName: cell(cells, "sizeName") || sizeCode,
@@ -223,12 +229,11 @@ export function parseProductCsv(text: string): ParseResult {
       errors: [],
     };
 
-    if (!row.styleCode) row.errors.push("品番がありません");
-    else if (!/^[A-Za-z0-9-]+$/.test(row.styleCode)) {
+    // 品番とカラーは任意。品番なしの行は商品名でまとめて自動採番する
+    if (row.styleCode && !/^[A-Za-z0-9-]+$/.test(row.styleCode)) {
       row.errors.push("品番は半角英数字とハイフンで入力してください");
     }
     if (!row.name) row.errors.push("商品名がありません");
-    if (!row.colorName) row.errors.push("カラーがありません");
     if (!row.sizeCode) row.errors.push("サイズがありません");
     if (listPriceRaw !== "" && row.listPrice === null) row.errors.push("上代が数値ではありません");
     if (row.listPrice !== null && row.listPrice < 0) row.errors.push("上代がマイナスです");

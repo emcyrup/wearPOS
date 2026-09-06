@@ -7,6 +7,7 @@ import { requireAdmin } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { applyStockMovement } from "@/lib/inventory";
 import { defaultColorHex, parseProductCsv, parseSeasonCode, type CsvRow } from "@/lib/product-csv";
+import { reserveAutoStyleCodes } from "@/lib/style-code";
 
 export type ImportOptions = {
   /** 既にある品番・SKU の情報 (商品名・価格・JAN) を上書きするか */
@@ -124,8 +125,15 @@ export async function importProductCsv(
     const usableLineNos = new Set(usable.map((row) => row.lineNo));
     const byStyle = groupByStyle(parsed.rows.filter((row) => usableLineNos.has(row.lineNo)));
 
-    for (const [styleCode, rows] of byStyle) {
+    // 品番が空の商品は、この取込のなかで自動採番する
+    const autoStyleCodes = await reserveAutoStyleCodes(
+      [...byStyle.values()].filter((rows) => !rows[0].styleCode).length,
+    );
+    let autoAt = 0;
+
+    for (const rows of byStyle.values()) {
       const head = rows[0];
+      const styleCode = head.styleCode || autoStyleCodes[autoAt++];
       const existing = await prisma.product.findUnique({
         where: { styleCode },
         include: { variants: true },
@@ -184,7 +192,7 @@ export async function importProductCsv(
       }
 
       for (const row of rows) {
-        const sku = buildSku(styleCode, row.colorCode, row.sizeCode);
+        const sku = buildSku(styleCode, row.colorSkuPart, row.sizeCode);
         const variant = await prisma.productVariant.findUnique({ where: { sku } });
 
         if (!variant) {
@@ -264,12 +272,19 @@ async function applyStock(
 /** マスタ名の突き合わせは大文字小文字と前後の空白を無視する */
 const masterKey = (value: string) => value.trim().toUpperCase();
 
+/**
+ * 1商品にまとめる単位。
+ * 品番があればそれ、無ければ商品名でまとめる (品番は取込時に自動採番する)
+ */
+const groupKeyOf = (row: CsvRow) => row.styleCode || `名称:${row.name}`;
+
 function groupByStyle(rows: CsvRow[]): Map<string, CsvRow[]> {
   const map = new Map<string, CsvRow[]>();
   for (const row of rows) {
-    const list = map.get(row.styleCode);
+    const key = groupKeyOf(row);
+    const list = map.get(key);
     if (list) list.push(row);
-    else map.set(row.styleCode, [row]);
+    else map.set(key, [row]);
   }
   return map;
 }
@@ -319,35 +334,39 @@ async function analyze(rows: CsvRow[], options: ImportOptions) {
   const barcodeSeen = new Map<string, number>();
 
   const preview: PreviewRow[] = rows.map((row) => {
-    const messages = [...row.errors];
+    // errors = 取り込めない理由 / notes = 取り込むけれど知らせたいこと
+    const errors = [...row.errors];
+    const notes: string[] = [];
+    // 品番が空の行は取込時に自動採番するため、この時点では SKU が決まらない
     const sku =
-      row.styleCode && row.colorCode && row.sizeCode
-        ? buildSku(row.styleCode, row.colorCode, row.sizeCode)
+      row.styleCode && row.sizeCode
+        ? buildSku(row.styleCode, row.colorSkuPart, row.sizeCode)
         : "";
-    const product = productByStyle.get(row.styleCode);
+    const product = row.styleCode ? productByStyle.get(row.styleCode) : undefined;
     const isNewProduct = !product;
 
-    // 同じ CSV の中での重複
-    if (sku) {
-      const firstAt = skuSeen.get(sku);
-      if (firstAt) messages.push(`${firstAt} 行目と同じ SKU です`);
-      else skuSeen.set(sku, row.lineNo);
+    // 同じ CSV の中での重複。品番が空でも、商品名 + カラー + サイズが同じなら重複
+    const dedupeKey = sku || `${groupKeyOf(row)}/${row.colorSkuPart}/${row.sizeCode}`;
+    if (row.sizeCode) {
+      const firstAt = skuSeen.get(dedupeKey);
+      if (firstAt) errors.push(`${firstAt} 行目と同じ SKU です`);
+      else skuSeen.set(dedupeKey, row.lineNo);
     }
     if (row.barcode) {
       const firstAt = barcodeSeen.get(row.barcode);
-      if (firstAt) messages.push(`${firstAt} 行目と同じ JAN です`);
+      if (firstAt) errors.push(`${firstAt} 行目と同じ JAN です`);
       else barcodeSeen.set(row.barcode, row.lineNo);
     }
 
     // すでに別の SKU が使っている JAN は登録できない
     const owner = row.barcode ? barcodeOwnerBySku.get(row.barcode) : undefined;
     if (owner && owner !== sku) {
-      messages.push(`この JAN は既に ${owner} で使われています`);
+      errors.push(`この JAN は既に ${owner} で使われています`);
     }
 
     // 新規の品番はマスタと上代がそろっている必要がある
     if (isNewProduct) {
-      if (row.listPrice === null) messages.push("上代がありません (新規の品番には必要です)");
+      if (row.listPrice === null) errors.push("上代がありません (新規の品番には必要です)");
       for (const [value, list, bucket, label] of [
         [row.brand, brands, newBrands, "ブランド"],
         [row.category, categories, newCategories, "カテゴリ"],
@@ -355,20 +374,27 @@ async function analyze(rows: CsvRow[], options: ImportOptions) {
       ] as const) {
         if (hasMaster(list, value)) continue;
         if (!value) {
-          messages.push(`${label}がありません (新規の品番には必要です)`);
+          errors.push(`${label}がありません (新規の品番には必要です)`);
         } else if (!options.createMasters) {
-          messages.push(`${label}「${value}」がマスタにありません`);
+          errors.push(`${label}「${value}」がマスタにありません`);
         } else if (label === "シーズン" && !parseSeasonCode(value)) {
-          messages.push(`シーズン「${value}」は 2026SS のような形式で入力してください`);
+          errors.push(`シーズン「${value}」は 2026SS のような形式で入力してください`);
         } else {
           bucket.add(value);
         }
       }
     }
 
+    // 品番を書かなかった行は、取込のたびに新しい商品として登録される。
+    // 同じファイルを二度取り込むと二重に増えるため、実行前に伝える
+    if (!row.styleCode) {
+      notes.push("品番を自動採番します (取り込むたびに新しい商品になります)");
+    }
+    if (!row.colorSkuPart) notes.push(`カラーは「${row.colorName}」で登録します`);
+
     const existingVariant = sku ? skuOwner.get(sku) : undefined;
     let status: PreviewRow["status"];
-    if (messages.length > 0) {
+    if (errors.length > 0) {
       status = "ERROR";
     } else if (!existingVariant) {
       status = "NEW";
@@ -377,10 +403,10 @@ async function analyze(rows: CsvRow[], options: ImportOptions) {
     } else if (row.barcode && !existingVariant.barcode) {
       // 更新しない設定でも、未設定の JAN は埋める
       status = "UPDATE";
-      messages.push("JAN のみ設定します");
+      notes.push("JAN のみ設定します");
     } else {
       status = "SKIP";
-      messages.push("登録済みのため変更しません");
+      notes.push("登録済みのため変更しません");
     }
 
     return {
@@ -394,7 +420,7 @@ async function analyze(rows: CsvRow[], options: ImportOptions) {
       listPrice: row.listPrice,
       stock: row.stock,
       status,
-      messages,
+      messages: status === "ERROR" ? errors : notes,
     };
   });
 

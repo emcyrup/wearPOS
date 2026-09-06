@@ -311,11 +311,11 @@ export function ProductCsvImport({
                       </span>
                     </td>
                     <td className="tabular px-2 py-1.5 text-xs whitespace-nowrap">
-                      {row.styleCode}
+                      {row.styleCode || <span className="text-ink-400">自動採番</span>}
                     </td>
                     <td className="px-2 py-1.5 text-xs">{row.name}</td>
                     <td className="tabular px-2 py-1.5 text-xs whitespace-nowrap text-ink-500">
-                      {row.sku}
+                      {row.sku || `${row.colorName} / ${row.sizeName}`}
                     </td>
                     <td className="tabular px-2 py-1.5 text-xs whitespace-nowrap text-ink-500">
                       {row.barcode || "—"}

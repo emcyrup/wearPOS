@@ -3,18 +3,25 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
-import { buildSku, sizeOrderOf } from "@/lib/apparel";
+import { buildSku, NO_COLOR, sizeOrderOf } from "@/lib/apparel";
 import { requireAdmin } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { currentYearMonth, reserveSequentialJan } from "@/lib/jan";
+import { reserveAutoStyleCodes } from "@/lib/style-code";
 
 const createSchema = z.object({
+  /** 品番。空欄なら登録時に自動採番する (品番を決めていないお店・商品もあるため) */
   styleCode: z
     .string()
     .trim()
-    .min(3, "品番は3文字以上で入力してください")
     .max(32)
-    .regex(/^[A-Za-z0-9-]+$/, "品番は半角英数字とハイフンで入力してください"),
+    .refine((value) => value === "" || /^[A-Za-z0-9-]+$/.test(value), {
+      message: "品番は半角英数字とハイフンで入力してください",
+    })
+    .refine((value) => value === "" || value.length >= 3, {
+      message: "品番は3文字以上で入力してください",
+    })
+    .default(""),
   name: z.string().trim().min(1, "商品名を入力してください").max(80),
   brandId: z.string().min(1, "ブランドを選択してください"),
   categoryId: z.string().min(1, "カテゴリを選択してください"),
@@ -31,6 +38,7 @@ const createSchema = z.object({
     .array(z.object({ fieldId: z.string().min(1), value: z.string().trim().min(1).max(200) }))
     .max(30)
     .default([]),
+  /** カラー。空ならカラーを分けない商品として「指定なし」1つで登録する */
   colors: z
     .array(
       z.object({
@@ -39,8 +47,8 @@ const createSchema = z.object({
         hex: z.string().trim().max(20).optional(),
       }),
     )
-    .min(1, "カラーを1つ以上選択してください")
-    .max(20),
+    .max(20)
+    .default([]),
   sizes: z
     .array(z.object({ code: z.string().trim().min(1).max(10), name: z.string().trim().min(1).max(20) }))
     .min(1, "サイズを1つ以上選択してください")
@@ -96,17 +104,24 @@ export async function createProduct(input: unknown): Promise<CreateProductResult
     return { ok: false, error: parsed.error.issues[0]?.message ?? "入力内容を確認してください" };
   }
   const data = parsed.data;
-  const styleCode = data.styleCode.toUpperCase();
+  // 品番は任意。空欄なら自店ルール (P + 年月 + 連番3桁) で採番する
+  const styleCode = data.styleCode ? data.styleCode.toUpperCase() : (await reserveAutoStyleCodes(1))[0];
 
   const duplicate = await prisma.product.findUnique({ where: { styleCode } });
   if (duplicate) {
     return { ok: false, error: `品番「${styleCode}」はすでに登録されています` };
   }
 
+  // カラーも任意。選ばれていなければ「指定なし」1つとして扱い、SKU にはカラーを入れない
+  const colors =
+    data.colors.length > 0
+      ? data.colors.map((color) => ({ ...color, skuPart: color.code }))
+      : [{ code: NO_COLOR.code, name: NO_COLOR.name, hex: undefined, skuPart: "" }];
+
   // カラー×サイズの全組み合わせを SKU にする
-  const variants = data.colors.flatMap((color) =>
+  const variants = colors.flatMap((color) =>
     data.sizes.map((size) => ({
-      sku: buildSku(styleCode, color.code, size.code),
+      sku: buildSku(styleCode, color.skuPart, size.code),
       colorCode: color.code.toUpperCase(),
       colorName: color.name,
       colorHex: color.hex || null,
@@ -135,11 +150,15 @@ export async function createProduct(input: unknown): Promise<CreateProductResult
       };
     }
   } else if (data.barcodeMode === "MANUAL") {
-    // 既存のバーコード (メーカー値札 / 自店の旧ラベル) をそのまま登録する
-    const bySku = new Map(
-      data.manualBarcodes.map((entry) => [entry.sku, entry.barcode.trim()]),
-    );
-    barcodes = variants.map((variant) => bySku.get(variant.sku)?.trim() || null);
+    // 既存のバーコード (メーカー値札 / 自店の旧ラベル) をそのまま登録する。
+    // 品番を自動採番したときは画面と SKU 名が一致しないため、
+    // 同じ順 (カラー × サイズ) で送られてくる並びを優先して突き合わせる
+    if (data.manualBarcodes.length === variants.length) {
+      barcodes = data.manualBarcodes.map((entry) => entry.barcode.trim() || null);
+    } else {
+      const bySku = new Map(data.manualBarcodes.map((entry) => [entry.sku, entry.barcode.trim()]));
+      barcodes = variants.map((variant) => bySku.get(variant.sku)?.trim() || null);
+    }
 
     const entered = barcodes.filter((code): code is string => Boolean(code));
     const duplicatedInInput = entered.find((code, index) => entered.indexOf(code) !== index);
