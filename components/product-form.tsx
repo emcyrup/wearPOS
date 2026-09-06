@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 
 import { createProduct, type CreateProductResult } from "@/app/(app)/products/new/actions";
-import { ScanButton } from "@/components/barcode-scanner";
+import { BarcodeScanner, ScanButton } from "@/components/barcode-scanner";
 import { JanMonthInput } from "@/components/jan-month-input";
 import { buildSku, STANDARD_COLORS, STANDARD_SIZES } from "@/lib/apparel";
 import { MULTI_STORE } from "@/lib/config";
@@ -133,6 +133,31 @@ export function ProductForm({
       })),
     );
   }, [styleCode, selectedColors, selectedSizes]);
+
+  /** 既存バーコードの読み取り: まとめて読み取りのカメラを開いているか */
+  const [bulkScanOpen, setBulkScanOpen] = useState(false);
+  /** SKU ごとの入力欄。ハードウェアのリーダーで次の空欄へ移るために持つ */
+  const barcodeInputs = useRef<Record<string, HTMLInputElement | null>>({});
+  /** カラー・サイズの選択セクション (未選択のときにここへ案内する) */
+  const skuSectionRef = useRef<HTMLDivElement>(null);
+
+  const scannedCount = skus.filter((item) => (manualBarcodes[item.sku] ?? "").trim()).length;
+  /** これから読み取る SKU (上から順に空いているもの) */
+  const nextEmptySku =
+    skus.find((item) => !(manualBarcodes[item.sku] ?? "").trim())?.sku ?? null;
+
+  /** 同じ値札を二度読みしていないか (登録前に画面で気づけるようにする) */
+  const duplicatedBarcodes = useMemo(() => {
+    const seen = new Set<string>();
+    const duplicated = new Set<string>();
+    for (const item of skus) {
+      const value = (manualBarcodes[item.sku] ?? "").trim();
+      if (!value) continue;
+      if (seen.has(value)) duplicated.add(value);
+      else seen.add(value);
+    }
+    return duplicated;
+  }, [skus, manualBarcodes]);
 
   // レジから持ち込んだバーコードは、SKU が決まった時点で先頭の SKU に入れておく
   const prefilled = useRef(false);
@@ -334,42 +359,111 @@ export function ProductForm({
                   </p>
                 )}
                 {skus.length === 0 ? (
-                  <p className="text-xs text-ink-400">
-                    品番とカラー・サイズを指定すると、SKU ごとの入力欄が出ます
-                  </p>
+                  <div className="rounded-lg border border-dashed border-ink-300 bg-white px-3 py-3">
+                    <p className="text-xs text-ink-600">
+                      先に<span className="font-medium">品番</span>と
+                      <span className="font-medium">カラー・サイズ</span>を決めてください。
+                      SKU が決まると、読み取り用の入力欄が出ます
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        skuSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })
+                      }
+                      className="mt-2 rounded-lg border border-ink-200 bg-white px-3 py-1.5 text-sm text-ink-600 hover:bg-ink-50"
+                    >
+                      カラー・サイズを選ぶ ↓
+                    </button>
+                  </div>
                 ) : (
                   <>
+                    {/* まとめて読み取り: カメラを開いたまま、値札を順番にかざしていく */}
+                    <div className="mb-2 rounded-lg border border-ink-200 bg-white p-3">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <span className="min-w-0">
+                          <span className="block text-sm font-medium text-ink-800">
+                            値札をまとめて読み取る
+                          </span>
+                          <span className="mt-0.5 block text-xs text-ink-400">
+                            カメラを開いたまま、値札を1枚ずつかざすと上から順に入ります
+                          </span>
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setBulkScanOpen(true)}
+                          disabled={nextEmptySku === null}
+                          className="shrink-0 rounded-lg bg-ink-900 px-3.5 py-1.5 text-sm font-medium whitespace-nowrap text-white hover:bg-ink-800 disabled:opacity-40"
+                        >
+                          📷 まとめて読み取る
+                        </button>
+                      </div>
+                      <p className="mt-2 text-xs text-ink-500">
+                        {scannedCount} / {skus.length} 読み取り済み
+                        {nextEmptySku && (
+                          <span className="ml-1 text-ink-400">（次: {nextEmptySku}）</span>
+                        )}
+                      </p>
+                      <p className="mt-1 text-xs text-ink-400">
+                        USB / Bluetooth のバーコードリーダーをお使いの場合は、下の入力欄を選んで
+                        そのまま読み取ってください。1つ読むと次の空欄へ自動で移ります
+                      </p>
+                    </div>
+
                     <p className="mb-2 text-xs text-ink-400">
-                      値札のバーコードを1つずつ読み取ってください。空欄のままにした SKU は
-                      あとから登録できます
+                      空欄のままにした SKU は、あとから商品詳細で登録できます
                     </p>
                     <div className="space-y-1.5">
-                      {skus.map((item) => (
-                        <div key={item.sku} className="flex flex-wrap items-center gap-2">
-                          <span className="tabular w-full text-xs text-ink-500 sm:w-56">
-                            {item.sku}
-                          </span>
-                          <span className="flex min-w-0 flex-1 gap-1.5">
-                            <input
-                              value={manualBarcodes[item.sku] ?? ""}
-                              onChange={(event) =>
-                                setManualBarcodes((prev) => ({
-                                  ...prev,
-                                  [item.sku]: event.target.value.trim(),
-                                }))
-                              }
-                              placeholder="値札のバーコードをスキャン"
-                              aria-label={`${item.sku} のバーコード`}
-                              className={`${inputClass} tabular min-w-0 flex-1`}
-                            />
-                            <ScanButton
-                              onDetect={(value) =>
-                                setManualBarcodes((prev) => ({ ...prev, [item.sku]: value }))
-                              }
-                            />
-                          </span>
-                        </div>
-                      ))}
+                      {skus.map((item, index) => {
+                        const value = manualBarcodes[item.sku] ?? "";
+                        const duplicated = value !== "" && duplicatedBarcodes.has(value);
+                        return (
+                          <div key={item.sku} className="flex flex-wrap items-center gap-2">
+                            <span className="tabular w-full text-xs text-ink-500 sm:w-56">
+                              {item.sku}
+                            </span>
+                            <span className="flex min-w-0 flex-1 gap-1.5">
+                              <input
+                                ref={(element) => {
+                                  barcodeInputs.current[item.sku] = element;
+                                }}
+                                value={value}
+                                onChange={(event) =>
+                                  setManualBarcodes((prev) => ({
+                                    ...prev,
+                                    [item.sku]: event.target.value.trim(),
+                                  }))
+                                }
+                                onKeyDown={(event) => {
+                                  // ハードウェアのリーダーは読み取りの最後に Enter を送る。
+                                  // 送信せず、次の空欄へ移って続けて読めるようにする
+                                  if (event.key !== "Enter") return;
+                                  event.preventDefault();
+                                  const next = skus
+                                    .slice(index + 1)
+                                    .find((row) => !(manualBarcodes[row.sku] ?? "").trim());
+                                  if (next) barcodeInputs.current[next.sku]?.focus();
+                                  else event.currentTarget.blur();
+                                }}
+                                placeholder="値札のバーコードをスキャン"
+                                aria-label={`${item.sku} のバーコード`}
+                                className={`${inputClass} tabular min-w-0 flex-1 ${
+                                  duplicated ? "border-rose-400" : ""
+                                }`}
+                              />
+                              <ScanButton
+                                onDetect={(scanned) =>
+                                  setManualBarcodes((prev) => ({ ...prev, [item.sku]: scanned }))
+                                }
+                              />
+                            </span>
+                            {duplicated && (
+                              <span className="w-full text-xs text-rose-700 sm:pl-56">
+                                同じバーコードが他の SKU にも入っています
+                              </span>
+                            )}
+                          </div>
+                        );
+                      })}
                     </div>
                   </>
                 )}
@@ -490,7 +584,7 @@ export function ProductForm({
           </div>
 
           {/* カラー × サイズ (選んだ全組み合わせが SKU になる) */}
-          <div className="mt-4 border-t border-ink-100 pt-4">
+          <div ref={skuSectionRef} className="mt-4 scroll-mt-4 border-t border-ink-100 pt-4">
             <h3 className="mb-1 text-sm font-semibold text-ink-800">カラー × サイズ (SKU)</h3>
             <p className="mb-3 text-xs text-ink-400">
               選んだカラーとサイズの全組み合わせが SKU として作られます
@@ -678,6 +772,28 @@ export function ProductForm({
           </p>
         </div>
       </div>
+
+      {/* 値札をまとめて読み取る。カメラを開いたまま、空いている SKU に上から入れていく */}
+      {bulkScanOpen && (
+        <BarcodeScanner
+          continuous
+          title="値札をまとめて読み取る"
+          hint={
+            nextEmptySku
+              ? `${scannedCount} / ${skus.length} 読み取り済み — 次: ${nextEmptySku}`
+              : `${skus.length} 件すべて読み取りました`
+          }
+          onDetect={(code) => {
+            setManualBarcodes((prev) => {
+              // 直前の状態から空いている SKU を探す (連続読み取りで取りこぼさないため)
+              const target = skus.find((item) => !(prev[item.sku] ?? "").trim());
+              if (!target) return prev;
+              return { ...prev, [target.sku]: code };
+            });
+          }}
+          onClose={() => setBulkScanOpen(false)}
+        />
+      )}
     </form>
   );
 }

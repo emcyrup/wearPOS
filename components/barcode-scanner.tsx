@@ -25,15 +25,56 @@ function getBarcodeDetector(): BarcodeDetectorCtor | null {
 export function BarcodeScanner({
   onDetect,
   onClose,
+  continuous = false,
+  title = "バーコードを読み取る",
+  hint,
 }: {
-  /** 読み取り成功時に一度だけ呼ばれる */
+  /** 読み取り成功時に呼ばれる (continuous のときは読み取るたびに呼ばれる) */
   onDetect: (code: string, format: string) => void;
   onClose: () => void;
+  /**
+   * カメラを開いたまま続けて読み取る。
+   * 値札を1枚ずつスキャンしていくとき、そのつどカメラを開き直さずに済む
+   */
+  continuous?: boolean;
+  title?: string;
+  /** 進捗など、カメラの下に出す案内 (例: 「3 / 12 読み取り済み」) */
+  hint?: string;
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const stoppedRef = useRef(false);
   const [error, setError] = useState<string | null>(null);
+  /** 連続読み取りで直前に読んだコード。同じ値札を何度も拾わないようにする */
+  const lastRef = useRef<{ code: string; at: number } | null>(null);
+  const [recent, setRecent] = useState<string[]>([]);
+
+  // 親が再描画されるたびに onDetect の実体は変わる。
+  // そのままだと読み取りのたびにカメラを開き直すことになるので、最新の関数だけを持ち替える
+  const onDetectRef = useRef(onDetect);
+  useEffect(() => {
+    onDetectRef.current = onDetect;
+  });
+
+  /**
+   * 読み取り結果を親に渡す。
+   * 連続読み取りでは、同じコードが 2 秒以内にまた読めても無視する
+   * (カメラの前に値札を出しっぱなしにしていると、同じものを何度も拾ってしまうため)
+   */
+  const handleDetected = useCallback(
+    (code: string, format: string) => {
+      if (continuous) {
+        const now = Date.now();
+        const last = lastRef.current;
+        if (last && last.code === code && now - last.at < 2000) return false;
+        lastRef.current = { code, at: now };
+        setRecent((prev) => [code, ...prev.filter((value) => value !== code)].slice(0, 3));
+      }
+      onDetectRef.current(code, format);
+      return true;
+    },
+    [continuous],
+  );
 
   const stop = useCallback(() => {
     stoppedRef.current = true;
@@ -45,6 +86,8 @@ export function BarcodeScanner({
     let raf = 0;
     let zxingControls: { stop(): void } | null = null;
     const Detector = getBarcodeDetector();
+    // 開き直したときに前回の停止フラグが残っていると、すぐ止まってしまう
+    stoppedRef.current = false;
 
     const cameraError = () =>
       setError(
@@ -77,9 +120,12 @@ export function BarcodeScanner({
             try {
               const results = await detector.detect(videoRef.current);
               if (results.length > 0) {
-                stop();
-                onDetect(results[0].rawValue, results[0].format);
-                return;
+                if (!continuous) {
+                  stop();
+                  handleDetected(results[0].rawValue, results[0].format);
+                  return;
+                }
+                handleDetected(results[0].rawValue, results[0].format);
               }
             } catch {
               // フレーム未確定時は無視して次のフレームへ
@@ -117,12 +163,14 @@ export function BarcodeScanner({
           videoRef.current,
           (result) => {
             if (!result || stoppedRef.current) return;
+            const format = BarcodeFormat[result.getBarcodeFormat()]?.toLowerCase() ?? "unknown";
+            if (continuous) {
+              handleDetected(result.getText(), format);
+              return;
+            }
             stoppedRef.current = true;
             zxingControls?.stop();
-            onDetect(
-              result.getText(),
-              BarcodeFormat[result.getBarcodeFormat()]?.toLowerCase() ?? "unknown",
-            );
+            handleDetected(result.getText(), format);
           },
         );
         // 起動待ちの間に閉じられていたら即停止する
@@ -137,18 +185,18 @@ export function BarcodeScanner({
       zxingControls?.stop();
       stop();
     };
-  }, [onDetect, stop]);
+  }, [continuous, handleDetected, stop]);
 
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-ink-900/80 p-4"
       role="dialog"
       aria-modal="true"
-      aria-label="バーコードを読み取る"
+      aria-label={title}
     >
       <div className="w-full max-w-md overflow-hidden rounded-xl bg-white shadow-xl">
         <div className="flex items-center justify-between border-b border-ink-100 px-4 py-3">
-          <h2 className="text-sm font-semibold text-ink-800">バーコードを読み取る</h2>
+          <h2 className="text-sm font-semibold text-ink-800">{title}</h2>
           <button
             type="button"
             onClick={() => {
@@ -172,6 +220,20 @@ export function BarcodeScanner({
             <p className="absolute inset-x-0 bottom-2 text-center text-xs text-white/90">
               枠内にバーコードを合わせてください
             </p>
+          </div>
+        )}
+
+        {/* 連続読み取りでは、進捗と直前に読んだコードを出して手を止めずに続けられるようにする */}
+        {!error && (hint || continuous) && (
+          <div className="border-t border-ink-100 px-4 py-3">
+            {hint && <p className="text-sm font-medium text-ink-800">{hint}</p>}
+            {continuous && (
+              <p className="mt-1 text-xs text-ink-400">
+                {recent.length === 0
+                  ? "続けて読み取れます。値札を順番にかざしてください"
+                  : `読み取り済み: ${recent.join(" / ")}`}
+              </p>
+            )}
           </div>
         )}
       </div>
