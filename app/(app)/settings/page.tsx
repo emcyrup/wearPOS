@@ -15,6 +15,7 @@ import { MULTI_STORE } from "@/lib/config";
 import { prisma } from "@/lib/db";
 import { formatPercent, formatYen } from "@/lib/format";
 import { getCustomerFieldPolicy } from "@/app/(app)/settings/customer-field-actions";
+import { isDataResetEnabled } from "@/app/(app)/settings/data-reset-actions";
 import { isChatGptConfigured } from "@/lib/chatgpt";
 import { isChatGptEnabled } from "@/lib/insight-policy";
 import { isLineConfigured, lineConfig } from "@/lib/line";
@@ -64,6 +65,9 @@ export default async function SettingsPage() {
   const chatGptEnabled = await isChatGptEnabled();
   // 顧客登録で集める項目
   const customerFieldPolicy = await getCustomerFieldPolicy();
+
+  // データの初期化。既定では無効で、初期化画面へのボタンもグレーアウトする
+  const dataResetEnabled = isAdmin ? await isDataResetEnabled() : false;
 
   // レジの支払方法 (組み込み + 店舗が追加したもの)。使用中の件数も出す
   const paymentMethods = await ensurePaymentMethods();
@@ -293,17 +297,39 @@ export default async function SettingsPage() {
         <Card
           title="データの初期化"
           className="mb-4"
-          action={<LinkButton href="/settings/data-reset">初期化画面を開く</LinkButton>}
+          action={
+            <LinkButton
+              href="/settings/data-reset"
+              disabled={!dataResetEnabled}
+              title={
+                dataResetEnabled
+                  ? undefined
+                  : "データの初期化は無効になっています。運用担当者にご連絡ください"
+              }
+            >
+              初期化画面を開く
+            </LinkButton>
+          }
         >
           <p className="text-sm text-ink-600">
             動作確認用に入れた取引・在庫・商品・顧客のデータをまとめて削除できます。
-            本番運用を始める前や、棚卸のタイミングでお使いください。
-            <span className="font-medium">
-              誤操作を防ぐため既定では無効（グレーアウト）で、削除するときだけ初期化画面で
-              有効にする必要があります。
-            </span>
-            1回実行すると自動的に無効へ戻ります。
+            本番運用を始める前や、棚卸のタイミングで使う機能です。
           </p>
+          {dataResetEnabled ? (
+            <p className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">
+              いま<span className="font-medium">有効</span>になっています。
+              作業が終わったら初期化画面で無効に戻してください
+              （1回実行すると自動的に無効へ戻ります）。
+            </p>
+          ) : (
+            <p className="mt-2 rounded-lg bg-ink-50 px-3 py-2 text-sm text-ink-600">
+              誤操作を防ぐため、
+              <span className="font-medium">既定では無効（グレーアウト）</span>で、
+              初期化画面を開くこともできません。
+              使う必要があるときは<span className="font-medium">運用担当者にご連絡ください</span>
+              （有効化は運用担当者が行います）。
+            </p>
+          )}
         </Card>
       )}
 

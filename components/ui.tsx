@@ -188,16 +188,37 @@ export function LinkButton({
   href,
   children,
   variant = "secondary",
+  disabled = false,
+  title,
 }: {
   href: string;
   children: ReactNode;
   variant?: "primary" | "secondary";
+  /** 押せない状態。リンクではなくグレーアウトした表示にする */
+  disabled?: boolean;
+  title?: string;
 }) {
+  const base = "inline-flex items-center rounded-lg px-3 py-1.5 text-sm font-medium transition-colors";
+
+  // 無効時はリンクにしない (キーボード操作や右クリックでも遷移させない)
+  if (disabled) {
+    return (
+      <span
+        aria-disabled="true"
+        title={title}
+        className={clsx(base, "cursor-not-allowed border border-ink-200 bg-ink-50 text-ink-400")}
+      >
+        {children}
+      </span>
+    );
+  }
+
   return (
     <Link
       href={href}
+      title={title}
       className={clsx(
-        "inline-flex items-center rounded-lg px-3 py-1.5 text-sm font-medium transition-colors",
+        base,
         variant === "primary"
           ? "bg-ink-900 text-white hover:bg-ink-800"
           : "border border-ink-200 bg-white text-ink-600 hover:bg-ink-50",

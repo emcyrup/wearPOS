@@ -38,6 +38,15 @@ export default async function DataResetPage() {
         description="動作確認用に入れたデータを消して、本番運用を始めるための機能です"
       />
 
+      {!enabled && (
+        <p className="mb-4 rounded-lg bg-ink-50 px-4 py-2.5 text-sm text-ink-600">
+          この機能は<span className="font-medium">既定で無効</span>です。設定画面の
+          「初期化画面を開く」ボタンもグレーアウトしており、
+          <span className="font-medium">有効化は運用担当者が行います</span>。
+          店舗での作業でこの画面が必要になった場合は、運用担当者にご連絡ください。
+        </p>
+      )}
+
       <Card title="削除するデータを選ぶ" className="mb-4">
         <p className="mb-3 text-sm text-ink-600">
           選んだデータを<span className="font-medium text-rose-700">完全に削除</span>します。
