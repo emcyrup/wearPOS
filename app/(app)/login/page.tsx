@@ -1,12 +1,15 @@
 import { LoginPanel, SetupForm } from "@/components/login-form";
 import { hasAnyUser } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { isSigningKeyMissing, SIGNING_KEY_MISSING_MESSAGE } from "@/lib/session";
 import { getSignupPolicy } from "@/lib/signup-policy";
 
 export const dynamic = "force-dynamic";
 
 export default async function LoginPage() {
   const initialized = await hasAnyUser();
+  // 署名鍵が無いとログインを発行できない。500 にせず、ここで理由を見せる
+  const keyMissing = isSigningKeyMissing();
 
   // 店頭のタブレットでも選びやすいよう、ユーザー名は選択式にする
   const [users, policy] = await Promise.all([
@@ -37,6 +40,18 @@ export default async function LoginPage() {
               : "はじめに管理者アカウントを作成します"}
           </p>
         </div>
+        {keyMissing && (
+          <div
+            role="alert"
+            className="mb-4 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800"
+          >
+            <p className="font-semibold">サーバーの設定が完了していません</p>
+            <p className="mt-1">{SIGNING_KEY_MISSING_MESSAGE}</p>
+            <p className="mt-1 text-xs text-rose-700">
+              設定されるまでログインできません（誰もログインできない状態なので、データが漏れることはありません）
+            </p>
+          </div>
+        )}
         <div className="rounded-xl border border-ink-200 bg-white p-6">
           {initialized ? (
             <LoginPanel users={users} canSignUp={canSignUp} needsCode={policy.mode === "CODE"} />

@@ -124,7 +124,7 @@ psql "$(grep -E '^DATABASE_URL=' .env | cut -d= -f2- | tr -d "'")" -c 'select ve
 
 ### ほかの必須項目
 
-- `AUTH_SECRET` … **未設定だとアプリが起動しません**（署名鍵が既定値のままになるのを防ぐため）
+- `AUTH_SECRET` … **未設定だと誰もログインできず、ログイン画面に案内が出ます**（既定値で署名しないため）
 - `APP_URL="https://wearpos.ai-labo.cloud"`
 - `CRON_SECRET` … Step 6 の cron が使います
 
@@ -258,7 +258,7 @@ cd ~/wearPOS && bash scripts/deploy.sh
 
 | 症状 | 確認すること |
 | --- | --- |
-| `AUTH_SECRET が設定されていません` で起動しない | `.env` に `AUTH_SECRET` を入れて `npx pm2 restart wearpos` |
+| ログイン画面に `AUTH_SECRET が設定されていません` と出る | `.env` に `AUTH_SECRET` を入れて `npx pm2 restart wearpos` |
 | `password authentication failed` | `DATABASE_URL` の URL エンコードとシングルクォート（Step 3） |
 | ブラウザで開くと 502 | アプリが :8026 で起動しているか `curl http://127.0.0.1:8026/api/health`。落ちていれば `npx pm2 logs wearpos` |
 | 画面は出るがフォーム送信で `Invalid Server Actions request` | nginx が `Host` ヘッダを渡していない。御社に `proxy_set_header Host $host;` の設定を依頼 |

@@ -12,9 +12,27 @@ import {
   verifyPassword,
 } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { SIGNING_KEY_MISSING_MESSAGE } from "@/lib/session";
 import { getSignupPolicy, verifySignupCode } from "@/lib/signup-policy";
 
 export type LoginState = { error: string };
+
+/**
+ * セッションの発行。署名鍵 (AUTH_SECRET) が無いと発行できないため、
+ * その場合は 500 にせずログイン画面のエラーとして返す。
+ */
+async function startSession(user: Parameters<typeof establishSession>[0]): Promise<LoginState | null> {
+  try {
+    await establishSession(user);
+    return null;
+  } catch (error) {
+    if (error instanceof Error && error.message === SIGNING_KEY_MISSING_MESSAGE) {
+      return { error: error.message };
+    }
+    throw error;
+  }
+}
+
 
 /** 何回続けて失敗したらロックするか / どれだけ止めるか */
 const MAX_FAILED_LOGINS = 8;
@@ -60,7 +78,8 @@ export async function login(_prev: LoginState, formData: FormData): Promise<Logi
     });
   }
 
-  await establishSession(user);
+  const failed = await startSession(user);
+  if (failed) return failed;
   redirect(
     homePathFor({ role: user.role === "ADMIN" ? "ADMIN" : "STAFF", features: user.features }),
   );
@@ -96,7 +115,8 @@ export async function createInitialAdmin(
     },
   });
 
-  await establishSession(user);
+  const failed = await startSession(user);
+  if (failed) return failed;
   redirect("/");
 }
 
@@ -161,7 +181,8 @@ export async function signUp(_prev: LoginState, formData: FormData): Promise<Log
     },
   });
 
-  await establishSession(user);
+  const failed = await startSession(user);
+  if (failed) return failed;
   redirect(homePathFor({ role: "STAFF", features: user.features }));
 }
 

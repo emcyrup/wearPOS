@@ -22,27 +22,25 @@ export const SESSION_COOKIE = "wearpos_session";
 export const SESSION_TTL_SECONDS = 60 * 60 * 12; // 12時間
 
 /**
- * 署名鍵。AUTH_SECRET を使う。未設定なら POS_API_KEY から導出する。
- *
- * どちらも無い場合、開発では固定値を使うが **本番では例外にする**。
- * 固定値のまま本番に出ると、その値を知っている人が誰でも管理者のセッションを
- * 偽造できてしまうため、動かないことで気づけるようにする。
+ * 開発時だけ使う固定の署名鍵。本番では使わない (secretSource を参照)。
+ * 固定値のまま本番に出ると、その値を知っている人が誰でも管理者のセッションを偽造できる。
  */
 const DEV_FALLBACK_SECRET = "wearpos-dev-secret";
 
-function secretSource(): string {
+/**
+ * 署名鍵。本番で未設定なら null を返す (例外にはしない)。
+ *
+ * 例外にすると、以前ログインしたブラウザ (Cookie が残っている) からは
+ * すべてのページが 500 になり、原因が画面から分からない。
+ * 代わりに「検証は必ず失敗・発行は必ず拒否」にして、ログイン画面に理由を出す。
+ * 偽造できない、という安全性は同じ。
+ */
+function secretSource(): string | null {
   const configured =
     process.env.AUTH_SECRET ??
     (process.env.POS_API_KEY ? `wearpos-auth:${process.env.POS_API_KEY}` : null);
   if (configured) return configured;
-
-  if (process.env.NODE_ENV === "production") {
-    throw new Error(
-      "AUTH_SECRET が設定されていません。セッションの署名鍵が既定値のままになるため起動できません " +
-        "(openssl rand -base64 32 で生成した値を環境変数に設定してください)",
-    );
-  }
-  return DEV_FALLBACK_SECRET;
+  return process.env.NODE_ENV === "production" ? null : DEV_FALLBACK_SECRET;
 }
 
 /** 署名鍵が設定されているか (設定画面の点検表示に使う) */
@@ -50,12 +48,42 @@ export function isAuthSecretConfigured(): boolean {
   return Boolean(process.env.AUTH_SECRET ?? process.env.POS_API_KEY);
 }
 
+/** 本番で署名鍵が無い状態か。ログイン画面の案内に使う */
+export function isSigningKeyMissing(): boolean {
+  return secretSource() === null;
+}
+
+export const SIGNING_KEY_MISSING_MESSAGE =
+  "AUTH_SECRET が設定されていません。ホスティングの環境変数に " +
+  "openssl rand -base64 32 で生成した値を設定し、再デプロイしてください";
+
+/** 未設定の鍵で署名してしまわないよう、発行側はここで止める */
+function requireSecret(): string {
+  const secret = secretSource();
+  if (!secret) throw new Error(SIGNING_KEY_MISSING_MESSAGE);
+  return secret;
+}
+
+/** 検証側。鍵が無ければ null を返し、呼び出し元は「無効なトークン」として扱う */
+async function hmacKeyOrNull(): Promise<CryptoKey | null> {
+  const secret = secretSource();
+  if (!secret) return null;
+  return crypto.subtle.importKey(
+    "raw",
+    encoder.encode(secret),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign", "verify"],
+  );
+}
+
 const encoder = new TextEncoder();
 
+/** 発行用。鍵が無ければ明確なメッセージで止める (未設定の鍵で署名しない) */
 async function hmacKey(): Promise<CryptoKey> {
   return crypto.subtle.importKey(
     "raw",
-    encoder.encode(secretSource()),
+    encoder.encode(requireSecret()),
     { name: "HMAC", hash: "SHA-256" },
     false,
     ["sign", "verify"],
@@ -95,9 +123,12 @@ export async function verifySession(token: string | undefined): Promise<SessionP
   const signatureBytes = fromBase64Url(signature);
   if (!signatureBytes) return null;
 
+  const key = await hmacKeyOrNull();
+  if (!key) return null;
+
   const valid = await crypto.subtle.verify(
     "HMAC",
-    await hmacKey(),
+    key,
     signatureBytes as BufferSource,
     encoder.encode(body),
   );
@@ -134,9 +165,12 @@ export async function verifyRegisterToken(token: string | undefined): Promise<bo
   const signatureBytes = fromBase64Url(signature);
   if (!signatureBytes) return false;
 
+  const key = await hmacKeyOrNull();
+  if (!key) return false;
+
   const valid = await crypto.subtle.verify(
     "HMAC",
-    await hmacKey(),
+    key,
     signatureBytes as BufferSource,
     encoder.encode(`register:${expiresAt}`),
   );
@@ -170,9 +204,12 @@ export async function verifySignupToken(token: string): Promise<string | null> {
   if (!lineUserId || !signature) return null;
   const signatureBytes = fromBase64Url(signature);
   if (!signatureBytes) return null;
+  const key = await hmacKeyOrNull();
+  if (!key) return null;
+
   const valid = await crypto.subtle.verify(
     "HMAC",
-    await hmacKey(),
+    key,
     signatureBytes as BufferSource,
     encoder.encode(`line-signup:${lineUserId}`),
   );
@@ -198,9 +235,12 @@ export async function verifyMemberCardToken(token: string): Promise<string | nul
   if (!customerId || !signature) return null;
   const signatureBytes = fromBase64Url(signature);
   if (!signatureBytes) return null;
+  const key = await hmacKeyOrNull();
+  if (!key) return null;
+
   const valid = await crypto.subtle.verify(
     "HMAC",
-    await hmacKey(),
+    key,
     signatureBytes as BufferSource,
     encoder.encode(`member-card:${customerId}`),
   );
