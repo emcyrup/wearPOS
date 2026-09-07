@@ -13,7 +13,12 @@
     "demo:build": "next build && node scripts/build-demo.mjs",
     "vercel-build": "prisma generate && prisma migrate deploy && next build",
     "db:migrate": "prisma migrate dev",
-    "db:deploy": "prisma migrate deploy"
+    "db:deploy": "prisma migrate deploy",
+    "start:prod": "next start -p 8026 -H 0.0.0.0",
+    "deploy": "bash scripts/deploy.sh"
+  },
+  "engines": {
+    "node": ">=22.0.0"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

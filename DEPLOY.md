@@ -1,5 +1,8 @@
 # デプロイ手順（Vercel + Neon）
 
+> **本番サーバー (wearpos.ai-labo.cloud / AWS EC2 自己ホスト) への移行手順は [DEPLOY_ONPREM.md](DEPLOY_ONPREM.md) を参照してください。**
+> このファイルは開発環境 (Vercel + Neon) 向けの手順です。
+
 wearPOS を実際に動く状態でインターネットに公開するまでの手順です。
 所要時間はおよそ 30 分、費用は無料枠の範囲で始められます。
 
