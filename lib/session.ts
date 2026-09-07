@@ -22,14 +22,32 @@ export const SESSION_COOKIE = "wearpos_session";
 export const SESSION_TTL_SECONDS = 60 * 60 * 12; // 12時間
 
 /**
- * 署名鍵。AUTH_SECRET を推奨。未設定なら POS_API_KEY から導出し、
- * それも無ければ開発用の固定値になる (本番では必ず AUTH_SECRET を設定する)。
+ * 署名鍵。AUTH_SECRET を使う。未設定なら POS_API_KEY から導出する。
+ *
+ * どちらも無い場合、開発では固定値を使うが **本番では例外にする**。
+ * 固定値のまま本番に出ると、その値を知っている人が誰でも管理者のセッションを
+ * 偽造できてしまうため、動かないことで気づけるようにする。
  */
+const DEV_FALLBACK_SECRET = "wearpos-dev-secret";
+
 function secretSource(): string {
-  return (
+  const configured =
     process.env.AUTH_SECRET ??
-    (process.env.POS_API_KEY ? `wearpos-auth:${process.env.POS_API_KEY}` : "wearpos-dev-secret")
-  );
+    (process.env.POS_API_KEY ? `wearpos-auth:${process.env.POS_API_KEY}` : null);
+  if (configured) return configured;
+
+  if (process.env.NODE_ENV === "production") {
+    throw new Error(
+      "AUTH_SECRET が設定されていません。セッションの署名鍵が既定値のままになるため起動できません " +
+        "(openssl rand -base64 32 で生成した値を環境変数に設定してください)",
+    );
+  }
+  return DEV_FALLBACK_SECRET;
+}
+
+/** 署名鍵が設定されているか (設定画面の点検表示に使う) */
+export function isAuthSecretConfigured(): boolean {
+  return Boolean(process.env.AUTH_SECRET ?? process.env.POS_API_KEY);
 }
 
 const encoder = new TextEncoder();
@@ -95,6 +113,37 @@ export async function verifySession(token: string | undefined): Promise<SessionP
   } catch {
     return null;
   }
+}
+
+// ---- レジ端末の認可 ----
+// 店頭のレジ端末は、レジ端末コードを一度入力すると以降ログインなしで使えるようにする。
+// 端末ごとの Cookie に「いつまで有効か」を署名付きで持たせる。
+
+export async function signRegisterToken(ttlSeconds: number): Promise<string> {
+  const expiresAt = Math.floor(Date.now() / 1000) + ttlSeconds;
+  const body = `register:${expiresAt}`;
+  const signature = await crypto.subtle.sign("HMAC", await hmacKey(), encoder.encode(body));
+  return `${expiresAt}.${toBase64Url(new Uint8Array(signature))}`;
+}
+
+export async function verifyRegisterToken(token: string | undefined): Promise<boolean> {
+  if (!token) return false;
+  const [expiresAt, signature] = token.split(".");
+  if (!expiresAt || !signature) return false;
+
+  const signatureBytes = fromBase64Url(signature);
+  if (!signatureBytes) return false;
+
+  const valid = await crypto.subtle.verify(
+    "HMAC",
+    await hmacKey(),
+    signatureBytes as BufferSource,
+    encoder.encode(`register:${expiresAt}`),
+  );
+  if (!valid) return false;
+
+  const expiry = Number(expiresAt);
+  return Number.isFinite(expiry) && expiry > Date.now() / 1000;
 }
 
 /** 認証を無効化しているか (静的デモ生成やローカル確認用) */

@@ -16,6 +16,10 @@ import { getSignupPolicy, verifySignupCode } from "@/lib/signup-policy";
 
 export type LoginState = { error: string };
 
+/** 何回続けて失敗したらロックするか / どれだけ止めるか */
+const MAX_FAILED_LOGINS = 8;
+const LOCK_MINUTES = 15;
+
 export async function login(_prev: LoginState, formData: FormData): Promise<LoginState> {
   const username = String(formData.get("username") ?? "").trim();
   const password = String(formData.get("password") ?? "");
@@ -24,8 +28,36 @@ export async function login(_prev: LoginState, formData: FormData): Promise<Logi
   }
 
   const user = await prisma.appUser.findUnique({ where: { username } });
+
+  // 総当たり対策。一定回数続けて失敗したら、しばらく受け付けない
+  if (user?.lockedUntil && user.lockedUntil > new Date()) {
+    const minutes = Math.max(1, Math.ceil((user.lockedUntil.getTime() - Date.now()) / 60000));
+    return {
+      error: `ログインの失敗が続いたため、一時的に停止しています。${minutes}分ほどおいてからお試しください`,
+    };
+  }
+
   if (!user || !user.isActive || !verifyPassword(password, user.passwordHash)) {
+    if (user) {
+      // ユーザーの有無を答えとして返さないよう、記録だけ残して同じ文言を返す
+      const failed = user.failedLogins + 1;
+      await prisma.appUser.update({
+        where: { id: user.id },
+        data: {
+          failedLogins: failed,
+          lockedUntil:
+            failed >= MAX_FAILED_LOGINS ? new Date(Date.now() + LOCK_MINUTES * 60_000) : null,
+        },
+      });
+    }
     return { error: "ユーザー名またはパスワードが違います" };
+  }
+
+  if (user.failedLogins > 0 || user.lockedUntil) {
+    await prisma.appUser.update({
+      where: { id: user.id },
+      data: { failedLogins: 0, lockedUntil: null },
+    });
   }
 
   await establishSession(user);

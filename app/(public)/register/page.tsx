@@ -1,11 +1,19 @@
 import { Register } from "@/components/register";
+import { RegisterUnlock } from "@/components/register-unlock";
 import { PageHeader } from "@/components/ui";
 import { prisma } from "@/lib/db";
 import { activePaymentMethods } from "@/lib/payment-methods";
+import { hasRegisterAccess, hasRegisterCode } from "@/lib/register-access";
 
 export const dynamic = "force-dynamic";
 
 export default async function RegisterPage() {
+  // レジは店頭端末でログインなしに使うため、端末そのものを一度だけ認可する。
+  // 未認可のまま会員検索や会計ができると、URL を知っているだけで顧客情報を引けてしまう
+  if (!(await hasRegisterAccess())) {
+    return <RegisterUnlock codeConfigured={await hasRegisterCode()} />;
+  }
+
   const [stores, staff, paymentMethods] = await Promise.all([
     prisma.store.findMany({ where: { isActive: true }, orderBy: { code: "asc" } }),
     prisma.staff.findMany({

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { getSessionUser } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
@@ -33,7 +34,10 @@ export async function GET() {
     await prisma.$queryRaw`SELECT 1`;
     dbPingMs = Date.now() - pingStart;
   } catch (error) {
-    dbError = error instanceof Error ? error.message : String(error);
+    // 例外の本文には接続先ホストなどが入りうるため、ログイン済みのときだけ返す
+    const detail = error instanceof Error ? error.message : String(error);
+    console.error("ヘルスチェックの DB 接続に失敗しました", error);
+    dbError = (await getSessionUser()) ? detail : "データベースに接続できません";
   }
 
   // 実際の画面で使う集計クエリ1本ぶんの時間

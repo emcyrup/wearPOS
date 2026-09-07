@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { prisma } from "@/lib/db";
+import { hasRegisterAccess } from "@/lib/register-access";
 
 export const dynamic = "force-dynamic";
 
@@ -11,6 +12,11 @@ export const dynamic = "force-dynamic";
  * GET /api/barcode-lookup?code=<JAN または SKU>
  */
 export async function GET(request: Request) {
+  // 商品マスタと在庫数を返すため、レジ端末かログイン済みに限る
+  if (!(await hasRegisterAccess())) {
+    return NextResponse.json({ error: "認証が必要です" }, { status: 401 });
+  }
+
   const code = new URL(request.url).searchParams.get("code")?.trim();
   if (!code) {
     return NextResponse.json({ error: "code を指定してください" }, { status: 400 });

@@ -19,8 +19,12 @@ export type SignupPolicy = {
 const MODE_KEY = "signup.mode";
 const CODE_KEY = "signup.codeHash";
 
-/** 既定は「だれでも作成できる」。作成されるのはスタッフ権限 + 既定機能のみ */
-export const DEFAULT_SIGNUP_MODE: SignupMode = "OPEN";
+/**
+ * 既定は「作成させない」。
+ * アプリの URL は外部から到達できるため、既定で誰でもスタッフ権限を作れる状態にはしない。
+ * スタッフを迎えるときに、管理者が設定画面から一時的に開ける運用にする。
+ */
+export const DEFAULT_SIGNUP_MODE: SignupMode = "OFF";
 
 function toMode(value: string | undefined): SignupMode {
   return value === "OPEN" || value === "CODE" || value === "OFF" ? value : DEFAULT_SIGNUP_MODE;

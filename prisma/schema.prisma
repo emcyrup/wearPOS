@@ -515,6 +515,10 @@ model AppUser {
   /// ダッシュボードで非表示にするセクションのキー
   dashboardHidden String[] @default([])
   isActive     Boolean  @default(true)
+  /// 連続でログインに失敗した回数。成功すると 0 に戻る
+  failedLogins Int      @default(0)
+  /// 総当たり対策で一時的にログインを止める期限
+  lockedUntil  DateTime?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 }

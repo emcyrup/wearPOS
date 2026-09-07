@@ -1,12 +1,22 @@
+import { cookies } from "next/headers";
 import Link from "next/link";
+import { redirect } from "next/navigation";
 
 import { NavLinks } from "@/components/nav-links";
 import { canUseFeature, FEATURES, getSessionUser } from "@/lib/auth";
+import { SESSION_COOKIE } from "@/lib/session";
 import { logout } from "@/app/(app)/login/actions";
 
 /** サイドバー付きの管理画面レイアウト (ログイン必須の画面) */
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const user = await getSessionUser();
+
+  // 署名としては正しいトークンが残っているのに使えない = 無効化・削除されたユーザー。
+  // middleware は DB を見られないので通してしまうため、ここで Cookie ごと片付ける
+  if (!user) {
+    const store = await cookies();
+    if (store.get(SESSION_COOKIE)?.value) redirect("/session-expired");
+  }
 
   // 未ログイン (=/login 表示中) はサイドバーなしで描画する
   if (!user) {

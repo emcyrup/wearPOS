@@ -4,6 +4,7 @@ import { Barcode } from "@/components/barcode";
 import { CloseWindowButton, PrintButton } from "@/components/print-button";
 import { PAYMENT_METHOD_LABEL } from "@/lib/apparel";
 import { prisma } from "@/lib/db";
+import { hasRegisterAccess } from "@/lib/register-access";
 import { formatDateTime, formatYen, fullName } from "@/lib/format";
 import { paymentMethodLabels } from "@/lib/payment-methods";
 
@@ -16,6 +17,9 @@ export const dynamic = "force-dynamic";
  */
 export default async function ReceiptPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+
+  // レシートには顧客名・担当者名が載るため、レジ端末かログイン済みのときだけ出す
+  if (!(await hasRegisterAccess())) notFound();
 
   const sale = await prisma.sale.findUnique({
     where: { id },

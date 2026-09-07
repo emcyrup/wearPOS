@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
 import { serializeTags } from "@/lib/apparel";
+import { canUseFeature, getSessionUser } from "@/lib/auth";
 import {
   buildRecommendDraft,
   buildRevisitDraft,
@@ -25,11 +26,23 @@ import { allocateMemberCode } from "@/lib/member-code";
 // ActionState の初期値は使う側 (components/customer-forms.tsx) で定義する
 export type ActionState = { status: "idle" | "success" | "error"; message: string };
 
+/**
+ * 顧客機能を使ってよいか。
+ * middleware でも弾いているが、サーバーアクションは単体で呼べるため入口でも確認する。
+ */
+async function canUseCustomers(): Promise<boolean> {
+  const user = await getSessionUser();
+  return Boolean(user && canUseFeature(user, "customers"));
+}
+
+const DENIED: ActionState = { status: "error", message: "顧客情報を扱う権限がありません" };
+
 /** 店頭で顧客に伝える LINE 連携コードを発行する */
 export async function createLineLinkToken(
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
+  if (!(await canUseCustomers())) return DENIED;
   const customerId = String(formData.get("customerId") ?? "");
   if (!customerId) return { status: "error", message: "顧客が指定されていません" };
 
@@ -55,6 +68,7 @@ export async function sendLineMessage(
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
+  if (!(await canUseCustomers())) return DENIED;
   const parsed = messageSchema.safeParse({
     customerId: formData.get("customerId"),
     body: formData.get("body"),
@@ -97,6 +111,7 @@ export async function updateCustomerProfile(
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
+  if (!(await canUseCustomers())) return DENIED;
   const parsed = profileSchema.safeParse({
     customerId: formData.get("customerId"),
     note: formData.get("note"),
@@ -126,6 +141,7 @@ const pointSchema = z.object({
 
 /** ポイントを手動調整する (お詫び付与・失効処理など) */
 export async function adjustPoints(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  if (!(await canUseCustomers())) return DENIED;
   const parsed = pointSchema.safeParse({
     customerId: formData.get("customerId"),
     points: formData.get("points"),
@@ -168,12 +184,14 @@ export type DraftResult = { ok: boolean; draft?: string; error?: string };
 
 /** 再来店促進メッセージの下書きを作る (送信はしない) */
 export async function draftRevisitMessage(customerId: string): Promise<DraftResult> {
+  if (!(await canUseCustomers())) return { ok: false, error: DENIED.message };
   const draft = await buildRevisitDraft(customerId);
   return draft ? { ok: true, draft } : { ok: false, error: "顧客が見つかりません" };
 }
 
 /** おすすめ商品メッセージの下書きを作る (送信はしない) */
 export async function draftRecommendMessage(customerId: string): Promise<DraftResult> {
+  if (!(await canUseCustomers())) return { ok: false, error: DENIED.message };
   const exists = await prisma.customer.findUnique({ where: { id: customerId }, select: { id: true } });
   if (!exists) return { ok: false, error: "顧客が見つかりません" };
   const draft = await buildRecommendDraft(customerId);
@@ -189,6 +207,7 @@ const campaignSchema = z.object({
 
 /** 一斉配信の対象人数を確認する */
 export async function previewCampaign(input: unknown): Promise<{ ok: boolean; count?: number; error?: string }> {
+  if (!(await canUseCustomers())) return { ok: false, error: DENIED.message };
   const parsed = campaignSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: "対象の指定が不正です" };
   const recipients = await campaignRecipients(parsed.data.target);
@@ -199,6 +218,7 @@ export async function previewCampaign(input: unknown): Promise<{ ok: boolean; co
 export async function sendCampaign(
   input: unknown,
 ): Promise<{ ok: boolean; result?: CampaignResult; error?: string }> {
+  if (!(await canUseCustomers())) return { ok: false, error: DENIED.message };
   const parsed = campaignSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: "対象の指定が不正です" };
 
@@ -221,6 +241,7 @@ const reminderSettingsSchema = z.object({
 export async function saveCustomerReminderSettings(
   input: unknown,
 ): Promise<{ ok: boolean; error?: string }> {
+  if (!(await canUseCustomers())) return { ok: false, error: DENIED.message };
   const parsed = reminderSettingsSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: "設定内容が不正です" };
 
@@ -266,6 +287,7 @@ export type CreateCustomerResult =
 
 /** 店頭・電話などで聞き取った情報から顧客を新規登録する (会員番号は自動採番) */
 export async function createCustomer(input: unknown): Promise<CreateCustomerResult> {
+  if (!(await canUseCustomers())) return { ok: false, error: DENIED.message };
   const parsed = createCustomerSchema.safeParse(input);
   if (!parsed.success) {
     return { ok: false, error: "入力内容を確認してください (お名前は必須です)" };
@@ -320,6 +342,7 @@ export async function createCustomer(input: unknown): Promise<CreateCustomerResu
  * 履歴のない顧客は完全に削除する。
  */
 export async function deleteCustomer(customerId: string): Promise<ActionState> {
+  if (!(await canUseCustomers())) return DENIED;
   const customer = await prisma.customer.findUnique({
     where: { id: customerId },
     include: { _count: { select: { sales: true } } },
@@ -350,6 +373,7 @@ export async function deleteCustomer(customerId: string): Promise<ActionState> {
 
 /** 店側からの LINE 連携解除。お客様の LINE アカウントとの紐付けを外す */
 export async function unlinkCustomerLine(customerId: string): Promise<ActionState> {
+  if (!(await canUseCustomers())) return DENIED;
   const account = await prisma.lineAccount.findUnique({ where: { customerId } });
   if (!account) return { status: "error", message: "この顧客は LINE 連携されていません" };
 

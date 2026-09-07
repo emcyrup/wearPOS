@@ -70,11 +70,34 @@ export const PSEUDO_ADMIN: SessionPayload = {
   exp: Number.MAX_SAFE_INTEGER,
 };
 
-/** 現在のセッションユーザーを返す。未ログインなら null (認証無効時は擬似管理者) */
+/**
+ * 現在のセッションユーザーを返す。未ログインなら null (認証無効時は擬似管理者)。
+ *
+ * トークンの署名だけでなく **毎回 DB を見る**。
+ * そうしないと、管理者がユーザーを無効化したり権限を下げても、
+ * 発行済みのトークンが期限切れになるまで古い権限のまま使えてしまう。
+ */
 export async function getSessionUser(): Promise<SessionPayload | null> {
   if (isAuthDisabled()) return PSEUDO_ADMIN;
+
   const store = await cookies();
-  return verifySession(store.get(SESSION_COOKIE)?.value);
+  const payload = await verifySession(store.get(SESSION_COOKIE)?.value);
+  if (!payload) return null;
+
+  const current = await prisma.appUser.findUnique({
+    where: { id: payload.uid },
+    select: { isActive: true, role: true, features: true, displayName: true },
+  });
+  // 削除済み・無効化済みのユーザーのトークンは通さない
+  if (!current || !current.isActive) return null;
+
+  // 権限は必ず DB の最新を使う (トークンに入っている値は表示用の控え)
+  return {
+    ...payload,
+    name: current.displayName,
+    role: current.role === "ADMIN" ? "ADMIN" : "STAFF",
+    features: normalizeFeatures(current.features),
+  };
 }
 
 /** ログイン成功時にセッション Cookie を発行する */

@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
+import { canUseFeature, getSessionUser } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { applyStockMovement } from "@/lib/inventory";
 
@@ -23,6 +24,12 @@ export type AdjustState = { status: "idle" | "success" | "error"; message: strin
  * INBOUND/ADJUSTMENT は差分、STOCKTAKE は実棚数として扱う。
  */
 export async function adjustStock(_prev: AdjustState, formData: FormData): Promise<AdjustState> {
+  // middleware でも弾いているが、サーバーアクションは単体で呼べるため入口でも確認する
+  const user = await getSessionUser();
+  if (!user || !canUseFeature(user, "inventory")) {
+    return { status: "error", message: "在庫を操作する権限がありません" };
+  }
+
   const parsed = adjustSchema.safeParse({
     storeId: formData.get("storeId"),
     skuOrBarcode: formData.get("skuOrBarcode"),

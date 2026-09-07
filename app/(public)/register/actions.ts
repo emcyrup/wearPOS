@@ -2,10 +2,16 @@
 
 import { randomUUID } from "node:crypto";
 
+import { redirect } from "next/navigation";
 import { z } from "zod";
 
 import { prisma } from "@/lib/db";
 import { activePaymentMethods } from "@/lib/payment-methods";
+import {
+  grantRegisterAccess,
+  requireRegisterAccess,
+  verifyRegisterCode,
+} from "@/lib/register-access";
 import {
   ingestPosSale,
   SaleIngestError,
@@ -22,6 +28,9 @@ export type MemberSummary = {
 
 /** 会員番号から会計に必要な最小限の情報を引く */
 export async function lookupMember(memberCode: string): Promise<MemberSummary> {
+  // 会員情報を返すため、認可されたレジ端末かログイン済みのときだけ答える
+  if (!(await requireRegisterAccess()).ok) return { found: false };
+
   const code = memberCode.trim();
   if (!code) return { found: false };
 
@@ -101,6 +110,10 @@ export type CheckoutResult =
  * POS 連携 API と同じ取り込みロジック (在庫減算・ポイント・LINE通知) を通す。
  */
 export async function checkout(input: unknown): Promise<CheckoutResult> {
+  // 会計は在庫とポイントを動かすため、認可されたレジ端末かログイン済みに限る
+  const access = await requireRegisterAccess();
+  if (!access.ok) return { ok: false, error: access.error };
+
   const parsed = checkoutSchema.safeParse(input);
   if (!parsed.success) {
     return { ok: false, error: "会計内容が不正です。カートを確認してください。" };
@@ -189,6 +202,8 @@ export async function searchProducts(
   query: string,
   storeCode: string,
 ): Promise<ProductSearchResult[]> {
+  if (!(await requireRegisterAccess()).ok) return [];
+
   const q = query.trim();
   if (q.length < 1) return [];
 
@@ -246,8 +261,12 @@ export type MemberSearchResult = {
 
 /** 氏名・カナ・電話番号・会員番号で会員を検索する */
 export async function searchMembers(query: string): Promise<MemberSearchResult[]> {
+  // 氏名・電話番号を返すため、認可されたレジ端末かログイン済みのときだけ答える
+  if (!(await requireRegisterAccess()).ok) return [];
+
   const q = query.trim();
-  if (q.length < 1) return [];
+  // 1文字での総当たりを防ぐため、2文字以上を必要とする
+  if (q.length < 2) return [];
 
   const customers = await prisma.customer.findMany({
     where: {
@@ -275,4 +294,31 @@ export async function searchMembers(query: string): Promise<MemberSearchResult[]
     phone: customer.phone,
     storeName: customer.store?.name ?? null,
   }));
+}
+
+// ---------------------------------------------------------------------------
+// レジ端末の認可
+// ---------------------------------------------------------------------------
+
+export type RegisterUnlockState = { error: string };
+
+/**
+ * レジ端末コードを確認して、この端末を認可する。
+ * 総当たりを防ぐため、失敗時は少し待たせる。
+ */
+export async function unlockRegister(
+  _prev: RegisterUnlockState,
+  formData: FormData,
+): Promise<RegisterUnlockState> {
+  // 認証前に誰でも呼べる入口なので、想定外の入力でも例外にしない
+  const code = typeof formData?.get === "function" ? String(formData.get("code") ?? "") : "";
+  if (!code.trim()) return { error: "レジ端末コードを入力してください" };
+
+  if (!(await verifyRegisterCode(code))) {
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+    return { error: "レジ端末コードが違います" };
+  }
+
+  await grantRegisterAccess();
+  redirect("/register");
 }

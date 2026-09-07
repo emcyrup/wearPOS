@@ -5,6 +5,7 @@ import { ReminderSettings } from "@/components/reminder-settings";
 import { AiSettings } from "@/components/ai-settings";
 import { CustomerFieldSettings } from "@/components/customer-field-settings";
 import { PaymentMethodSettings } from "@/components/payment-method-settings";
+import { RegisterAccessSettings } from "@/components/register-access-settings";
 import { RichMenuSetup } from "@/components/richmenu-setup";
 import { SignupPolicySettings } from "@/components/signup-policy-settings";
 import { UserManager } from "@/components/user-manager";
@@ -20,6 +21,7 @@ import { isChatGptConfigured } from "@/lib/chatgpt";
 import { isChatGptEnabled } from "@/lib/insight-policy";
 import { isLineConfigured, lineConfig } from "@/lib/line";
 import { ensurePaymentMethods } from "@/lib/payment-methods";
+import { hasRegisterCode } from "@/lib/register-access";
 import { ensureProductFields } from "@/lib/product-fields";
 import { getSignupPolicy } from "@/lib/signup-policy";
 
@@ -68,6 +70,9 @@ export default async function SettingsPage() {
 
   // データの初期化。既定では無効で、初期化画面へのボタンもグレーアウトする
   const dataResetEnabled = isAdmin ? await isDataResetEnabled() : false;
+
+  // レジ端末のアクセス制御 (レジはログインなしで開けるため、端末を認可する)
+  const registerCodeConfigured = isAdmin ? await hasRegisterCode() : false;
 
   // レジの支払方法 (組み込み + 店舗が追加したもの)。使用中の件数も出す
   const paymentMethods = await ensurePaymentMethods();
@@ -169,6 +174,17 @@ export default async function SettingsPage() {
               usedCount: usageByCode.get(method.code) ?? 0,
             }))}
           />
+        </Card>
+      )}
+
+      {isAdmin && (
+        <Card title="レジ端末のアクセス" className="mb-4">
+          <p className="mb-3 text-sm text-ink-600">
+            レジ画面は店頭の端末でログインなしに開けます。そのぶん、
+            <span className="font-medium">端末そのものを一度だけ認可</span>して、
+            会員の検索や会計が外部から実行されないようにしています。
+          </p>
+          <RegisterAccessSettings codeConfigured={registerCodeConfigured} />
         </Card>
       )}
 
