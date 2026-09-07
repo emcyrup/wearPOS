@@ -6,6 +6,7 @@ import { PageHeader } from "@/components/ui";
 import { getSessionUser } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { visibleProductFields } from "@/lib/product-fields";
+import { listActiveStores } from "@/lib/stores";
 
 export const dynamic = "force-dynamic";
 
@@ -22,7 +23,7 @@ export default async function NewProductPage({
     prisma.brand.findMany({ orderBy: { code: "asc" } }),
     prisma.category.findMany({ orderBy: { code: "asc" } }),
     prisma.season.findMany({ where: { isArchived: false }, orderBy: [{ year: "desc" }, { term: "asc" }] }),
-    prisma.store.findMany({ where: { isActive: true }, orderBy: { code: "asc" } }),
+    listActiveStores(),
     visibleProductFields(),
   ]);
 

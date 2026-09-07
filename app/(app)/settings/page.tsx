@@ -8,6 +8,7 @@ import { PaymentMethodSettings } from "@/components/payment-method-settings";
 import { RegisterAccessSettings } from "@/components/register-access-settings";
 import { RichMenuSetup } from "@/components/richmenu-setup";
 import { SignupPolicySettings } from "@/components/signup-policy-settings";
+import { StoreSettings } from "@/components/store-settings";
 import { UserManager } from "@/components/user-manager";
 import { ensureReminderRules } from "@/lib/reminders";
 import { RANK_RULES } from "@/lib/apparel";
@@ -23,6 +24,7 @@ import { isLineConfigured, lineConfig } from "@/lib/line";
 import { ensurePaymentMethods } from "@/lib/payment-methods";
 import { hasRegisterCode } from "@/lib/register-access";
 import { ensureProductFields } from "@/lib/product-fields";
+import { ensureDefaultStore } from "@/lib/stores";
 import { getSignupPolicy } from "@/lib/signup-policy";
 
 export const dynamic = "force-dynamic";
@@ -40,7 +42,13 @@ export default async function SettingsPage() {
   const isAdmin = sessionUser?.role === "ADMIN";
 
   const [stores, seasons, staff, brands, categories, appUsers] = await Promise.all([
-    prisma.store.findMany({ orderBy: { code: "asc" }, include: { _count: { select: { sales: true } } } }),
+    // 店舗が1つも無いと会計・在庫が動かないため、ここで既定の店舗を用意しておく
+    ensureDefaultStore().then(() =>
+      prisma.store.findMany({
+        orderBy: { code: "asc" },
+        include: { _count: { select: { sales: true } } },
+      }),
+    ),
     prisma.season.findMany({
       orderBy: [{ year: "desc" }, { term: "asc" }],
       include: { _count: { select: { products: true } } },
@@ -59,6 +67,9 @@ export default async function SettingsPage() {
     }),
     isAdmin ? prisma.appUser.findMany({ orderBy: { createdAt: "asc" } }) : Promise.resolve([]),
   ]);
+
+  // 単店舗運用で編集対象にする店舗 (先頭の1件)
+  const mainStore = stores.find((store) => store.isActive) ?? stores[0];
 
   // ログイン画面からの新規ユーザー作成の可否 (管理者のみ設定できる)
   const signupPolicy = await getSignupPolicy();
@@ -201,8 +212,8 @@ export default async function SettingsPage() {
       )}
 
       <div className={`mt-4 grid gap-4 ${MULTI_STORE ? "lg:grid-cols-2" : ""}`}>
-        {/* 単店舗運用では店舗マスタの表示を省く */}
-        {MULTI_STORE && (
+        {/* 単店舗運用でも、レシートに出る店舗名は変えられるようにする */}
+        {MULTI_STORE ? (
           <Card title="店舗">
             <Table head={["コード", "店舗名", "電話", "取引数"]}>
               {stores.map((store) => (
@@ -215,6 +226,22 @@ export default async function SettingsPage() {
               ))}
             </Table>
           </Card>
+        ) : (
+          mainStore && (
+            <Card title="店舗">
+              <StoreSettings
+                store={{
+                  id: mainStore.id,
+                  code: mainStore.code,
+                  name: mainStore.name,
+                  phone: mainStore.phone,
+                  address: mainStore.address,
+                  salesCount: mainStore._count.sales,
+                }}
+                canEdit={isAdmin}
+              />
+            </Card>
+          )
         )}
 
         <Card

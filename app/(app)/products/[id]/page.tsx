@@ -17,6 +17,7 @@ import { getSessionUser } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { formatDate, formatNumber, formatPercent, formatYen } from "@/lib/format";
 import { ensureProductFields } from "@/lib/product-fields";
+import { listActiveStores } from "@/lib/stores";
 
 export const dynamic = "force-dynamic";
 
@@ -46,7 +47,7 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
 
   if (!product) notFound();
 
-  const stores = await prisma.store.findMany({ where: { isActive: true }, orderBy: { code: "asc" } });
+  const stores = await listActiveStores();
   // 編集フォーム用のマスタと権限
   const [brands, categories, allSeasons, sessionUser] = await Promise.all([
     prisma.brand.findMany({ orderBy: { code: "asc" } }),

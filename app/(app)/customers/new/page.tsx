@@ -3,13 +3,13 @@ import Link from "next/link";
 import { CustomerNewForm } from "@/components/customer-new-form";
 import { PageHeader } from "@/components/ui";
 import { getCustomerFieldPolicy } from "@/app/(app)/settings/customer-field-actions";
-import { prisma } from "@/lib/db";
+import { listActiveStores } from "@/lib/stores";
 
 export const dynamic = "force-dynamic";
 
 export default async function CustomerNewPage() {
   const [stores, policy] = await Promise.all([
-    prisma.store.findMany({ where: { isActive: true }, orderBy: { code: "asc" } }),
+    listActiveStores(),
     getCustomerFieldPolicy(),
   ]);
 

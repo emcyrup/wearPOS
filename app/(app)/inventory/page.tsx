@@ -6,6 +6,7 @@ import { MOVEMENT_TYPE_LABEL } from "@/lib/apparel";
 import { MULTI_STORE } from "@/lib/config";
 import { prisma } from "@/lib/db";
 import { inventoryList, recentMovements } from "@/lib/inventory";
+import { listActiveStores } from "@/lib/stores";
 import { formatDateTime, formatNumber } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
@@ -17,7 +18,7 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
   const q = params.q?.trim() ?? "";
 
   const [stores, staff] = await Promise.all([
-    prisma.store.findMany({ where: { isActive: true }, orderBy: { code: "asc" } }),
+    listActiveStores(),
     prisma.staff.findMany({ where: { isActive: true }, orderBy: { code: "asc" } }),
   ]);
 

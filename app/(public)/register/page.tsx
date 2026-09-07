@@ -4,6 +4,7 @@ import { PageHeader } from "@/components/ui";
 import { prisma } from "@/lib/db";
 import { activePaymentMethods } from "@/lib/payment-methods";
 import { hasRegisterAccess, hasRegisterCode } from "@/lib/register-access";
+import { listActiveStores } from "@/lib/stores";
 
 export const dynamic = "force-dynamic";
 
@@ -15,7 +16,8 @@ export default async function RegisterPage() {
   }
 
   const [stores, staff, paymentMethods] = await Promise.all([
-    prisma.store.findMany({ where: { isActive: true }, orderBy: { code: "asc" } }),
+    // 店舗が1つも無いと会計できないため、初回はここで既定の店舗を用意する
+    listActiveStores(),
     prisma.staff.findMany({
       where: { isActive: true },
       include: { store: true },

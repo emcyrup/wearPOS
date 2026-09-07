@@ -6,6 +6,7 @@ import { requireAdmin } from "@/lib/auth";
 import { MULTI_STORE } from "@/lib/config";
 import { prisma } from "@/lib/db";
 import { CSV_SAMPLE } from "@/lib/product-csv";
+import { listActiveStores } from "@/lib/stores";
 
 export const dynamic = "force-dynamic";
 
@@ -23,11 +24,7 @@ export default async function ProductImportPage() {
     );
   }
 
-  const stores = await prisma.store.findMany({
-    where: { isActive: true },
-    orderBy: { code: "asc" },
-    select: { id: true, code: true, name: true },
-  });
+  const stores = await listActiveStores();
 
   return (
     <>

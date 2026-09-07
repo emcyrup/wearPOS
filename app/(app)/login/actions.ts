@@ -14,6 +14,7 @@ import {
 import { prisma } from "@/lib/db";
 import { SIGNING_KEY_MISSING_MESSAGE } from "@/lib/session";
 import { getSignupPolicy, verifySignupCode } from "@/lib/signup-policy";
+import { ensureDefaultStore } from "@/lib/stores";
 
 export type LoginState = { error: string };
 
@@ -114,6 +115,10 @@ export async function createInitialAdmin(
       role: "ADMIN",
     },
   });
+
+  // 伝票・在庫は店舗にひも付くため、まっさらな環境では既定の店舗を用意しておく
+  // (店舗名は 設定 → 店舗 から変更できる)
+  await ensureDefaultStore();
 
   const failed = await startSession(user);
   if (failed) return failed;

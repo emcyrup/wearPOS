@@ -106,6 +106,29 @@ export type CheckoutResult =
   | { ok: false; error: string };
 
 /**
+ * 入力チェックに落ちたとき、どこを直せばよいかが分かる文言にする。
+ * 「会計内容が不正です」だけだと、店頭では手の打ちようがない。
+ */
+function checkoutInputError(error: z.ZodError): string {
+  switch (error.issues[0]?.path[0]) {
+    case "storeCode":
+      return "店舗が設定されていません。管理者が 設定 → 店舗 を開いて店舗名を保存してください";
+    case "staffCode":
+      return "担当スタッフを選んでください";
+    case "lines":
+      return "カートの内容を確認してください。数量・金額が正しくない明細があります";
+    case "payments":
+    case "paymentMethod":
+      return "支払いの内訳を確認してください";
+    case "discount":
+    case "pointsUsed":
+      return "値引きとポイントの金額を確認してください";
+    default:
+      return "会計内容が不正です。カートを確認してください。";
+  }
+}
+
+/**
  * 店頭レジからの会計。
  * POS 連携 API と同じ取り込みロジック (在庫減算・ポイント・LINE通知) を通す。
  */
@@ -116,7 +139,7 @@ export async function checkout(input: unknown): Promise<CheckoutResult> {
 
   const parsed = checkoutSchema.safeParse(input);
   if (!parsed.success) {
-    return { ok: false, error: "会計内容が不正です。カートを確認してください。" };
+    return { ok: false, error: checkoutInputError(parsed.error) };
   }
 
   // レジに表示されている支払方法だけを受け付ける
