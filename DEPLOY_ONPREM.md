@@ -18,6 +18,35 @@ wearPOS を移し、稼働させるまでの手順です。開発環境（Vercel
 
 ---
 
+## 最短ルート: 1 コマンドで初回セットアップ
+
+Step 1〜6 をまとめて行うスクリプトを用意しています。手元の PC からサーバーに入り、次を実行するだけです。
+
+```bash
+# 手元の PC
+chmod 600 id_rsa_3piece4-prod.pem
+ssh -i id_rsa_3piece4-prod.pem 3piece_prod4@<サーバーIP>
+
+# サーバー上
+bash <(curl -fsSL https://raw.githubusercontent.com/emcyrup/wearPOS/main/scripts/bootstrap-onprem.sh)
+```
+
+スクリプトは **何度実行しても安全**（済んでいる手順は飛ばす）で、途中で止まるのは次の 2 回だけです。
+それぞれ対応してから、**同じコマンドをもう一度**実行すれば続きから進みます。
+
+| 止まる場所 | 画面に出るもの | やること |
+| --- | --- | --- |
+| ① GitHub 接続 | 公開鍵（`ssh-ed25519 AAAA...`） | GitHub リポジトリ → Settings → Deploy keys に登録（Allow write access は不要） |
+| ② `.env` 作成 | `nano ~/wearPOS/.env` の案内 | `DATABASE_URL`（パスワードは [Step 3](#step-3-env-を作る) の表で URL エンコード）と LINE / AI のキーを入力。`AUTH_SECRET` などの乱数は自動生成済み |
+
+`.env` が埋まった状態で 3 回目を実行すると、DB 接続確認 → マイグレーション → ビルド → PM2 起動 → crontab 登録 → ヘルスチェックまで進み、
+`✅ セットアップ完了` が出ます。あとは [Step 7](#step-7-外部連携の-url-を切り替える)（LINE の URL 切替）と [Step 8](#step-8-初期設定管理画面)（管理者作成）に進んでください。
+
+> スクリプトが途中で `✗` で止まった場合は、表示されたメッセージと [困ったとき](#困ったとき) を参照。
+> 手順を 1 つずつ確認したい場合は、以下の Step 1〜6 を手で実行しても同じ結果になります。
+
+---
+
 ## Step 0. 移行前に決めておくこと
 
 ### データをどうするか（2択）
