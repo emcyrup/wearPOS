@@ -104,12 +104,14 @@ cd wearPOS
 npm ci --no-audit --no-fund   # postinstall で prisma generate が走る
 ```
 
-PM2 はグローバルではなくプロジェクト内に入れます（sudo 不要）。
+PM2 は `devDependencies` に入っているため、`npm ci` で一緒に入ります（グローバル導入も sudo も不要）。
 
 ```bash
-npm install --no-save pm2   # または devDependencies に追加してもよい
-npx pm2 -v
+npx --no-install pm2 -v
 ```
+
+> `--no-install` を必ず付けてください。付けないと、見つからないときに npx が
+> 「入れますか?」と聞いて**入力待ちのまま止まります**。
 
 > `npm ci` で `sharp` のビルドに失敗する場合は `npm ci --ignore-scripts` の後に `npx prisma generate` を実行してください。
 
@@ -200,9 +202,9 @@ rm ~/wearpos-dev.sql
 cd ~/wearPOS
 mkdir -p logs
 NODE_OPTIONS="--max-old-space-size=1536" npx next build   # 2 GiB メモリ向けにヒープ上限を明示
-npx pm2 start ecosystem.config.cjs
-npx pm2 save
-npx pm2 startup   # 表示されたコマンドは sudo が必要なため実行しない (下記参照)
+npx --no-install pm2 start ecosystem.config.cjs
+npx --no-install pm2 save
+npx --no-install pm2 startup   # 表示されたコマンドは sudo が必要なため実行しない (下記参照)
 ```
 
 > **サーバー再起動後の自動起動について**
@@ -213,7 +215,7 @@ npx pm2 startup   # 表示されたコマンドは sudo が必要なため実行
 
 ```bash
 curl -s http://127.0.0.1:8026/api/health   # {"instanceAgeMs":...,"dbPingMs":...} が返る
-npx pm2 logs wearpos --lines 50
+npx --no-install pm2 logs wearpos --lines 50
 ```
 
 ブラウザで `https://wearpos.ai-labo.cloud/` を開き、ログイン画面（または初期セットアップ画面）が出れば
@@ -231,7 +233,7 @@ crontab -e
 
 ```cron
 # サーバー再起動時にアプリを起動 (sudo 不要の代替)
-@reboot cd /home/prod4/wearPOS && /usr/bin/env npx pm2 resurrect >> /home/prod4/wearPOS/logs/pm2-boot.log 2>&1
+@reboot cd /home/prod4/wearPOS && /usr/bin/env npx --no-install pm2 resurrect >> /home/prod4/wearPOS/logs/pm2-boot.log 2>&1
 
 # LINE 自動リマインド (Vercel Cron の代わり) 毎日 10:00 JST
 0 1 * * * /home/prod4/wearPOS/scripts/reminders-cron.sh >> /home/prod4/wearPOS/logs/reminders.log 2>&1
@@ -279,7 +281,7 @@ cd ~/wearPOS && bash scripts/deploy.sh
 ```
 
 取得 → `npm ci` → マイグレーション → ビルド → PM2 無停止入れ替え → ヘルスチェックまで行います。
-途中で失敗したら古いビルドのまま稼働し続けます（`npx pm2 logs wearpos` で原因を確認）。
+途中で失敗したら古いビルドのまま稼働し続けます（`npx --no-install pm2 logs wearpos` で原因を確認）。
 
 ---
 
@@ -287,13 +289,14 @@ cd ~/wearPOS && bash scripts/deploy.sh
 
 | 症状 | 確認すること |
 | --- | --- |
-| ログイン画面に `AUTH_SECRET が設定されていません` と出る | `.env` に `AUTH_SECRET` を入れて `npx pm2 restart wearpos` |
+| ログイン画面に `AUTH_SECRET が設定されていません` と出る | `.env` に `AUTH_SECRET` を入れて `npx --no-install pm2 restart wearpos` |
 | `password authentication failed` | `DATABASE_URL` の URL エンコードとシングルクォート（Step 3） |
-| ブラウザで開くと 502 | アプリが :8026 で起動しているか `curl http://127.0.0.1:8026/api/health`。落ちていれば `npx pm2 logs wearpos` |
+| ブラウザで開くと 502 | アプリが :8026 で起動しているか `curl http://127.0.0.1:8026/api/health`。落ちていれば `npx --no-install pm2 logs wearpos` |
 | 画面は出るがフォーム送信で `Invalid Server Actions request` | nginx が `Host` ヘッダを渡していない。御社に `proxy_set_header Host $host;` の設定を依頼 |
 | ログインはできるが LINE から届かない | Webhook URL が旧ドメインのまま（Step 7）。`APP_URL` が新ドメインになっているか |
+| `5/5 アプリを入れ替え` から進まない | pm2 が見つからず `npx` が「入れますか?」で入力待ちになっている。Ctrl-C で抜け、`npm install --no-save pm2` のあと `npx --no-install pm2 reload ecosystem.config.cjs --update-env` |
 | ビルドが `JavaScript heap out of memory` | `NODE_OPTIONS="--max-old-space-size=1536"` が付いているか。ほかのプロセスがメモリを使っていないか `free -m` |
-| サーバー再起動後にアプリが上がらない | crontab の `@reboot` 行（Step 6）と `npx pm2 save` を実行済みか |
+| サーバー再起動後にアプリが上がらない | crontab の `@reboot` 行（Step 6）と `npx --no-install pm2 save` を実行済みか |
 
 ### nginx（御社管理）に必要な設定
 

@@ -69,6 +69,7 @@ git log --oneline -1 | sed 's/^/   /'
 # ---------------------------------------------------------------------------
 log "3/8 依存パッケージ (postinstall で prisma generate)"
 npm ci --no-audit --no-fund --loglevel=error
+# pm2 は devDependencies に入っているので npm ci で入る (古い環境向けの保険)
 if ! npx --no-install pm2 -v >/dev/null 2>&1; then
   npm install --no-save --no-audit --no-fund --loglevel=error pm2
 fi
@@ -135,7 +136,7 @@ npx --no-install pm2 save >/dev/null
 
 # ---------------------------------------------------------------------------
 log "8/8 crontab (自動起動 + LINE リマインド)。重複登録はしない"
-CRON_BOOT="@reboot cd $APP_DIR && /usr/bin/env npx pm2 resurrect >> $APP_DIR/logs/pm2-boot.log 2>&1"
+CRON_BOOT="@reboot cd $APP_DIR && /usr/bin/env npx --no-install pm2 resurrect >> $APP_DIR/logs/pm2-boot.log 2>&1"
 if [ "$(date +%Z)" = "JST" ]; then HOUR=10; else HOUR=1; fi   # 10:00 JST
 CRON_REM="0 $HOUR * * * $APP_DIR/scripts/reminders-cron.sh >> $APP_DIR/logs/reminders.log 2>&1"
 current="$(crontab -l 2>/dev/null || true)"
