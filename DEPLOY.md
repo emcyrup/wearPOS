@@ -1,7 +1,10 @@
 # デプロイ手順（Vercel + Neon）
 
-> **本番サーバー (wearpos.ai-labo.cloud / AWS EC2 自己ホスト) への移行手順は [DEPLOY_ONPREM.md](DEPLOY_ONPREM.md) を参照してください。**
-> このファイルは開発環境 (Vercel + Neon) 向けの手順です。
+> **本番は wearpos.ai-labo.cloud（AWS EC2 自己ホスト）です。手順は [DEPLOY_ONPREM.md](DEPLOY_ONPREM.md) を参照してください。**
+> このファイルは Vercel + Neon で動かす場合の手順です。2026-09-10 の本番移行にともない、
+> **Vercel 側は停止**しました（自動デプロイを外し、LINE 自動リマインドの cron も `vercel.json` から削除）。
+> 本番と同じ LINE チャネルを使うため、Vercel を再開するときは
+> **`LINE_PUSH_ENABLED="false"` にして、お客様へ二重に配信しないようにしてください。**
 
 wearPOS を実際に動く状態でインターネットに公開するまでの手順です。
 所要時間はおよそ 30 分、費用は無料枠の範囲で始められます。
@@ -108,7 +111,7 @@ Configure Project 画面の **Environment Variables**（デプロイ後なら Se
 | `LINE_PUSH_ENABLED` | `false` にすると LINE 送信を止めてログだけ残す | 任意 |
 | `ANTHROPIC_API_KEY` | [Anthropic Console](https://console.anthropic.com/) で発行した API キー。ダッシュボードの AI考察 (壁打ち) に使用 | AI考察を使う場合 |
 | `AUTH_SECRET` | ログインセッションの署名鍵。`openssl rand -base64 32` で生成した値 | 推奨 |
-| `CRON_SECRET` | LINE 自動リマインド (毎日 10:00 JST の Vercel Cron) の認証キー。ランダム値を設定 | リマインドを使う場合 |
+| `CRON_SECRET` | LINE 自動リマインド (`/api/reminders/run`) の認証キー。ランダム値を設定 | リマインドを使う場合 |
 | `OPENAI_API_KEY` | AI考察の討論相手 (ChatGPT)。未設定なら Claude 単独の考察になる | 討論にする場合 |
 | `LIFF_ID` / `LIFF_CHANNEL_ID` | リッチメニューをタップで直接画面遷移にする場合に設定 | LINE を使う場合 |
 | `DATABASE_POOL_MAX` | 1インスタンスあたりの最大接続数（既定 5） | 任意 |
