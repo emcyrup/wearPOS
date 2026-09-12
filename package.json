@@ -15,7 +15,8 @@
     "db:migrate": "prisma migrate dev",
     "db:deploy": "prisma migrate deploy",
     "start:prod": "next start -p 8026 -H 0.0.0.0",
-    "deploy": "bash scripts/deploy.sh"
+    "deploy": "bash scripts/deploy.sh",
+    "manual:build": "node scripts/build-manual.mjs"
   },
   "engines": {
     "node": ">=22.0.0"

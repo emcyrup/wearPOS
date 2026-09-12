@@ -151,6 +151,13 @@
     margin: 5mm 0 2mm;
     padding-left: 3mm;
     border-left: 3.5px solid var(--accent);
+    /* 見出しだけがページ末尾に取り残されないようにする */
+    page-break-after: avoid;
+    break-after: avoid;
+  }
+  h2.block + .chap-lead, h2.block + ol.steps, h2.block + ul.plain, h2.block + table {
+    page-break-before: avoid;
+    break-before: avoid;
   }
   ul.plain { list-style: none; }
   ul.plain li {
@@ -173,53 +180,52 @@
     <div class="cover-title">かんたん操作マニュアル</div>
     <div class="cover-sub">店舗スタッフ・アルバイト向け ── 店頭でよく使う操作だけをまとめました</div>
   </div>
-  <div class="cover-meta">最終更新: 2026年8月13日 ／ スマートフォン・タブレット・パソコンのどれでも同じように使えます</div>
+  <div class="cover-meta">最終更新: 2026年9月12日 ／ スマートフォン・タブレット・パソコンのどれでも同じように使えます</div>
   <div class="cover-toc">
     <h2>もくじ</h2>
     <ol>
-      <li><span class="no">1</span>ログインする</li>
+      <li><span class="no">1</span>はじめに（画面を開く・ログイン）</li>
       <li><span class="no">2</span>会計する（レジ）</li>
-      <li><span class="no">3</span>返品する（会計の取り消し）</li>
-      <li><span class="no">4</span>商品を登録する（管理者）</li>
-      <li><span class="no">5</span>在庫の作業</li>
-      <li><span class="no">6</span>お客様の登録・LINE</li>
-      <li><span class="no">7</span>売上を見る・AIに相談する</li>
-      <li><span class="no">8</span>困ったときは</li>
+      <li><span class="no">3</span>支払いを分けて受け取る</li>
+      <li><span class="no">4</span>返品する（会計の取り消し）</li>
+      <li><span class="no">5</span>商品を登録する</li>
+      <li><span class="no">6</span>在庫の作業</li>
+      <li><span class="no">7</span>お客様の登録・LINE</li>
+      <li><span class="no">8</span>売上を見る・AI に相談する</li>
+      <li><span class="no">9</span>店長・管理者の設定</li>
+      <li><span class="no">10</span>困ったときは</li>
     </ol>
   </div>
 </div>
 
 <!-- ================= 1 ================= -->
 <section class="chapter first">
-  <div class="chap-head"><div class="chap-no">1</div><h1>ログインする</h1></div>
+  <div class="chap-head"><div class="chap-no">1</div><h1>はじめに（画面を開く・ログイン）</h1></div>
+  <p class="chap-lead">ブラウザで次の URL を開きます。よく使う端末では、ブックマークやホーム画面に追加しておくと便利です。</p>
+  <div class="ok" style="font-size:11pt"><b>https://wearpos.ai-labo.cloud</b></div>
+
+  <h2 class="block">ログインする</h2>
   <ol class="steps">
-    <li><span class="t">wearPOS の URL をブラウザで開く</span></li>
     <li><span class="t">自分の名前を選ぶ</span><div class="d">ユーザー名は一覧から選ぶだけです</div></li>
     <li><span class="t">パスワードを入力して <span class="btn dark">ログイン</span></span></li>
   </ol>
+  <div class="note">自分のユーザーがまだ無いときは、<b>店長（管理者）に作ってもらってください</b>。お店の設定によっては、ログイン画面の <span class="btn">新規ユーザーを作成</span> タブから自分で作れることもあります（合言葉が必要な場合があります）。</div>
+  <div class="warn">パスワードを続けて <b>8 回</b>間違えると、そのユーザーは <b>15 分間</b>ログインできなくなります。あわてず時間をおくか、店長に連絡してください。</div>
 
-  <h2 class="block">はじめて使うとき（自分のユーザーを作る）</h2>
+  <h2 class="block">レジ端末をはじめて使うとき</h2>
+  <p class="chap-lead">店頭のレジ端末は、ログインなしでレジ画面を開けるようにできます。そのかわり、<b>最初に一度だけ「レジ端末コード」の入力</b>が必要です。</p>
   <ol class="steps">
-    <li><span class="t">ログイン画面の <span class="btn">新規ユーザーを作成</span> タブを開く</span></li>
-    <li>
-      <span class="t">ユーザー名・表示名・パスワードを入力</span>
-      <div class="d">ユーザー名は半角英数字で3文字以上、パスワードは8文字以上。確認用にもう一度パスワードを入れます。</div>
-    </li>
-    <li>
-      <span class="t">合言葉を伝えられている場合は入力</span>
-      <div class="d">お店の設定によっては合言葉の入力欄が出ます。分からないときは店長に確認してください。</div>
-    </li>
-    <li><span class="t"><span class="btn dark">作成してログイン</span> を押す</span></li>
+    <li><span class="t">レジ画面を開くと、コードの入力欄が出る</span></li>
+    <li><span class="t">店長から聞いたレジ端末コードを入力して <span class="btn dark">この端末で使えるようにする</span></span></li>
+    <li><span class="t">以降 <b>90 日間</b>は、その端末はコードなしでレジを使えます</span><div class="d">別の端末を使うときは、その端末でも一度入力してください。</div></li>
   </ol>
-  <div class="note">
-    作られるのは<b>スタッフ権限</b>（レジ・商品・在庫）のユーザーです。顧客情報や設定も使いたい場合は、管理者に権限の変更を依頼してください。
-  </div>
+  <div class="note">ログイン済みであれば、コードを入れなくてもレジは使えます。コードは「店頭のタブレットをログインなしで使う」ための仕組みです。</div>
 
-  <div class="note">レジ画面だけはログインなしで使えます（店頭のレジ端末用）。</div>
   <h2 class="block">権限について</h2>
   <ul class="plain">
-    <li><b>管理者</b>: すべての操作（商品登録・価格変更・顧客削除・設定など）</li>
-    <li><b>スタッフ</b>: 許可された画面のみ（レジ・商品・在庫など。権限は管理者が設定します）</li>
+    <li><b>管理者</b>: すべての操作（商品登録・価格変更・顧客情報・設定など）</li>
+    <li><b>スタッフ</b>: 許可された画面のみ（レジ・商品・在庫など。権限は管理者が決めます）</li>
+    <li>使いたい画面が見えないときは、権限の追加を店長に相談してください</li>
     <li>パスワードを忘れたら管理者に連絡してください（リセットできます）</li>
   </ul>
 </section>
@@ -235,42 +241,68 @@
     </li>
     <li>
       <span class="t">商品を追加する</span>
-      <div class="d">値札のバーコードをスキャン（カメラ or ハンドスキャナ）。読み取れないときは <span class="btn">🔍 商品名で検索</span>、値札がない商品（ノベルティ等）は <span class="btn">✏️ 未登録商品を手入力</span> で商品名と価格を入力します。</div>
+      <div class="d">値札のバーコードをスキャン（カメラ／ハンドスキャナ）。読み取れないときは <span class="btn">🔍 商品名で検索</span>。値札が無いもの（ノベルティ等）は <span class="btn">✏️ 未登録商品を手入力</span> で商品名と価格を入力します。</div>
     </li>
     <li>
       <span class="t">会員をつける（任意）</span>
       <div class="d">お客様の LINE 会員証バーコードをスキャン、または会員番号を入力して <span class="btn">照会</span>。分からないときは <span class="btn">🔍 お名前・電話番号で検索</span>。</div>
     </li>
     <li>
-      <span class="t">値引きする（任意）</span>
-      <div class="d">1商品だけ → その行の「この明細を値引き」／会計全体 → 「伝票値引き」。¥ と % は両方入れると合算されます。</div>
+      <span class="t">値引き・ポイントを使う（任意）</span>
+      <div class="d">1商品だけなら その行の「この明細を値引き」、会計全体なら「伝票値引き」。¥ と % の両方を入れると合算されます。会員のポイントもここで使えます。</div>
     </li>
     <li>
       <span class="t">支払方法を選ぶ</span>
-      <div class="d">現金 → お預かり金額を入力（お釣りは自動計算）。クレジット等 → 決済端末での処理が終わったことを確認して確定します。</div>
+      <div class="d">現金は <b>お預かり金額</b>を入力するとお釣りが自動計算されます。クレジット等は、決済端末での処理が終わったことを確認してから進めます。</div>
     </li>
     <li><span class="t"><span class="btn dark">会計する</span> を押す</span></li>
-    <li>
-      <span class="t"><span class="btn">レシートを印刷</span> → 印刷して閉じる</span>
-      <div class="d">レシートは別ウィンドウで開きます。印刷が終わったら「閉じる」で戻ります。</div>
-    </li>
+    <li><span class="t"><span class="btn">レシートを印刷</span> → 別ウィンドウで開くので印刷して閉じる</span></li>
     <li><span class="t"><span class="btn">次の会計へ</span> で次のお客様へ</span></li>
   </ol>
-  <div class="ok">会計すると、在庫の減算・ポイント付与・お客様への LINE 通知まで自動で行われます。</div>
+  <div class="ok">在庫の減算・ポイントの付与・累計購入額と会員ランクの更新・お客様への LINE 通知まで、会計と同時に自動で行われます。</div>
+
+  <h2 class="block">承認番号を残す（決済メモ）</h2>
+  <p class="chap-lead">クレジットや QR 決済など、別の端末で処理した支払いは、<b>決済端末の承認番号・伝票番号</b>をメモとして残せます。</p>
+  <ul class="plain">
+    <li>支払方法を選ぶと、その下にメモ欄が出ます</li>
+    <li>入力した番号は伝票詳細に「No. ○○」と表示されます</li>
+    <li>あとで決済端末の控えと突き合わせるときに役立ちます</li>
+  </ul>
 </section>
 
 <!-- ================= 3 ================= -->
 <section class="chapter">
-  <div class="chap-head"><div class="chap-no">3</div><h1>返品する（会計の取り消し）</h1></div>
+  <div class="chap-head"><div class="chap-no">3</div><h1>支払いを分けて受け取る</h1></div>
+  <p class="chap-lead">「現金 1万円 ＋ 残りを電子マネー」のように、1 回の会計で支払方法を組み合わせられます。</p>
+  <ol class="steps">
+    <li><span class="t">お会計の欄で <span class="btn">支払方法を分けて支払う</span> を押す</span></li>
+    <li>
+      <span class="t">使う支払方法のボタンを押す</span>
+      <div class="d">押すと<b>残額が自動で入ります</b>。金額を直せば、残りは次の行に回せます。</div>
+    </li>
+    <li>
+      <span class="t">現金の行は お預かり金額 を入れる</span>
+      <div class="d">行ごとにお釣りが計算され、合計のお釣りも表示されます。</div>
+    </li>
+    <li>
+      <span class="t">内訳の合計がお支払い額とぴったり合ったら <span class="btn dark">会計する</span></span>
+      <div class="d">ぴったり合うまで会計ボタンは押せません。残額は画面に表示されています。</div>
+    </li>
+  </ol>
+  <div class="note">分割に使えるのは、店長が設定で「分割決済に使える」にした支払方法だけです。ボタンが出ないときは店長に確認してください。</div>
+  <div class="ok">レシートと伝票詳細には、支払方法ごとの内訳が印字・表示されます。返品したときも、この内訳どおりに返金されます。</div>
+</section>
+
+<!-- ================= 4 ================= -->
+<section class="chapter">
+  <div class="chap-head"><div class="chap-no">4</div><h1>返品する（会計の取り消し）</h1></div>
   <p class="chap-lead">レジの打ち間違い・お客様都合の返品はこちら。むずかしい操作はありません。</p>
   <ol class="steps">
     <li>
       <span class="t"><b>取引履歴</b> から対象の伝票を探して開く</span>
       <div class="d">伝票番号や会員名で絞り込みできます。行をクリックすると詳細が開きます。</div>
     </li>
-    <li>
-      <span class="t">右上の <span class="btn">返品する</span> を押す</span>
-    </li>
+    <li><span class="t">右上の <span class="btn">返品する</span> を押す</span></li>
     <li>
       <span class="t"><b>返す商品の点数</b>を決める</span>
       <div class="d">はじめは全部が選ばれています。− ＋ で点数を変えれば、1点だけ返すこともできます。</div>
@@ -279,9 +311,7 @@
       <span class="t"><b>返金の方法</b>を選ぶ</span>
       <div class="d">そのままなら元の支払い方法どおりに返します。クレジットの取消ができないときなどは「返金方法を指定する」で現金に振り替えられます。</div>
     </li>
-    <li>
-      <span class="t">右下の <span class="btn">○ 点を返品する</span> を押して、確認画面で OK</span>
-    </li>
+    <li><span class="t">右下の <span class="btn">○ 点を返品する</span> を押して、確認画面で OK</span></li>
   </ol>
   <h2 class="block">返品したぶんだけ自動で元に戻るもの</h2>
   <ul class="plain">
@@ -292,14 +322,18 @@
   <div class="ok">一部だけ返品したときは、残りをあとから返品できます。伝票には「一部返品」と表示され、明細ごとに返した点数が出ます。同じ商品を二重に返品することはできません。</div>
 </section>
 
-<!-- ================= 4 ================= -->
+<!-- ================= 5 ================= -->
 <section class="chapter">
-  <div class="chap-head"><div class="chap-no">4</div><h1>商品を登録する（管理者）</h1></div>
+  <div class="chap-head"><div class="chap-no">5</div><h1>商品を登録する</h1></div>
+  <p class="chap-lead">管理者の操作です。<b>商品 / SKU</b> → <span class="btn dark">商品を登録</span> から行います。</p>
   <ol class="steps">
-    <li><span class="t"><b>商品 / SKU</b> → <span class="btn dark">商品を登録</span></span></li>
     <li>
-      <span class="t">商品名・価格などを入力</span>
-      <div class="d"><b>品番は空欄でかまいません</b>。空なら自動で採番されます（例: P2609-001）。</div>
+      <span class="t">商品名・価格を入力</span>
+      <div class="d">必ず入れるのは <b>商品名・プロパー価格・サイズ</b> の3つだけです。</div>
+    </li>
+    <li>
+      <span class="t">品番は空欄でかまいません</span>
+      <div class="d">空なら自動で採番されます（例: P2609-001）。</div>
     </li>
     <li>
       <span class="t">サイズを選ぶ（カラーは任意）</span>
@@ -307,7 +341,7 @@
     </li>
     <li>
       <span class="t">JAN コードは自動採番</span>
-      <div class="d">採番年月は数字6桁で入力します（例: 202608）。</div>
+      <div class="d">採番年月は数字6桁で入力します（例: 202609）。</div>
     </li>
     <li><span class="t">登録後、<span class="btn">値札ラベルを印刷</span> でバーコード付きの値札を印刷</span></li>
   </ol>
@@ -326,7 +360,7 @@
   <h2 class="block">あとから直すとき</h2>
   <ul class="plain">
     <li>商品の情報 → 商品詳細の <b>商品情報カード右上</b> の <span class="btn">✏️ 編集する</span>（販売価格の変更は履歴に残ります）</li>
-    <li>SKU コード → SKU 一覧の ✎ から変更（管理者のみ）</li>
+    <li>SKU コード・バーコード → SKU 一覧の ✎ から変更（管理者のみ）</li>
   </ul>
 
   <h2 class="block">たくさんの商品をまとめて登録する（CSV 一括取込）</h2>
@@ -353,9 +387,9 @@
   <div class="ok">既にある商品は、既定では変更しません（JAN が空のところにだけ JAN を入れます）。上書きしたいときは設定のチェックを入れてください。</div>
 </section>
 
-<!-- ================= 5 ================= -->
+<!-- ================= 6 ================= -->
 <section class="chapter">
-  <div class="chap-head"><div class="chap-no">5</div><h1>在庫の作業</h1></div>
+  <div class="chap-head"><div class="chap-no">6</div><h1>在庫の作業</h1></div>
   <p class="chap-lead"><b>在庫</b> 画面で行います。一覧のラジオボタンで商品を選ぶと、その SKU がフォームに自動で入ります。</p>
   <table>
     <tr><th style="width:28%">やりたいこと</th><th>操作</th></tr>
@@ -364,24 +398,27 @@
     <tr><td><b>棚卸</b></td><td>区分「棚卸」で実際に数えた数を入力（その数に上書きされます）</td></tr>
   </table>
   <div class="ok">すべての増減は「直近の在庫変動」に履歴として残ります。あとから誰がいつ変えたか確認できます。</div>
+  <div class="note">在庫が少なくなった商品は、在庫画面の上部にアラートとして出ます（発注点は商品ごとに設定できます）。</div>
 </section>
 
-<!-- ================= 6 ================= -->
+<!-- ================= 7 ================= -->
 <section class="chapter">
-  <div class="chap-head"><div class="chap-no">6</div><h1>お客様の登録・LINE</h1></div>
+  <div class="chap-head"><div class="chap-no">7</div><h1>お客様の登録・LINE</h1></div>
   <table>
     <tr><th style="width:34%">やりたいこと</th><th>操作</th></tr>
     <tr><td>店頭で新規登録</td><td><b>顧客 (CRM)</b> → <span class="btn dark">顧客を登録</span>（会員番号は自動発行）</td></tr>
     <tr><td>LINE で自己登録</td><td>お客様が公式 LINE を友だち追加 → リッチメニューの「会員登録」から</td></tr>
     <tr><td>LINE 会員証</td><td>お客様がリッチメニューの「会員証」でバーコード表示 → レジでスキャン</td></tr>
+    <tr><td>既存会員を LINE とつなぐ</td><td>顧客詳細 → <span class="btn">連携コードを発行</span>（6桁）→ お客様が LINE に送る</td></tr>
     <tr><td>一斉配信</td><td>顧客一覧 → <span class="btn">LINE 一斉配信</span></td></tr>
   </table>
+  <div class="note">登録でお聞きする項目は、お店の設定で変えられます（お名前だけ、ニックネーム可、住所は市区町村まで、など）。画面に出ていない項目は「集めない」設定になっています。</div>
   <div class="note">お客様は LINE のトークに「通知オフ」「通知オン」「連携解除」と送ると、自分で設定を変えられます。</div>
 </section>
 
-<!-- ================= 7 ================= -->
+<!-- ================= 8 ================= -->
 <section class="chapter">
-  <div class="chap-head"><div class="chap-no">7</div><h1>売上を見る・AI に相談する</h1></div>
+  <div class="chap-head"><div class="chap-no">8</div><h1>売上を見る・AI に相談する</h1></div>
   <ul class="plain">
     <li><b>ダッシュボード</b>: 期間を選んで売上・客数・客単価・売れ筋などを確認できます</li>
     <li><b>AI考察</b>: <span class="btn dark">討論を開始</span> を押すと、2つの AI が実績を分析して<br>
@@ -395,17 +432,60 @@
   <div class="note">ChatGPT への送信を止めたいときは、設定 → 「AI考察と個人情報の取り扱い」でチェックを外してください。AI がつながらないときは、同じ画面の <span class="btn">AI接続テスト</span> で原因を確認できます。</div>
 </section>
 
-<!-- ================= 8 ================= -->
+<!-- ================= 9 ================= -->
 <section class="chapter">
-  <div class="chap-head"><div class="chap-no">8</div><h1>困ったときは</h1></div>
+  <div class="chap-head"><div class="chap-no">9</div><h1>店長・管理者の設定</h1></div>
+  <p class="chap-lead">サイドメニューの <b>設定 / 連携</b> から行います。開店前に一度確認しておくとスムーズです。</p>
+  <table>
+    <tr><th style="width:32%">やりたいこと</th><th>場所とポイント</th></tr>
+    <tr>
+      <td><b>店舗名を決める</b></td>
+      <td>設定 → <b>店舗</b>。ここで入れた店舗名が<b>レシートの一番上に印字</b>されます。開店前に自店の名前へ変更してください</td>
+    </tr>
+    <tr>
+      <td><b>レジ端末コード</b></td>
+      <td>設定 → <b>レジ端末のアクセス</b>。店頭端末をログインなしで使うための合言葉です。決めたら店頭の端末で1回入力します（未設定なら、ログインした人だけがレジを使えます）</td>
+    </tr>
+    <tr>
+      <td><b>スタッフを増やす</b></td>
+      <td>設定 → <b>スタッフ</b>（レジの担当者一覧）と <b>ユーザーと権限</b>（ログインする人）。名札バーコードは「名札バーコード」から印刷できます</td>
+    </tr>
+    <tr>
+      <td><b>支払方法を増やす</b></td>
+      <td>設定 → <b>レジの支払方法</b>。ギフト券・商品券などを追加できます。「分割決済に使える」「お釣りを出せる」もここで決めます</td>
+    </tr>
+    <tr>
+      <td><b>新規ユーザー作成の可否</b></td>
+      <td>設定 → <b>ログイン画面での新規ユーザー作成</b>。既定は「作成させない」。スタッフを迎えるときだけ開くのがおすすめです</td>
+    </tr>
+    <tr>
+      <td><b>LINE リマインド</b></td>
+      <td>設定 → <b>リマインド設定</b>。購入後フォロー・再来店・休眠・誕生日の ON/OFF と日数を変えられます（毎日 10:00 に自動配信）</td>
+    </tr>
+    <tr>
+      <td><b>顧客登録の項目</b></td>
+      <td>設定 → <b>顧客登録の項目</b>。集める情報を必要最小限にできます（「最小構成にする」ボタンで一括変更）</td>
+    </tr>
+  </table>
+  <div class="warn"><b>データの初期化</b>は、テスト後に中身を空にするための機能です。既定ではボタンがグレーアウトしていて押せません。実際の運用が始まったら使わないでください。</div>
+</section>
+
+<!-- ================= 10 ================= -->
+<section class="chapter">
+  <div class="chap-head"><div class="chap-no">10</div><h1>困ったときは</h1></div>
   <table>
     <tr><th style="width:36%">症状</th><th>対処</th></tr>
     <tr><td>バーコードが読めない</td><td>レジの <span class="btn">🔍 商品名で検索</span> から追加。値札が無いものは <span class="btn">✏️ 未登録商品を手入力</span></td></tr>
     <tr><td>会計を間違えた</td><td>取引履歴から伝票を開いて <span class="btn">返品する</span> → 正しい内容でもう一度会計</td></tr>
     <tr><td>会員が見つからない</td><td>レジの「お名前・電話番号で検索」。それでも無ければ新規登録</td></tr>
-    <tr><td>会計ボタンが押せない</td><td>担当スタッフが未選択、または現金のお預かり金額が不足していないか確認</td></tr>
+    <tr><td>会計ボタンが押せない</td><td>担当スタッフが未選択／現金のお預かり金額が不足／分割の内訳がお支払い額と合っていない、のいずれかです</td></tr>
+    <tr><td>「担当スタッフを選んでください」と出る</td><td>レジ画面の担当スタッフ欄が「未指定」のままです。名前を選んでください</td></tr>
+    <tr><td>「店舗が設定されていません」と出る</td><td>店長に連絡してください（設定 → 店舗 を開いて保存すると直ります）</td></tr>
+    <tr><td>レジでコードを聞かれた</td><td>その端末での初回です。店長からレジ端末コードを聞いて入力してください（1章）</td></tr>
+    <tr><td>ログインが一時的に止まった</td><td>パスワードを 8 回続けて間違えると 15 分止まります。時間をおくか店長に連絡を</td></tr>
     <tr><td>ポイント残高がおかしい</td><td>顧客詳細のポイント履歴で増減を確認（返品分は自動で調整されています）</td></tr>
     <tr><td>パスワードを忘れた</td><td>管理者に連絡（設定 → ユーザーと権限 からリセットできます）</td></tr>
+    <tr><td>画面が固まった・表示が古い</td><td>ブラウザの再読み込み（スマホは画面を下に引っ張る）。会計済みのデータが消えることはありません</td></tr>
   </table>
   <div class="note">このマニュアルに載っていない操作や詳しい説明は、「wearPOS 機能・運用ガイド」をご覧ください。</div>
 </section>
