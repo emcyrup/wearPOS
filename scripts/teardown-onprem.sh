@@ -86,14 +86,27 @@ main() {
     ok "PM2 のプロセスはありません"
   fi
 
-  # 保存済みのプロセス一覧も空にする (@reboot で復活させない)
+  # このサーバーの PM2 は**ほかのアプリと共用**のことがある。
+  # pm2 kill は全アプリを巻き添えにするので使わない。wearpos を外した一覧を保存するだけにする
   pm2 save --force >/dev/null 2>&1 || true
-  pm2 kill >/dev/null 2>&1 || true
-  ok "PM2 を終了しました"
+  # pm2 jlist は先頭に案内文を出すことがあるため、JSON の行だけを拾って数える
+  remaining="$(pm2 jlist 2>/dev/null | node -e '
+    let s = ""; process.stdin.on("data", (d) => (s += d)).on("end", () => {
+      const line = s.split("\n").reverse().find((l) => l.trim().startsWith("["));
+      try { console.log(JSON.parse(line).length); } catch { console.log(0); }
+    });' 2>/dev/null || echo 0)"
+  ok "保存済みの一覧から wearpos を外しました (PM2 に残るアプリ: ${remaining} 件)"
 
   log "crontab から wearPOS の行を削除"
   current="$(crontab -l 2>/dev/null || true)"
-  others="$(printf '%s\n' "$current" | grep -v -F "pm2 resurrect" | grep -v -F "reminders-cron.sh" | sed '/^$/d' || true)"
+  if [ "${remaining:-0}" -gt 0 ]; then
+    # ほかのアプリが残っているなら、再起動時の pm2 resurrect はそのアプリにも必要なので残す
+    others="$(printf '%s\n' "$current" | grep -v -F "reminders-cron.sh" | sed '/^$/d' || true)"
+    KEPT_RESURRECT=1
+  else
+    others="$(printf '%s\n' "$current" | grep -v -F "pm2 resurrect" | grep -v -F "reminders-cron.sh" | sed '/^$/d' || true)"
+    KEPT_RESURRECT=0
+  fi
   if [ -n "$others" ]; then
     printf '%s\n' "$others" | crontab -
   else
@@ -116,6 +129,19 @@ main() {
   - ${APP_DIR} のソースと .env (.env には認証情報が入っています)
   - ホームディレクトリのバックアップファイル
 
+EOF
+
+  if [ "$KEPT_RESURRECT" = "1" ] && crontab -l 2>/dev/null | grep -q -F "$APP_DIR"; then
+    cat <<EOF
+⚠️  PM2 にほかのアプリが ${remaining} 件残っているため、crontab の @reboot 行は残しました。
+    この行は ${APP_DIR} の中の pm2 を使って全アプリを起動し直します。
+    **${APP_DIR} を消す前に**、ほかのアプリ側の pm2 を使う行へ書き換えてください
+    (crontab -e)。書き換えずに消すと、サーバー再起動後にほかのアプリが上がりません。
+
+EOF
+  fi
+
+  cat <<EOF
 このあとの作業は DECOMMISSION.md のチェックリストを参照してください。
   - LINE Developers の Webhook 解除・リッチメニュー削除
   - GitHub の Deploy key 削除
