@@ -8,7 +8,7 @@ wearPOS を移し、稼働させるまでの手順です。開発環境（Vercel
 | 役割 | 本番 | 備考 |
 | --- | --- | --- |
 | 公開 URL | `https://wearpos.ai-labo.cloud` | nginx（御社管理）が受けて **:8026** へ転送 |
-| アプリの実行 | PM2（ユーザー権限） | `ecosystem.config.cjs`。ポート 8026 / 0.0.0.0 で待ち受け |
+| アプリの実行 | PM2（ユーザー権限） | `ecosystem.config.cjs`。ポート 8026 を **127.0.0.1 のみ**で待ち受け（外部からは nginx 経由だけ） |
 | データベース | 同一サーバーの PostgreSQL 18 | DB名 `wearpos`、ユーザー `ai_labo_dbuser` |
 | 定期実行（LINE リマインド） | ユーザーの crontab | Vercel Cron の代わり |
 | バックアップ | 御社の自動ダンプ + AWS Backup | アプリ側で独自の cron は組まない（御社案内どおり） |

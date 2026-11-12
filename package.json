@@ -14,7 +14,7 @@
     "vercel-build": "prisma generate && prisma migrate deploy && next build",
     "db:migrate": "prisma migrate dev",
     "db:deploy": "prisma migrate deploy",
-    "start:prod": "next start -p 8026 -H 0.0.0.0",
+    "start:prod": "next start -p 8026 -H 127.0.0.1",
     "deploy": "bash scripts/deploy.sh",
     "manual:build": "node scripts/build-manual.mjs"
   },

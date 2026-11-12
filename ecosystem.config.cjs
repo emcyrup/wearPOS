@@ -3,7 +3,8 @@
  *
  * 本番は nginx (御社管理) が https://wearpos.ai-labo.cloud を受け、
  * このアプリの 8026 番ポートへリバースプロキシする構成。
- * アプリ側は「割り当てられたポートで 0.0.0.0 に待ち受ける」だけでよい。
+ * nginx は同じサーバー上にあるため、アプリは 127.0.0.1 (ループバック) だけで待ち受ける。
+ * 0.0.0.0 にすると nginx を通らずにポートへ直接つながる経路ができてしまう。
  *
  *   pm2 start ecosystem.config.cjs      # 初回
  *   pm2 reload wearpos                  # 更新時 (無停止で入れ替え)
@@ -17,7 +18,7 @@ module.exports = {
     {
       name: "wearpos",
       script: "node_modules/next/dist/bin/next",
-      args: "start -p 8026 -H 0.0.0.0",
+      args: "start -p 8026 -H 127.0.0.1",
       cwd: __dirname,
       instances: 1,
       exec_mode: "fork",

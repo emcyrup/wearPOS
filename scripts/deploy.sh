@@ -77,6 +77,15 @@ main() {
 
   # 起動確認 (自分自身に対して)
   sleep 3
+
+  # nginx を通らない経路を作らないよう、ループバックだけで待ち受けていることを確かめる
+  if command -v ss >/dev/null 2>&1; then
+    open="$(ss -ltnH 'sport = :8026' 2>/dev/null | grep -vE '(127\.0\.0\.1|\[::1\]):8026' || true)"
+    if [ -n "$open" ]; then
+      echo "⚠️  8026 番が 127.0.0.1 以外でも待ち受けています (ecosystem.config.cjs の -H を確認):" >&2
+      printf '%s\n' "$open" | sed 's/^/    /' >&2
+    fi
+  fi
   if curl -fsS --max-time 10 "http://127.0.0.1:8026/api/health" >/dev/null; then
     echo
     echo "✅ 更新完了: $(git log --oneline -1)"
