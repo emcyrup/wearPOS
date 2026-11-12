@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 
+import { publicUrl } from "@/lib/public-url";
 import { isAuthDisabled, SESSION_COOKIE, verifySession } from "@/lib/session";
 
 /**
@@ -46,7 +47,7 @@ export async function middleware(request: NextRequest) {
   if (pathname === "/login") {
     // ログイン済みならトップへ
     if (session) {
-      return NextResponse.redirect(new URL("/", request.url));
+      return NextResponse.redirect(publicUrl("/", request));
     }
     return NextResponse.next();
   }
@@ -55,8 +56,7 @@ export async function middleware(request: NextRequest) {
     if (pathname.startsWith("/api/")) {
       return NextResponse.json({ error: "ログインが必要です" }, { status: 401 });
     }
-    const login = new URL("/login", request.url);
-    return NextResponse.redirect(login);
+    return NextResponse.redirect(publicUrl("/login", request));
   }
 
   // 機能制限 (ADMIN は全機能)
@@ -69,7 +69,7 @@ export async function middleware(request: NextRequest) {
       // 使える最初の機能のページへ逃がす (無限リダイレクトを避ける)
       const fallback = session.features.map((f) => FEATURE_PATHS[f]).find(Boolean) ?? "/login";
       if (fallback !== pathname) {
-        return NextResponse.redirect(new URL(fallback, request.url));
+        return NextResponse.redirect(publicUrl(fallback, request));
       }
     }
   }

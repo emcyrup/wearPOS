@@ -86,6 +86,21 @@ main() {
       printf '%s\n' "$open" | sed 's/^/    /' >&2
     fi
   fi
+  # nginx 越しに開いたとき、ログイン画面へのリダイレクト先が公開ドメインになっていること。
+  # 待ち受けを 127.0.0.1 にした際、ここが https://localhost:8026/login になって
+  # 「サイトにアクセスできません」になったことがある
+  public_host="$(grep -E '^APP_URL=' .env | head -n1 | cut -d= -f2- | tr -d "\"'" | sed -E 's#^https?://##; s#/.*$##' || true)"
+  if [ -n "$public_host" ]; then
+    location="$(curl -s -o /dev/null -D - --max-time 10 -H "Host: ${public_host}" "http://127.0.0.1:8026/" \
+      | tr -d '\r' | awk 'tolower($1)=="location:"{print $2}' || true)"
+    case "$location" in
+      *localhost*|*127.0.0.1*)
+        echo "⚠️  リダイレクト先が公開ドメインになっていません: ${location}" >&2
+        echo "    ブラウザからはログイン画面に進めません。lib/public-url.ts を確認してください" >&2
+        ;;
+    esac
+  fi
+
   if curl -fsS --max-time 10 "http://127.0.0.1:8026/api/health" >/dev/null; then
     echo
     echo "✅ 更新完了: $(git log --oneline -1)"

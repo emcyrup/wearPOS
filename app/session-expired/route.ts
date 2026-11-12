@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { publicUrl } from "@/lib/public-url";
 import { SESSION_COOKIE } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
@@ -12,7 +13,7 @@ export const dynamic = "force-dynamic";
  * 画面側で気づいたときにここへ寄せて Cookie を消す。
  */
 export async function GET(request: Request) {
-  const response = NextResponse.redirect(new URL("/login", request.url));
+  const response = NextResponse.redirect(publicUrl("/login", request));
   response.cookies.delete(SESSION_COOKIE);
   return response;
 }
