@@ -286,6 +286,12 @@ npm run demo:build    # ビルド → 各画面を取り込み → docs/index.ht
 LINE の認証情報が未設定でもアプリは動作します。その場合、送信はスキップされログだけが残るため、
 連携前の画面確認や開発中の動作確認に使えます。
 
+## モバイルアプリ（iOS / Android）
+
+`mobile/` に Expo（React Native）のアプリがあります。いまはアプリ内に Web 画面を表示する外枠の段階で、
+印刷・別ウィンドウ・外部リンクなど、ブラウザと動きが違う部分だけをアプリ側で補っています。
+動かし方と今後の予定は [mobile/README.md](mobile/README.md) を参照してください。
+
 ## POS レジ連携 API
 
 すべてのエンドポイントで `X-API-Key: <POS_API_KEY>` ヘッダ（または `Authorization: Bearer`）が必要です。
